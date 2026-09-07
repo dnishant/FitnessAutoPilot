@@ -42,6 +42,34 @@ values
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0003', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0002', current_date, 2700, 150)
 on conflict (id) do nothing;
 
+insert into public.rmr_estimates (
+  id, user_id, rmr_kcal, source, algorithm_name, algorithm_version,
+  input_snapshot, reported_or_measured_at, calculated_at
+) values
+  (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0004',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    1390,
+    'estimated_mifflin_st_jeor',
+    'mifflin_st_jeor',
+    'rmr-v1',
+    '{"dateOfBirth":"1990-01-01","biologicalSex":"female","heightCm":165,"weightKg":70,"ageYears":36}'::jsonb,
+    null,
+    now()
+  ),
+  (
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0004',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    1782,
+    'user_reported_dexa',
+    null,
+    null,
+    null,
+    '2026-01-15',
+    now()
+  )
+on conflict (id) do nothing;
+
 -- Become user A
 set local role authenticated;
 set local request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -65,6 +93,40 @@ begin
 
   select count(*) into n from public.user_profiles where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   if n <> 1 then raise exception 'RLS FAIL: user A cannot read own profile'; end if;
+
+  select count(*) into n from public.rmr_estimates where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  if n <> 1 then raise exception 'RLS FAIL: user A cannot read own RMR'; end if;
+
+  select count(*) into n from public.rmr_estimates where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  if n <> 0 then raise exception 'RLS FAIL: user A can read user B RMR'; end if;
+
+  update public.rmr_estimates
+    set rmr_kcal = 1
+    where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'RLS FAIL: user A can modify user B RMR'; end if;
+
+  begin
+    insert into public.rmr_estimates (
+      user_id, rmr_kcal, source, algorithm_name, algorithm_version,
+      input_snapshot, reported_or_measured_at, calculated_at
+    ) values (
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      1200,
+      'user_reported_dexa',
+      null,
+      null,
+      null,
+      '2026-01-15',
+      now()
+    );
+    raise exception 'RLS FAIL: user A can insert RMR for user B';
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
 end $$;
 
 rollback;

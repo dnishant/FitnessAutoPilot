@@ -7,13 +7,16 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  CompleteRmrOnboardingRequest,
   CreateGoalRequest,
   DailyPlan,
   Goal,
   NutritionTarget,
-  UserProfile,
+  ProfileBasics,
+  RmrEstimate,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { completeRmrOnboarding as completeRmrOnboardingDomain } from "@fitness-autopilot/domain";
 import { supabase, useLocalPlanner } from "../lib/supabase";
 import {
   ensureLocalUser,
@@ -21,7 +24,9 @@ import {
   localGeneratePlan,
   localSaveGoal,
   localSaveProfile,
+  localSaveRmrEstimate,
 } from "../lib/local-planner";
+import { mapProfileRow, mapRmrRow } from "../lib/rmr-mappers";
 
 type SessionUser = { id: string; email: string };
 
@@ -29,16 +34,17 @@ type SessionValue = {
   loading: boolean;
   useLocalMode: boolean;
   user: SessionUser | null;
-  profile: UserProfile | null;
+  profile: ProfileBasics | null;
+  currentRmr: RmrEstimate | null;
   goal: Goal | null;
   nutritionTarget: NutritionTarget | null;
   dailyPlan: DailyPlan | null;
   signIn: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signUp: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => Promise<void>;
-  saveProfile: (
-    profile: UserProfile,
-  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  completeRmrOnboarding: (
+    request: CompleteRmrOnboardingRequest,
+  ) => Promise<{ ok: true; rmr: RmrEstimate } | { ok: false; error: string }>;
   saveGoal: (
     request: CreateGoalRequest,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -48,10 +54,37 @@ type SessionValue = {
 const SessionContext = createContext<SessionValue | null>(null);
 const LOCAL_USER_KEY = "fa.local.user";
 
+async function loadRemoteProfileAndRmr(userId: string): Promise<{
+  profile: ProfileBasics | null;
+  currentRmr: RmrEstimate | null;
+}> {
+  if (!supabase) {
+    return { profile: null, currentRmr: null };
+  }
+  const profileRes = await supabase
+    .from("user_profiles")
+    .select("user_id, date_of_birth, biological_sex, height_cm, weight_kg")
+    .eq("user_id", userId)
+    .maybeSingle();
+  const rmrRes = await supabase
+    .from("rmr_estimates")
+    .select("*")
+    .eq("user_id", userId)
+    .order("calculated_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    profile: profileRes.data ? mapProfileRow(profileRes.data) : null,
+    currentRmr: rmrRes.data ? mapRmrRow(rmrRes.data) : null,
+  };
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<SessionUser | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [profile, setProfile] = useState<ProfileBasics | null>(null);
+  const [currentRmr, setCurrentRmr] = useState<RmrEstimate | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [nutritionTarget, setNutritionTarget] = useState<NutritionTarget | null>(null);
   const [dailyPlan, setDailyPlan] = useState<DailyPlan | null>(null);
@@ -68,6 +101,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             if (!cancelled) {
               setUser({ id: store.userId, email: store.email });
               setProfile(store.profile);
+              setCurrentRmr(store.currentRmr);
               setGoal(store.goal);
               setNutritionTarget(store.nutritionTarget);
               setDailyPlan(store.dailyPlan);
@@ -80,6 +114,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               id: data.session.user.id,
               email: data.session.user.email ?? "",
             });
+            const loaded = await loadRemoteProfileAndRmr(data.session.user.id);
+            if (!cancelled) {
+              setProfile(loaded.profile);
+              setCurrentRmr(loaded.currentRmr);
+            }
           }
         }
       } finally {
@@ -99,6 +138,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       useLocalMode: useLocalPlanner,
       user,
       profile,
+      currentRmr,
       goal,
       nutritionTarget,
       dailyPlan,
@@ -114,6 +154,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             }
             setUser(next);
             setProfile(store.profile);
+            setCurrentRmr(store.currentRmr);
             setGoal(store.goal);
             setNutritionTarget(store.nutritionTarget);
             setDailyPlan(store.dailyPlan);
@@ -137,6 +178,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return { ok: false, error: "Sign-in succeeded but user is missing." };
         }
         setUser({ id: data.user.id, email: data.user.email ?? email });
+        const loaded = await loadRemoteProfileAndRmr(data.user.id);
+        setProfile(loaded.profile);
+        setCurrentRmr(loaded.currentRmr);
         return { ok: true };
       },
       async signUp(email, password) {
@@ -146,6 +190,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           await AsyncStorage.setItem(LOCAL_USER_KEY, JSON.stringify(next));
           setUser(next);
           setProfile(store.profile);
+          setCurrentRmr(store.currentRmr);
           setGoal(store.goal);
           setNutritionTarget(store.nutritionTarget);
           setDailyPlan(store.dailyPlan);
@@ -177,33 +222,54 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
         setUser(null);
         setProfile(null);
+        setCurrentRmr(null);
         setGoal(null);
         setNutritionTarget(null);
         setDailyPlan(null);
       },
-      async saveProfile(nextProfile) {
+      async completeRmrOnboarding(request) {
         try {
           if (useLocalPlanner) {
             if (!user) {
               return { ok: false, error: "Not signed in" };
             }
-            const saved = localSaveProfile(user.id, nextProfile);
-            setProfile(saved);
-            return { ok: true };
+            const completed = completeRmrOnboardingDomain({
+              ...request,
+              asOf: new Date(),
+            });
+            if (!completed.ok) {
+              return { ok: false, error: completed.error.message };
+            }
+            const savedProfile = localSaveProfile(user.id, {
+              userId: user.id,
+              dateOfBirth: completed.value.profile.dateOfBirth,
+              biologicalSex: completed.value.profile.biologicalSex,
+              heightCm: completed.value.profile.heightCm,
+              weightKg: completed.value.profile.weightKg,
+            });
+            const savedRmr = localSaveRmrEstimate(user.id, completed.value.rmr);
+            setProfile(savedProfile);
+            setCurrentRmr(savedRmr);
+            return { ok: true, rmr: savedRmr };
           }
           if (!supabase || !user) {
             return { ok: false, error: "Supabase is not configured." };
           }
-          const { error } = await supabase.functions.invoke("upsert-profile", {
-            body: nextProfile,
+          const { data, error } = await supabase.functions.invoke("complete-rmr-onboarding", {
+            body: request,
           });
           if (error) {
             return { ok: false, error: error.message };
           }
-          setProfile(nextProfile);
-          return { ok: true };
+          const payload = data as { profile: ProfileBasics; rmr: RmrEstimate };
+          setProfile(payload.profile);
+          setCurrentRmr(payload.rmr);
+          return { ok: true, rmr: payload.rmr };
         } catch (e) {
-          return { ok: false, error: e instanceof Error ? e.message : "Failed to save profile" };
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "Failed to save RMR",
+          };
         }
       },
       async saveGoal(request) {
@@ -270,7 +336,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [loading, user, profile, goal, nutritionTarget, dailyPlan],
+    [loading, user, profile, currentRmr, goal, nutritionTarget, dailyPlan],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

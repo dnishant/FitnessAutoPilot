@@ -33,6 +33,7 @@ export const SafetyRestrictionSchema = z.enum([
   "other_professional_management",
 ]);
 
+/** Current body-weight in kg. DB column remains `weight_kg`. */
 export const UserProfileSchema = z.object({
   userId: z.string().uuid(),
   dateOfBirth: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),

@@ -12,8 +12,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - uses: actions/setup-node@v4
         with:
@@ -35,9 +33,14 @@ jobs:
       - name: Validate SQL migrations exist
         run: |
           test -f supabase/migrations/20260307000100_init_schema.sql
+          test -f supabase/migrations/20260907000100_rmr_estimates.sql
           test -f supabase/seed.sql
           grep -n "enable row level security" supabase/migrations/20260307000100_init_schema.sql
           grep -n "auth.uid() = user_id" supabase/migrations/20260307000100_init_schema.sql
+          grep -n "enable row level security" supabase/migrations/20260907000100_rmr_estimates.sql
+          grep -n "auth.uid() = user_id" supabase/migrations/20260907000100_rmr_estimates.sql
 
       - name: RLS test file present
-        run: test -f supabase/tests/rls/cross_user_isolation.sql
+        run: |
+          test -f supabase/tests/rls/cross_user_isolation.sql
+          grep -n "rmr_estimates" supabase/tests/rls/cross_user_isolation.sql
