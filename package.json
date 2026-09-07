@@ -1,0 +1,27 @@
+{
+  "name": "fitness-autopilot",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Fitness Autopilot — structured recipe selection + deterministic portioning",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:unit": "pnpm --filter @fitness-autopilot/domain test && pnpm --filter @fitness-autopilot/contracts test",
+    "build": "pnpm -r --if-present build",
+    "mobile": "pnpm --filter @fitness-autopilot/mobile start",
+    "mobile:web": "pnpm --filter @fitness-autopilot/mobile web"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "eslint": "^9.17.0",
+    "@typescript-eslint/eslint-plugin": "^8.18.1",
+    "@typescript-eslint/parser": "^8.18.1",
+    "prettier": "^3.4.2"
+  }
+}
