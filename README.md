@@ -45,14 +45,18 @@ supabase db reset   # applies migrations + seed.sql
 
 ```bash
 cp apps/mobile/.env.example apps/mobile/.env
-# set EXPO_PUBLIC_SUPABASE_URL and EXPO_PUBLIC_SUPABASE_ANON_KEY from `supabase status`
+# Default: EXPO_PUBLIC_USE_LOCAL_PLANNER=true runs the deterministic
+# domain engines in-process (no Supabase required for the first slice demo).
+# For full Supabase: set URL + anon key from `supabase status` and set
+# EXPO_PUBLIC_USE_LOCAL_PLANNER=false
 pnpm mobile
 ```
 
-For web preview during development:
+Web preview (useful in this environment):
 
 ```bash
 pnpm mobile:web
+# http://127.0.0.1:19006
 ```
 
 ## Workspace layout
