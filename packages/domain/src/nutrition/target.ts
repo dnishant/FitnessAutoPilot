@@ -6,8 +6,8 @@ import type {
   UserProfile,
 } from "@fitness-autopilot/contracts";
 import { ok, err, type Result } from "@fitness-autopilot/validation";
-import { requireAllowedEligibility, type SafetyFailure } from "../safety/eligibility.js";
-import { roundKcal, roundMacroG } from "../common/rounding.js";
+import { requireAllowedEligibility, type SafetyFailure } from "../safety/eligibility";
+import { roundKcal, roundMacroG } from "../common/rounding";
 
 export const NUTRITION_TARGET_ALGORITHM_NAME = "nutrition-target" as const;
 export const NUTRITION_TARGET_ALGORITHM_VERSION = "nutrition-target-v1" as const;

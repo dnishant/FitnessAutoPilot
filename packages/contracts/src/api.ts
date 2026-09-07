@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { UserProfileSchema } from "./profile.js";
-import { GoalTypeSchema } from "./goal.js";
+import { UserProfileSchema } from "./profile";
+import { GoalTypeSchema } from "./goal";
 
 export const UpsertProfileRequestSchema = UserProfileSchema.omit({ userId: true }).partial({
   cuisinePreferences: true,

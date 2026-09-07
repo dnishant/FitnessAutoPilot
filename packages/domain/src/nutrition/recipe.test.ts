@@ -5,8 +5,8 @@ import {
   foods,
   foodsById,
 } from "@fitness-autopilot/test-fixtures";
-import { calculateFoodNutrition } from "./food.js";
-import { calculateRecipeNutrition } from "../recipes/nutrition.js";
+import { calculateFoodNutrition } from "./food";
+import { calculateRecipeNutrition } from "../recipes/nutrition";
 
 describe("food and recipe nutrition", () => {
   it("calculates food nutrition deterministically", () => {

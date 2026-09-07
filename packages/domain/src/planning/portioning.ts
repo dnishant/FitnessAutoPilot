@@ -5,8 +5,8 @@ import type {
   RecipeIngredient,
 } from "@fitness-autopilot/contracts";
 import { ok, err, type Result } from "@fitness-autopilot/validation";
-import { roundGrams } from "../common/rounding.js";
-import { calculateRecipeNutrition } from "../recipes/nutrition.js";
+import { roundGrams } from "../common/rounding";
+import { calculateRecipeNutrition } from "../recipes/nutrition";
 
 export const PortioningPolicy = {
   calorieToleranceFraction: 0.08,

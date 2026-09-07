@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { catalog, foodsById, makeProfile } from "@fitness-autopilot/test-fixtures";
-import { calculateNutritionTarget } from "../nutrition/target.js";
-import { planOneDay, PlannerPolicy } from "./planner.js";
+import { calculateNutritionTarget } from "../nutrition/target";
+import { planOneDay, PlannerPolicy } from "./planner";
 
 const asOf = new Date("2026-09-07T00:00:00.000Z");
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { catalog, foodsById, makeProfile } from "@fitness-autopilot/test-fixtures";
-import { calculateNutritionTarget, planOneDay } from "../index.js";
+import { calculateNutritionTarget, planOneDay } from "../index";
 
 describe("end-to-end domain path", () => {
   it("profile → target → one-day plan", () => {

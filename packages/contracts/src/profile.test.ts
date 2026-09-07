@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UserProfileSchema } from "./profile.js";
+import { UserProfileSchema } from "./profile";
 
 describe("UserProfileSchema", () => {
   it("accepts a valid profile", () => {

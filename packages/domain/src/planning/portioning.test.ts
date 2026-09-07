@@ -4,7 +4,7 @@ import {
   chickenTikkaIngredients,
   foodsById,
 } from "@fitness-autopilot/test-fixtures";
-import { portionRecipe } from "./portioning.js";
+import { portionRecipe } from "./portioning";
 
 describe("portionRecipe", () => {
   it("scales protein and returns deterministic result", () => {

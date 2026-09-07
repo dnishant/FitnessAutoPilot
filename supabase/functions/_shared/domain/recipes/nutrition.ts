@@ -5,7 +5,7 @@ import type {
   RecipeIngredient,
 } from "../../contracts/index.ts";
 import { ok, err, type Result } from "../../validation/index.ts";
-import { calculateFoodNutrition, sumNutrition } from "../nutrition/food.js";
+import { calculateFoodNutrition, sumNutrition } from "../nutrition/food";
 
 export type RecipeNutritionLine = {
   ingredient: RecipeIngredient;

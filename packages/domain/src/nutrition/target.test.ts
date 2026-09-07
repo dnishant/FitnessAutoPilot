@@ -4,7 +4,7 @@ import {
   calculateNutritionTarget,
   NUTRITION_TARGET_ALGORITHM_VERSION,
   NutritionTargetV1Policy,
-} from "./target.js";
+} from "./target";
 
 const asOf = new Date("2026-09-07T00:00:00.000Z");
 

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { NutritionMacrosSchema } from "./nutrition.js";
-import { MealTypeSchema } from "./recipe.js";
+import { NutritionMacrosSchema } from "./nutrition";
+import { MealTypeSchema } from "./recipe";
 
 export const PortionedIngredientSchema = z.object({
   recipeIngredientId: z.string().uuid(),

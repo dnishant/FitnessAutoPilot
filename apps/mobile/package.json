@@ -12,6 +12,7 @@
     "lint": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@expo/log-box": "~57.0.4",
     "@expo/metro-runtime": "^57.0.15",
     "@fitness-autopilot/contracts": "workspace:*",
     "@fitness-autopilot/domain": "workspace:*",

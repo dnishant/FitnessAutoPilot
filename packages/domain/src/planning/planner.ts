@@ -7,8 +7,8 @@ import type {
   UserProfile,
 } from "@fitness-autopilot/contracts";
 import { ok, err, type Result } from "@fitness-autopilot/validation";
-import type { NutritionTargetCalculation } from "../nutrition/target.js";
-import { portionRecipe, type PortionedRecipe } from "./portioning.js";
+import type { NutritionTargetCalculation } from "../nutrition/target";
+import { portionRecipe, type PortionedRecipe } from "./portioning";
 
 export const PlannerPolicy = {
   mealCalorieShares: {

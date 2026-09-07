@@ -29,6 +29,9 @@ importers:
 
   apps/mobile:
     dependencies:
+      '@expo/log-box':
+        specifier: ~57.0.4
+        version: 57.0.4(@expo/dom-webview@57.0.1)(expo@57.0.20)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
       '@expo/metro-runtime':
         specifier: ^57.0.15
         version: 57.0.15(@expo/log-box@57.0.4)(expo@57.0.20)(react-dom@19.2.3(react@19.2.3))(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.87.1(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3)
@@ -1466,9 +1469,6 @@ packages:
 
   '@types/react-test-renderer@19.1.0':
     resolution: {integrity: sha512-XD0WZrHqjNrxA/MaR9O22w/RNidWR9YZmBdRGI7wcnWGrv/3dA8wKCJ8m63Sn+tLJhcjmuhOi629N66W6kgWzQ==}
-
-  '@types/react@19.1.17':
-    resolution: {integrity: sha512-Qec1E3mhALmaspIrhWt9jkQMNdw6bReVu64mjvhbhq2NFPftLPVr+l1SZgmw/66WwBNpDh7ao5AT6gF5v41PFA==}
 
   '@types/react@19.2.18':
     resolution: {integrity: sha512-AnzbBERsrLKtk2XSfTbYRLjQPdy116Sty4q+T+Bp3IC4l6jNBvreVPAHmpq9qhXQM7CXZPjLVmGMw9sy+hxQ3w==}
@@ -5220,11 +5220,7 @@ snapshots:
 
   '@types/react-test-renderer@19.1.0':
     dependencies:
-      '@types/react': 19.1.17
-
-  '@types/react@19.1.17':
-    dependencies:
-      csstype: 3.2.3
+      '@types/react': 19.2.18
 
   '@types/react@19.2.18':
     dependencies:

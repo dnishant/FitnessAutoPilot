@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateRecommendationEligibility, requireAllowedEligibility } from "./eligibility.js";
+import { evaluateRecommendationEligibility, requireAllowedEligibility } from "./eligibility";
 
 describe("safety eligibility", () => {
   it("allows empty restrictions", () => {

@@ -5,7 +5,7 @@ import type {
   RecipeIngredient,
 } from "@fitness-autopilot/contracts";
 import { ok, err, type Result } from "@fitness-autopilot/validation";
-import { calculateFoodNutrition, sumNutrition } from "../nutrition/food.js";
+import { calculateFoodNutrition, sumNutrition } from "../nutrition/food";
 
 export type RecipeNutritionLine = {
   ingredient: RecipeIngredient;
