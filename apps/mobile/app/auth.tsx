@@ -26,7 +26,8 @@ export default function AuthScreen() {
       setError(result.error);
       return;
     }
-    router.replace("/");
+    // Navigate to the next required step directly to avoid a race with session state.
+    router.replace("/onboarding");
   }
 
   return (

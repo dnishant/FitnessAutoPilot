@@ -104,15 +104,26 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       dailyPlan,
       async signIn(email, password) {
         if (useLocalPlanner) {
-          const store = ensureLocalUser(email, password);
-          const next = { id: store.userId, email: store.email };
-          await AsyncStorage.setItem(LOCAL_USER_KEY, JSON.stringify(next));
-          setUser(next);
-          setProfile(store.profile);
-          setGoal(store.goal);
-          setNutritionTarget(store.nutritionTarget);
-          setDailyPlan(store.dailyPlan);
-          return { ok: true };
+          try {
+            const store = ensureLocalUser(email, password);
+            const next = { id: store.userId, email: store.email };
+            try {
+              await AsyncStorage.setItem(LOCAL_USER_KEY, JSON.stringify(next));
+            } catch {
+              // Web environments may lack AsyncStorage; in-memory session still works.
+            }
+            setUser(next);
+            setProfile(store.profile);
+            setGoal(store.goal);
+            setNutritionTarget(store.nutritionTarget);
+            setDailyPlan(store.dailyPlan);
+            return { ok: true };
+          } catch (e) {
+            return {
+              ok: false,
+              error: e instanceof Error ? e.message : "Local sign-in failed",
+            };
+          }
         }
         if (!supabase) {
           return { ok: false, error: "Supabase is not configured." };
