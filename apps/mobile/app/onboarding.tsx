@@ -9,17 +9,27 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
-import type { RmrBiologicalSex } from "@fitness-autopilot/contracts";
+import {
+  ONBOARDING_GOAL_OPTIONS,
+  WEARABLE_OPTIONS,
+  type OnboardingGoalType,
+  type RmrBiologicalSex,
+  type Wearable,
+} from "@fitness-autopilot/contracts";
 import {
   chooseOnboardingRmrSource,
+  chooseOnboardingWearable,
   createOnboardingView,
   submitOnboardingBasics,
   submitOnboardingDexa,
+  submitOnboardingGoal,
+  submitOnboardingWearableCalories,
+  wearableCaloriesFieldLabel,
 } from "@fitness-autopilot/domain";
 import { useSession } from "../src/state/session";
 
 export default function OnboardingScreen() {
-  const { completeRmrOnboarding, user } = useSession();
+  const { completeOnboarding, user } = useSession();
   const [view, setView] = useState(() => createOnboardingView());
   const [busy, setBusy] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
@@ -44,7 +54,7 @@ export default function OnboardingScreen() {
     }
     setBusy(true);
     setPersistError(null);
-    const saved = await completeRmrOnboarding({
+    const saved = await completeOnboarding({
       dateOfBirth: view.draft.dateOfBirth,
       biologicalSex: view.draft.biologicalSex as RmrBiologicalSex,
       heightCm: Number(view.draft.heightCm),
@@ -53,6 +63,9 @@ export default function OnboardingScreen() {
       reportedRmrKcal:
         result.source === "user_reported_dexa" ? Number(view.draft.reportedRmrKcal) : undefined,
       reportDate: result.source === "user_reported_dexa" ? view.draft.reportDate : undefined,
+      goalType: result.goalType,
+      wearable: view.draft.wearable as Wearable,
+      wearableCaloriesKcal: Number(view.draft.wearableCaloriesKcal),
     });
     setBusy(false);
     if (!saved.ok) {
@@ -64,6 +77,71 @@ export default function OnboardingScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {view.step === "goal" ? (
+        <>
+          <Text style={styles.title}>What is your goal?</Text>
+          <Text style={styles.help}>We store this so later targets can follow what you want.</Text>
+          {ONBOARDING_GOAL_OPTIONS.map((option) => (
+            <Pressable
+              key={option.type}
+              style={styles.option}
+              onPress={() =>
+                setView((current) => submitOnboardingGoal(current, option.type as OnboardingGoalType))
+              }
+            >
+              <Text style={styles.optionLabel}>{option.label}</Text>
+              <Text style={styles.optionDetail}>{option.detail}</Text>
+            </Pressable>
+          ))}
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+        </>
+      ) : null}
+
+      {view.step === "wearable" ? (
+        <>
+          <Text style={styles.title}>What wearable do you use?</Text>
+          <Text style={styles.help}>We use this to establish your daily energy use (TDEE).</Text>
+          {WEARABLE_OPTIONS.map((option) => (
+            <Pressable
+              key={option.type}
+              style={styles.option}
+              onPress={() =>
+                setView((current) => chooseOnboardingWearable(current, option.type as Wearable))
+              }
+            >
+              <Text style={styles.optionLabel}>{option.label}</Text>
+            </Pressable>
+          ))}
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+        </>
+      ) : null}
+
+      {view.step === "wearable_calories" && view.draft.wearable ? (
+        <>
+          <Text style={styles.title}>
+            {view.draft.wearable === "whoop" ? "Your Whoop daily calories" : "Your Apple Watch active calories"}
+          </Text>
+          <Text style={styles.help}>
+            {view.draft.wearable === "whoop"
+              ? "Enter the average daily calories from Whoop. This becomes your TDEE."
+              : "Enter your typical Apple Watch active calories. TDEE will be this plus your RMR."}
+          </Text>
+          <Field
+            label={wearableCaloriesFieldLabel(view.draft.wearable)}
+            value={view.draft.wearableCaloriesKcal}
+            onChange={(value) => updateDraft("wearableCaloriesKcal", value)}
+            keyboard="numeric"
+          />
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+          <Pressable
+            style={styles.primary}
+            onPress={() => setView((current) => submitOnboardingWearableCalories(current))}
+          >
+            <Text style={styles.primaryText}>Continue</Text>
+          </Pressable>
+        </>
+      ) : null}
+
       {view.step === "basics" ? (
         <>
           <Text style={styles.title}>Basic information</Text>
@@ -158,10 +236,16 @@ export default function OnboardingScreen() {
 
       {view.step === "result" && view.result ? (
         <>
+          <Text style={styles.kicker}>Your goal</Text>
+          <Text style={styles.goalValue}>{view.result.goalLabel}</Text>
           <Text style={styles.kicker}>Resting Metabolic Rate</Text>
           <Text style={styles.rmrValue}>{view.result.formattedRmr}</Text>
           <Text style={styles.source}>{view.result.sourceLabel}</Text>
           <Text style={styles.help}>{view.result.explanation}</Text>
+          <Text style={styles.kicker}>Total Daily Energy Expenditure</Text>
+          <Text style={styles.rmrValue}>{view.result.formattedTdee}</Text>
+          <Text style={styles.source}>{view.result.tdeeSourceLabel}</Text>
+          <Text style={styles.help}>{view.result.tdeeExplanation}</Text>
           {persistError ? <Text style={styles.error}>{persistError}</Text> : null}
           <Pressable style={styles.primary} disabled={busy} onPress={persistResult}>
             {busy ? (
@@ -228,6 +312,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   optionLabel: { fontWeight: "700", color: "#0B1F17", fontSize: 16 },
+  optionDetail: { color: "#3D5A4C", marginTop: 4 },
   primary: {
     marginTop: 8,
     backgroundColor: "#1F6F4A",
@@ -239,5 +324,6 @@ const styles = StyleSheet.create({
   error: { color: "#9B1C1C" },
   kicker: { fontSize: 16, fontWeight: "700", color: "#3D5A4C" },
   rmrValue: { fontSize: 36, fontWeight: "800", color: "#0B1F17" },
+  goalValue: { fontSize: 24, fontWeight: "800", color: "#0B1F17", marginBottom: 8 },
   source: { fontSize: 16, color: "#1F6F4A", fontWeight: "600" },
 });

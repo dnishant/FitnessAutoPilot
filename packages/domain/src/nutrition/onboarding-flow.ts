@@ -1,6 +1,14 @@
-import type { RmrBiologicalSex, RmrSource } from "@fitness-autopilot/contracts";
+import type {
+  OnboardingGoalType,
+  RmrBiologicalSex,
+  RmrSource,
+  TdeeSource,
+  Wearable,
+} from "@fitness-autopilot/contracts";
+import { onboardingGoalLabel } from "@fitness-autopilot/contracts";
 import { err, ok, type Result } from "@fitness-autopilot/validation";
 import {
+  completeRmrOnboarding,
   createEstimatedRmr,
   createUserReportedRmr,
   formatRmrKcalPerDay,
@@ -9,10 +17,32 @@ import {
   type RmrError,
   type RmrEstimateDraft,
 } from "./rmr";
+import {
+  createTdeeFromWearable,
+  formatTdeeKcalPerDay,
+  TDEE_EXPLANATION,
+  tdeeResultSourceLabel,
+  validateOnboardingGoalType,
+  validateTdeeRange,
+  validateWearable,
+  validateWearableCalories,
+  type TdeeError,
+  type TdeeEstimateDraft,
+} from "./tdee";
 
-export type OnboardingStep = "basics" | "source" | "dexa_details" | "result";
+export type OnboardingStep =
+  | "goal"
+  | "wearable"
+  | "wearable_calories"
+  | "basics"
+  | "source"
+  | "dexa_details"
+  | "result";
 
 export type OnboardingDraft = {
+  goalType: OnboardingGoalType | "";
+  wearable: Wearable | "";
+  wearableCaloriesKcal: string;
   dateOfBirth: string;
   biologicalSex: RmrBiologicalSex | "";
   heightCm: string;
@@ -29,6 +59,14 @@ export type OnboardingResultView = {
   sourceLabel: string;
   explanation: string;
   draft: RmrEstimateDraft;
+  tdeeKcal: number;
+  formattedTdee: string;
+  tdeeSource: TdeeSource;
+  tdeeSourceLabel: string;
+  tdeeExplanation: string;
+  tdeeDraft: TdeeEstimateDraft;
+  goalType: OnboardingGoalType;
+  goalLabel: string;
 };
 
 export type OnboardingView = {
@@ -38,10 +76,15 @@ export type OnboardingView = {
   result: OnboardingResultView | null;
 };
 
+export type OnboardingError = RmrError | TdeeError;
+
 export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): OnboardingView {
   return {
-    step: "basics",
+    step: "goal",
     draft: {
+      goalType: "",
+      wearable: "",
+      wearableCaloriesKcal: "",
       dateOfBirth: "",
       biologicalSex: "",
       heightCm: "",
@@ -56,7 +99,7 @@ export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): 
   };
 }
 
-function parseRequiredNumber(value: string, label: string): Result<number, RmrError> {
+function parseRequiredNumber(value: string, label: string): Result<number, OnboardingError> {
   const parsed = Number(value);
   if (value.trim() === "" || !Number.isFinite(parsed)) {
     return err({
@@ -74,7 +117,7 @@ function parseBasics(draft: OnboardingDraft): Result<
     heightCm: number;
     weightKg: number;
   },
-  RmrError
+  OnboardingError
 > {
   if (draft.biologicalSex !== "male" && draft.biologicalSex !== "female") {
     return err({
@@ -99,24 +142,117 @@ function parseBasics(draft: OnboardingDraft): Result<
   });
 }
 
-function withError(view: OnboardingView, error: RmrError): OnboardingView {
+function parseWearableCalories(draft: OnboardingDraft): Result<number, OnboardingError> {
+  const wearable = validateWearable(draft.wearable);
+  if (!wearable.ok) {
+    return wearable;
+  }
+  const label = wearable.value === "whoop" ? "Average daily calories" : "Active calories";
+  return parseRequiredNumber(draft.wearableCaloriesKcal, label);
+}
+
+function withError(view: OnboardingView, error: OnboardingError): OnboardingView {
   return { ...view, error: error.message };
 }
 
-function withResult(view: OnboardingView, draft: RmrEstimateDraft): OnboardingView {
+function withResult(
+  view: OnboardingView,
+  rmr: RmrEstimateDraft,
+  tdee: TdeeEstimateDraft,
+  goalType: OnboardingGoalType,
+): OnboardingView {
   return {
     ...view,
     step: "result",
     error: null,
     result: {
-      rmrKcal: draft.rmrKcal,
-      formattedRmr: formatRmrKcalPerDay(draft.rmrKcal),
-      source: draft.source,
-      sourceLabel: rmrResultSourceLabel(draft.source),
+      rmrKcal: rmr.rmrKcal,
+      formattedRmr: formatRmrKcalPerDay(rmr.rmrKcal),
+      source: rmr.source,
+      sourceLabel: rmrResultSourceLabel(rmr.source),
       explanation: RMR_EXPLANATION,
-      draft,
+      draft: rmr,
+      tdeeKcal: tdee.tdeeKcal,
+      formattedTdee: formatTdeeKcalPerDay(tdee.tdeeKcal),
+      tdeeSource: tdee.source,
+      tdeeSourceLabel: tdeeResultSourceLabel(tdee.source),
+      tdeeExplanation: TDEE_EXPLANATION,
+      tdeeDraft: tdee,
+      goalType,
+      goalLabel: onboardingGoalLabel(goalType),
     },
   };
+}
+
+function finishOnboardingResult(view: OnboardingView, rmr: RmrEstimateDraft, asOf: Date): OnboardingView {
+  const goal = validateOnboardingGoalType(view.draft.goalType);
+  if (!goal.ok) {
+    return withError(view, goal.error);
+  }
+  const wearable = validateWearable(view.draft.wearable);
+  if (!wearable.ok) {
+    return withError(view, wearable.error);
+  }
+  const calories = parseWearableCalories(view.draft);
+  if (!calories.ok) {
+    return withError(view, calories.error);
+  }
+  const tdee = createTdeeFromWearable({
+    wearable: wearable.value,
+    wearableCaloriesKcal: calories.value,
+    rmrKcal: rmr.rmrKcal,
+    rmrSource: rmr.source,
+    goalType: goal.value,
+    asOf,
+  });
+  if (!tdee.ok) {
+    return withError(view, tdee.error);
+  }
+  return withResult(view, rmr, tdee.value, goal.value);
+}
+
+export function submitOnboardingGoal(view: OnboardingView, goalType: OnboardingGoalType): OnboardingView {
+  const goal = validateOnboardingGoalType(goalType);
+  if (!goal.ok) {
+    return withError(view, goal.error);
+  }
+  return {
+    ...view,
+    step: "wearable",
+    error: null,
+    draft: { ...view.draft, goalType: goal.value },
+  };
+}
+
+export function chooseOnboardingWearable(view: OnboardingView, wearable: Wearable): OnboardingView {
+  const parsed = validateWearable(wearable);
+  if (!parsed.ok) {
+    return withError(view, parsed.error);
+  }
+  return {
+    ...view,
+    step: "wearable_calories",
+    error: null,
+    draft: { ...view.draft, wearable: parsed.value },
+  };
+}
+
+export function submitOnboardingWearableCalories(view: OnboardingView): OnboardingView {
+  const calories = parseWearableCalories(view.draft);
+  if (!calories.ok) {
+    return withError(view, calories.error);
+  }
+  const ranged = validateWearableCalories(calories.value);
+  if (!ranged.ok) {
+    return withError(view, ranged.error);
+  }
+  if (view.draft.wearable === "whoop") {
+    const whoopTdee = validateTdeeRange(ranged.value);
+    if (!whoopTdee.ok) {
+      return withError(view, whoopTdee.error);
+    }
+  }
+  return { ...view, step: "basics", error: null };
 }
 
 export function submitOnboardingBasics(
@@ -156,7 +292,7 @@ export function chooseOnboardingRmrSource(
   if (!estimated.ok) {
     return withError(next, estimated.error);
   }
-  return withResult(next, estimated.value);
+  return finishOnboardingResult(next, estimated.value, asOf);
 }
 
 export function submitOnboardingDexa(
@@ -179,5 +315,76 @@ export function submitOnboardingDexa(
   if (!reported.ok) {
     return withError(view, reported.error);
   }
-  return withResult({ ...view, draft: { ...view.draft, knowsRmr: true } }, reported.value);
+  return finishOnboardingResult(
+    { ...view, draft: { ...view.draft, knowsRmr: true } },
+    reported.value,
+    asOf,
+  );
+}
+
+export function completeOnboarding(input: {
+  dateOfBirth: string;
+  biologicalSex: RmrBiologicalSex;
+  heightCm: number;
+  weightKg: number;
+  source: RmrSource;
+  reportedRmrKcal?: number;
+  reportDate?: string;
+  goalType: OnboardingGoalType;
+  wearable: Wearable;
+  wearableCaloriesKcal: number;
+  asOf?: Date;
+}): Result<
+  {
+    profile: {
+      dateOfBirth: string;
+      biologicalSex: RmrBiologicalSex;
+      heightCm: number;
+      weightKg: number;
+    };
+    rmr: RmrEstimateDraft;
+    tdee: TdeeEstimateDraft;
+    goalType: OnboardingGoalType;
+  },
+  OnboardingError
+> {
+  const asOf = input.asOf ?? new Date();
+  const goal = validateOnboardingGoalType(input.goalType);
+  if (!goal.ok) {
+    return goal;
+  }
+  const wearable = validateWearable(input.wearable);
+  if (!wearable.ok) {
+    return wearable;
+  }
+  const rmrCompleted = completeRmrOnboarding({
+    dateOfBirth: input.dateOfBirth,
+    biologicalSex: input.biologicalSex,
+    heightCm: input.heightCm,
+    weightKg: input.weightKg,
+    source: input.source,
+    reportedRmrKcal: input.reportedRmrKcal,
+    reportDate: input.reportDate,
+    asOf,
+  });
+  if (!rmrCompleted.ok) {
+    return rmrCompleted;
+  }
+  const tdee = createTdeeFromWearable({
+    wearable: wearable.value,
+    wearableCaloriesKcal: input.wearableCaloriesKcal,
+    rmrKcal: rmrCompleted.value.rmr.rmrKcal,
+    rmrSource: rmrCompleted.value.rmr.source,
+    goalType: goal.value,
+    asOf,
+  });
+  if (!tdee.ok) {
+    return tdee;
+  }
+  return ok({
+    profile: rmrCompleted.value.profile,
+    rmr: rmrCompleted.value.rmr,
+    tdee: tdee.value,
+    goalType: goal.value,
+  });
 }

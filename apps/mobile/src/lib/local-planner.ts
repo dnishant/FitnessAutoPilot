@@ -4,18 +4,24 @@ import type {
   Goal,
   MealInstance,
   NutritionTarget,
+  OnboardingGoalType,
   ProfileBasics,
   RmrEstimate,
+  TdeeEstimate,
   UserProfile,
 } from "@fitness-autopilot/contracts";
 import { UserProfileSchema } from "@fitness-autopilot/contracts";
 import {
   appendRmrEstimate,
+  appendTdeeEstimate,
   calculateNutritionTarget,
   planOneDay,
   selectCurrentRmr,
+  selectCurrentTdee,
+  utcDateKey,
   type NutritionTargetCalculation,
   type RmrEstimateDraft,
+  type TdeeEstimateDraft,
 } from "@fitness-autopilot/domain";
 import { catalog, foodsById } from "@fitness-autopilot/test-fixtures";
 
@@ -35,6 +41,8 @@ export type LocalStore = {
   profile: ProfileBasics | null;
   rmrHistory: RmrEstimate[];
   currentRmr: RmrEstimate | null;
+  tdeeHistory: TdeeEstimate[];
+  currentTdee: TdeeEstimate | null;
   goal: Goal | null;
   nutritionTarget: (NutritionTarget & { calculation?: NutritionTargetCalculation }) | null;
   dailyPlan: DailyPlan | null;
@@ -58,6 +66,8 @@ export function ensureLocalUser(email: string, password: string): LocalStore {
     profile: null,
     rmrHistory: [],
     currentRmr: null,
+    tdeeHistory: [],
+    currentTdee: null,
     goal: null,
     nutritionTarget: null,
     dailyPlan: null,
@@ -105,6 +115,45 @@ export function localSaveRmrEstimate(userId: string, draft: RmrEstimateDraft): R
     }
   });
   return saved;
+}
+
+export function localSaveTdeeEstimate(userId: string, draft: TdeeEstimateDraft): TdeeEstimate {
+  const store = memory.get(userId);
+  if (!store) {
+    throw new Error("Local user missing");
+  }
+  const previous = store.tdeeHistory.map((row) => ({ ...row }));
+  const now = draft.calculatedAt;
+  const saved: TdeeEstimate = {
+    id: uuidFromSeed(`tdee:${userId}:${draft.source}:${draft.tdeeKcal}:${now}:${store.tdeeHistory.length}`),
+    userId,
+    tdeeKcal: draft.tdeeKcal,
+    source: draft.source,
+    wearable: draft.wearable,
+    wearableCaloriesKcal: draft.wearableCaloriesKcal,
+    rmrKcalUsed: draft.rmrKcalUsed,
+    algorithmName: draft.algorithmName,
+    algorithmVersion: draft.algorithmVersion,
+    inputSnapshot: draft.inputSnapshot,
+    calculatedAt: draft.calculatedAt,
+    createdAt: now,
+  };
+  store.tdeeHistory = appendTdeeEstimate(store.tdeeHistory, saved);
+  store.currentTdee = selectCurrentTdee(store.tdeeHistory);
+  previous.forEach((row, index) => {
+    const current = store.tdeeHistory[index];
+    if (JSON.stringify(current) !== JSON.stringify(row)) {
+      throw new Error("TDEE history mutation is not allowed");
+    }
+  });
+  return saved;
+}
+
+export function localSaveOnboardingGoal(userId: string, goalType: OnboardingGoalType, asOf: Date): Goal {
+  return localSaveGoal(userId, {
+    goalType,
+    startDate: utcDateKey(asOf),
+  });
 }
 
 export function localSaveGoal(userId: string, request: CreateGoalRequest): Goal {

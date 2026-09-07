@@ -9,6 +9,7 @@ Fitness Autopilot is a modular monolith.
 3. **Domain** (`packages/domain`) — pure deterministic engines:
    - safety eligibility
    - RMR v1 (Mifflin-St Jeor estimate or user-reported DEXA)
+   - TDEE v1 (Whoop daily calories, or Apple Watch active calories + current RMR)
    - nutrition target v1
    - food / recipe nutrition
    - portioning
@@ -29,4 +30,4 @@ Client JWT + anon key
 
 ## Rounding rules
 
-Documented in [nutrition-rounding.md](./nutrition-rounding.md), [rmr-v1.md](./rmr-v1.md), and [nutrition-target-v1.md](./nutrition-target-v1.md).
+Documented in [nutrition-rounding.md](./nutrition-rounding.md), [rmr-v1.md](./rmr-v1.md), [tdee-v1.md](./tdee-v1.md), and [nutrition-target-v1.md](./nutrition-target-v1.md).
