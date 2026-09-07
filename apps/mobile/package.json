@@ -9,7 +9,8 @@
     "ios": "expo start --ios --port 19006",
     "web": "expo start --web --port 19006",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "lint": "tsc -p tsconfig.json --noEmit"
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@expo/log-box": "~57.0.4",
@@ -35,6 +36,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.18",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "^2.1.8"
   }
 }

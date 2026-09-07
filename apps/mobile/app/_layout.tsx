@@ -16,7 +16,7 @@ export default function RootLayout() {
       >
         <Stack.Screen name="index" options={{ title: "Fitness Autopilot" }} />
         <Stack.Screen name="auth" options={{ title: "Sign in" }} />
-        <Stack.Screen name="onboarding" options={{ title: "Your profile" }} />
+        <Stack.Screen name="onboarding" options={{ title: "Your RMR" }} />
         <Stack.Screen name="goal" options={{ title: "Your goal" }} />
         <Stack.Screen name="generate" options={{ title: "Generate plan" }} />
         <Stack.Screen name="today" options={{ title: "Today" }} />

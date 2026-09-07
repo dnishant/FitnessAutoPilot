@@ -9,87 +9,169 @@ import {
   View,
 } from "react-native";
 import { router } from "expo-router";
-import type { UserProfile } from "@fitness-autopilot/contracts";
+import type { RmrBiologicalSex } from "@fitness-autopilot/contracts";
+import {
+  chooseOnboardingRmrSource,
+  createOnboardingView,
+  submitOnboardingBasics,
+  submitOnboardingDexa,
+} from "@fitness-autopilot/domain";
 import { useSession } from "../src/state/session";
 
 export default function OnboardingScreen() {
-  const { saveProfile, user } = useSession();
+  const { completeRmrOnboarding, user } = useSession();
+  const [view, setView] = useState(() => createOnboardingView());
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [dateOfBirth, setDob] = useState("1990-06-15");
-  const [heightCm, setHeight] = useState("165");
-  const [weightKg, setWeight] = useState("70");
-  const [allergies, setAllergies] = useState("");
-  const [disliked, setDisliked] = useState("");
-  const [preferred, setPreferred] = useState("chicken");
-  const [cuisines, setCuisines] = useState("indian, american");
+  const [persistError, setPersistError] = useState<string | null>(null);
 
-  async function submit() {
+  function updateDraft<K extends keyof typeof view.draft>(key: K, value: (typeof view.draft)[K]) {
+    setView((current) => ({
+      ...current,
+      error: null,
+      draft: { ...current.draft, [key]: value },
+    }));
+    setPersistError(null);
+  }
+
+  async function persistResult() {
     if (!user) {
-      setError("Not signed in");
+      setPersistError("Not signed in");
+      return;
+    }
+    const result = view.result;
+    if (!result) {
       return;
     }
     setBusy(true);
-    setError(null);
-    const profile: UserProfile = {
-      userId: user.id,
-      dateOfBirth,
-      biologicalSex: "female",
-      heightCm: Number(heightCm),
-      weightKg: Number(weightKg),
-      fitnessExperience: "intermediate",
-      dietaryPreference: "omnivore",
-      cuisinePreferences: cuisines
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      allergies: allergies
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      dislikedFoods: disliked
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      preferredFoods: preferred
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean),
-      mealPrepAvailability: "weekends",
-      cookingSkill: "intermediate",
-      cookingEquipment: ["stovetop", "microwave", "blender"],
-      maxMealPrepMinutes: 45,
-      safetyRestrictions: [],
-    };
-    const result = await saveProfile(profile);
+    setPersistError(null);
+    const saved = await completeRmrOnboarding({
+      dateOfBirth: view.draft.dateOfBirth,
+      biologicalSex: view.draft.biologicalSex as RmrBiologicalSex,
+      heightCm: Number(view.draft.heightCm),
+      weightKg: Number(view.draft.weightKg),
+      source: result.source,
+      reportedRmrKcal:
+        result.source === "user_reported_dexa" ? Number(view.draft.reportedRmrKcal) : undefined,
+      reportDate: result.source === "user_reported_dexa" ? view.draft.reportDate : undefined,
+    });
     setBusy(false);
-    if (!result.ok) {
-      setError(result.error);
+    if (!saved.ok) {
+      setPersistError(saved.error);
       return;
     }
-    router.replace("/goal");
+    router.replace("/today");
   }
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Tell us about you</Text>
-      <Text style={styles.help}>
-        We use this for deterministic calorie targets and recipe filtering — not
-        for a metrics dashboard.
-      </Text>
+      {view.step === "basics" ? (
+        <>
+          <Text style={styles.title}>Basic information</Text>
+          <Text style={styles.help}>
+            We only need enough to establish your resting metabolic rate.
+          </Text>
+          <Field
+            label="Date of birth (YYYY-MM-DD)"
+            value={view.draft.dateOfBirth}
+            onChange={(value) => updateDraft("dateOfBirth", value)}
+          />
+          <Text style={styles.label}>Biological sex</Text>
+          <View style={styles.row}>
+            {(["male", "female"] as const).map((sex) => (
+              <Pressable
+                key={sex}
+                style={[styles.choice, view.draft.biologicalSex === sex && styles.choiceSelected]}
+                onPress={() => updateDraft("biologicalSex", sex)}
+              >
+                <Text style={styles.choiceText}>{sex === "male" ? "Male" : "Female"}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Field
+            label="Height (cm)"
+            value={view.draft.heightCm}
+            onChange={(value) => updateDraft("heightCm", value)}
+            keyboard="numeric"
+          />
+          <Field
+            label="Current weight (kg)"
+            value={view.draft.weightKg}
+            onChange={(value) => updateDraft("weightKg", value)}
+            keyboard="numeric"
+          />
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+          <Pressable
+            style={styles.primary}
+            onPress={() => setView((current) => submitOnboardingBasics(current))}
+          >
+            <Text style={styles.primaryText}>Continue</Text>
+          </Pressable>
+        </>
+      ) : null}
 
-      <Field label="Date of birth (YYYY-MM-DD)" value={dateOfBirth} onChange={setDob} />
-      <Field label="Height (cm)" value={heightCm} onChange={setHeight} keyboard="numeric" />
-      <Field label="Weight (kg)" value={weightKg} onChange={setWeight} keyboard="numeric" />
-      <Field label="Cuisine preferences (comma-separated)" value={cuisines} onChange={setCuisines} />
-      <Field label="Preferred foods" value={preferred} onChange={setPreferred} />
-      <Field label="Allergies (hard exclusions)" value={allergies} onChange={setAllergies} />
-      <Field label="Disliked foods (hard exclusions)" value={disliked} onChange={setDisliked} />
+      {view.step === "source" ? (
+        <>
+          <Text style={styles.title}>Do you already know your RMR?</Text>
+          <Text style={styles.help}>
+            Do you already know your RMR from a DEXA/body-composition report?
+          </Text>
+          <Pressable
+            style={styles.option}
+            onPress={() => setView((current) => chooseOnboardingRmrSource(current, true))}
+          >
+            <Text style={styles.optionLabel}>Yes, I know my RMR</Text>
+          </Pressable>
+          <Pressable
+            style={styles.option}
+            onPress={() => setView((current) => chooseOnboardingRmrSource(current, false))}
+          >
+            <Text style={styles.optionLabel}>No, estimate it for me</Text>
+          </Pressable>
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+        </>
+      ) : null}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-      <Pressable style={styles.primary} disabled={busy} onPress={submit}>
-        {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Continue</Text>}
-      </Pressable>
+      {view.step === "dexa_details" ? (
+        <>
+          <Text style={styles.title}>Your DEXA RMR</Text>
+          <Text style={styles.help}>Enter the value from your report. This is not a medical review.</Text>
+          <Field
+            label="RMR (kcal/day)"
+            value={view.draft.reportedRmrKcal}
+            onChange={(value) => updateDraft("reportedRmrKcal", value)}
+            keyboard="numeric"
+          />
+          <Field
+            label="Scan/report date (YYYY-MM-DD)"
+            value={view.draft.reportDate}
+            onChange={(value) => updateDraft("reportDate", value)}
+          />
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+          <Pressable
+            style={styles.primary}
+            onPress={() => setView((current) => submitOnboardingDexa(current))}
+          >
+            <Text style={styles.primaryText}>Save RMR</Text>
+          </Pressable>
+        </>
+      ) : null}
+
+      {view.step === "result" && view.result ? (
+        <>
+          <Text style={styles.kicker}>Resting Metabolic Rate</Text>
+          <Text style={styles.rmrValue}>{view.result.formattedRmr}</Text>
+          <Text style={styles.source}>{view.result.sourceLabel}</Text>
+          <Text style={styles.help}>{view.result.explanation}</Text>
+          {persistError ? <Text style={styles.error}>{persistError}</Text> : null}
+          <Pressable style={styles.primary} disabled={busy} onPress={persistResult}>
+            {busy ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.primaryText}>Continue</Text>
+            )}
+          </Pressable>
+        </>
+      ) : null}
     </ScrollView>
   );
 }
@@ -126,6 +208,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  row: { flexDirection: "row", gap: 8 },
+  choice: {
+    flex: 1,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#C9D9CF",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  choiceSelected: { borderColor: "#1F6F4A", backgroundColor: "#E4F0E8" },
+  choiceText: { fontWeight: "700", color: "#0B1F17", textTransform: "capitalize" },
+  option: {
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#C9D9CF",
+    borderRadius: 8,
+    padding: 14,
+  },
+  optionLabel: { fontWeight: "700", color: "#0B1F17", fontSize: 16 },
   primary: {
     marginTop: 8,
     backgroundColor: "#1F6F4A",
@@ -135,4 +237,7 @@ const styles = StyleSheet.create({
   },
   primaryText: { color: "#fff", fontWeight: "700" },
   error: { color: "#9B1C1C" },
+  kicker: { fontSize: 16, fontWeight: "700", color: "#3D5A4C" },
+  rmrValue: { fontSize: 36, fontWeight: "800", color: "#0B1F17" },
+  source: { fontSize: 16, color: "#1F6F4A", fontWeight: "600" },
 });

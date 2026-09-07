@@ -8,6 +8,7 @@ import type {
 import { ok, err, type Result } from "@fitness-autopilot/validation";
 import { requireAllowedEligibility, type SafetyFailure } from "../safety/eligibility";
 import { roundKcal, roundMacroG } from "../common/rounding";
+import { calculateAgeFromDateOfBirth, mifflinStJeorRaw } from "./rmr";
 
 export const NUTRITION_TARGET_ALGORITHM_NAME = "nutrition-target" as const;
 export const NUTRITION_TARGET_ALGORITHM_VERSION = "nutrition-target-v1" as const;
@@ -59,34 +60,6 @@ export type NutritionTargetError =
   | SafetyFailure
   | { code: "invalid_input"; message: string };
 
-function ageFromDob(dateOfBirth: string, asOf: Date): number {
-  const [y, m, d] = dateOfBirth.split("-").map(Number);
-  if (!y || !m || !d) {
-    return NaN;
-  }
-  let age = asOf.getUTCFullYear() - y;
-  const month = asOf.getUTCMonth() + 1;
-  const day = asOf.getUTCDate();
-  if (month < m || (month === m && day < d)) {
-    age -= 1;
-  }
-  return age;
-}
-
-function mifflinStJeorBmr(args: {
-  sex: BiologicalSex;
-  weightKg: number;
-  heightCm: number;
-  ageYears: number;
-}): number {
-  const base = 10 * args.weightKg + 6.25 * args.heightCm - 5 * args.ageYears;
-  // `other` uses male constants as a documented conservative placeholder.
-  if (args.sex === "female") {
-    return base - 161;
-  }
-  return base + 5;
-}
-
 export function calculateNutritionTarget(
   profile: UserProfile,
   goal: Pick<Goal, "goalType" | "desiredRateKgPerWeek" | "id">,
@@ -98,13 +71,14 @@ export function calculateNutritionTarget(
   }
 
   const asOf = options?.asOf ?? new Date();
-  const ageYears = ageFromDob(profile.dateOfBirth, asOf);
-  if (!Number.isFinite(ageYears) || ageYears < 16 || ageYears > 100) {
+  const age = calculateAgeFromDateOfBirth(profile.dateOfBirth, asOf);
+  if (!age.ok || age.value < 16 || age.value > 100) {
     return err({
       code: "invalid_input",
       message: "Date of birth must yield an age between 16 and 100 for v1.",
     });
   }
+  const ageYears = age.value;
 
   if (!Number.isFinite(profile.weightKg) || profile.weightKg <= 0) {
     return err({ code: "invalid_input", message: "Weight must be a positive number." });
@@ -113,8 +87,9 @@ export function calculateNutritionTarget(
     return err({ code: "invalid_input", message: "Height must be a positive number." });
   }
 
-  const bmr = mifflinStJeorBmr({
-    sex: profile.biologicalSex,
+  // `other` uses male Mifflin constants as a documented conservative placeholder.
+  const bmr = mifflinStJeorRaw({
+    biologicalSex: profile.biologicalSex === "female" ? "female" : "male",
     weightKg: profile.weightKg,
     heightCm: profile.heightCm,
     ageYears,

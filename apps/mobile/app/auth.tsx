@@ -26,8 +26,8 @@ export default function AuthScreen() {
       setError(result.error);
       return;
     }
-    // Navigate to the next required step directly to avoid a race with session state.
-    router.replace("/onboarding");
+    // Let index route to onboarding or Today once session state is set.
+    router.replace("/");
   }
 
   return (
@@ -37,8 +37,8 @@ export default function AuthScreen() {
 
       {useLocalMode ? (
         <Text style={styles.banner}>
-          Local planner mode is on. Auth is simulated so you can exercise the
-          deterministic meal slice without Supabase credentials.
+          Local planner mode is on. Auth is simulated so you can exercise RMR
+          onboarding without Supabase credentials.
         </Text>
       ) : null}
 

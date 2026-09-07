@@ -4,12 +4,18 @@ import type {
   Goal,
   MealInstance,
   NutritionTarget,
+  ProfileBasics,
+  RmrEstimate,
   UserProfile,
 } from "@fitness-autopilot/contracts";
+import { UserProfileSchema } from "@fitness-autopilot/contracts";
 import {
+  appendRmrEstimate,
   calculateNutritionTarget,
   planOneDay,
+  selectCurrentRmr,
   type NutritionTargetCalculation,
+  type RmrEstimateDraft,
 } from "@fitness-autopilot/domain";
 import { catalog, foodsById } from "@fitness-autopilot/test-fixtures";
 
@@ -26,7 +32,9 @@ function uuidFromSeed(seed: string): string {
 export type LocalStore = {
   userId: string;
   email: string;
-  profile: UserProfile | null;
+  profile: ProfileBasics | null;
+  rmrHistory: RmrEstimate[];
+  currentRmr: RmrEstimate | null;
   goal: Goal | null;
   nutritionTarget: (NutritionTarget & { calculation?: NutritionTargetCalculation }) | null;
   dailyPlan: DailyPlan | null;
@@ -48,6 +56,8 @@ export function ensureLocalUser(email: string, password: string): LocalStore {
     userId,
     email,
     profile: null,
+    rmrHistory: [],
+    currentRmr: null,
     goal: null,
     nutritionTarget: null,
     dailyPlan: null,
@@ -56,7 +66,7 @@ export function ensureLocalUser(email: string, password: string): LocalStore {
   return store;
 }
 
-export function localSaveProfile(userId: string, profile: UserProfile): UserProfile {
+export function localSaveProfile(userId: string, profile: ProfileBasics): ProfileBasics {
   const store = memory.get(userId);
   if (!store) {
     throw new Error("Local user missing");
@@ -64,6 +74,37 @@ export function localSaveProfile(userId: string, profile: UserProfile): UserProf
   const next = { ...profile, userId };
   store.profile = next;
   return next;
+}
+
+export function localSaveRmrEstimate(userId: string, draft: RmrEstimateDraft): RmrEstimate {
+  const store = memory.get(userId);
+  if (!store) {
+    throw new Error("Local user missing");
+  }
+  const previous = store.rmrHistory.map((row) => ({ ...row }));
+  const now = draft.calculatedAt;
+  const saved: RmrEstimate = {
+    id: uuidFromSeed(`rmr:${userId}:${draft.source}:${draft.rmrKcal}:${now}:${store.rmrHistory.length}`),
+    userId,
+    rmrKcal: draft.rmrKcal,
+    source: draft.source,
+    algorithmName: draft.algorithmName,
+    algorithmVersion: draft.algorithmVersion,
+    inputSnapshot: draft.inputSnapshot,
+    reportedOrMeasuredAt: draft.reportedOrMeasuredAt,
+    calculatedAt: draft.calculatedAt,
+    createdAt: now,
+  };
+  store.rmrHistory = appendRmrEstimate(store.rmrHistory, saved);
+  store.currentRmr = selectCurrentRmr(store.rmrHistory);
+  // Guardrail: previous rows stay byte-for-byte intact.
+  previous.forEach((row, index) => {
+    const current = store.rmrHistory[index];
+    if (JSON.stringify(current) !== JSON.stringify(row)) {
+      throw new Error("RMR history mutation is not allowed");
+    }
+  });
+  return saved;
 }
 
 export function localSaveGoal(userId: string, request: CreateGoalRequest): Goal {
@@ -98,11 +139,13 @@ export function localGeneratePlan(userId: string, planDate?: string): {
   dailyPlan: DailyPlan;
 } {
   const store = memory.get(userId);
-  if (!store?.profile || !store.goal) {
-    throw new Error("Profile and goal are required before generating a plan.");
+  const parsedProfile = store?.profile ? UserProfileSchema.safeParse(store.profile) : null;
+  if (!store || !parsedProfile?.success || !store.goal) {
+    throw new Error("A complete meal-planning profile and goal are required before generating a plan.");
   }
+  const profile: UserProfile = parsedProfile.data;
 
-  const calculated = calculateNutritionTarget(store.profile, store.goal);
+  const calculated = calculateNutritionTarget(profile, store.goal);
   if (!calculated.ok) {
     throw new Error(calculated.error.message);
   }
@@ -127,7 +170,7 @@ export function localGeneratePlan(userId: string, planDate?: string): {
   };
 
   const planned = planOneDay({
-    profile: store.profile,
+    profile,
     nutritionTarget: calculated.value,
     catalog,
     foodsById,

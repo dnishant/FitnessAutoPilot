@@ -8,6 +8,7 @@ Fitness Autopilot is a modular monolith.
 2. **Contracts / validation** — Zod schemas at external boundaries.
 3. **Domain** (`packages/domain`) — pure deterministic engines:
    - safety eligibility
+   - RMR v1 (Mifflin-St Jeor estimate or user-reported DEXA)
    - nutrition target v1
    - food / recipe nutrition
    - portioning
@@ -28,4 +29,4 @@ Client JWT + anon key
 
 ## Rounding rules
 
-Documented in [nutrition-rounding.md](./nutrition-rounding.md) and [nutrition-target-v1.md](./nutrition-target-v1.md).
+Documented in [nutrition-rounding.md](./nutrition-rounding.md), [rmr-v1.md](./rmr-v1.md), and [nutrition-target-v1.md](./nutrition-target-v1.md).
