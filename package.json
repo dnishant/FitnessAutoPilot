@@ -11,7 +11,8 @@
     "test:unit": "pnpm --filter @fitness-autopilot/domain test && pnpm --filter @fitness-autopilot/contracts test",
     "build": "pnpm -r --if-present build",
     "mobile": "pnpm --filter @fitness-autopilot/mobile start",
-    "mobile:web": "pnpm --filter @fitness-autopilot/mobile web"
+    "mobile:web": "pnpm --filter @fitness-autopilot/mobile web",
+    "sync:edge": "bash scripts/sync-edge-shared.sh"
   },
   "engines": {
     "node": ">=20"

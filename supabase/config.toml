@@ -1,0 +1,33 @@
+# Fitness Autopilot local Supabase
+project_id = "fitness-autopilot"
+
+[api]
+port = 54321
+
+[db]
+port = 54322
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed.sql"]
+
+[studio]
+port = 54323
+
+[inbucket]
+port = 54324
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:19006"
+additional_redirect_urls = ["exp://127.0.0.1:19006"]
+enable_signup = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false
+
+[functions]
+import_map = "./functions/import_map.json"
+verify_jwt = true
