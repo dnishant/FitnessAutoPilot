@@ -5,6 +5,8 @@ export * from "./nutrition/food";
 export * from "./nutrition/rmr";
 export * from "./nutrition/tdee";
 export * from "./nutrition/calorie-target";
+export * from "./nutrition/energy";
+export * from "./nutrition/macros";
 export * from "./nutrition/onboarding-flow";
 export * from "./nutrition/target";
 export * from "./recipes/nutrition";

@@ -5,6 +5,7 @@ import {
   chooseOnboardingRmrSource,
   chooseOnboardingWearable,
   completeOnboarding,
+  continueFromCalorieTarget,
   continueFromEnergyResult,
   createOnboardingView,
   submitOnboardingBasics,
@@ -202,6 +203,9 @@ describe("completeOnboarding", () => {
     }
     expect(result.value.calorieTarget.dailyCalorieAdjustment).toBe(-675);
     expect(result.value.calorieTarget.targetCalories).toBe(2025);
+    expect(result.value.nutritionTarget.proteinGrams).toBeCloseTo(180, 10);
+    expect(result.value.nutritionTarget.macroPolicyVersion).toBe("macro-policy-v1");
+    expect(result.value.nutritionTarget.inputSnapshot.targetCalories).toBe(2025);
   });
 });
 
@@ -279,5 +283,39 @@ describe("pace and calorie-target steps", () => {
     expect(view.calorieTarget?.goalLabel).toBe("Maintain");
     expect(view.calorieTarget?.formattedTargetCalories).toBe("2,700 kcal/day");
     expect(view.calorieTarget?.draft.dailyCalorieAdjustment).toBe(0);
+  });
+});
+
+describe("nutrition target result", () => {
+  it("renders calories, protein, fat, carbs, and the calculation explanation", () => {
+    let view = createOnboardingView({
+      dateOfBirth: "1990-03-01",
+      biologicalSex: "male",
+      heightCm: "180",
+      weightKg: String(lbToKg(180)),
+      wearableCaloriesKcal: "2700",
+    });
+    view = submitOnboardingGoal(view, "fat_loss");
+    view = chooseOnboardingWearable(view, "whoop");
+    view = submitOnboardingWearableCalories(view);
+    view = submitOnboardingBasics(view, asOf);
+    view = chooseOnboardingRmrSource(view, false, asOf);
+    view = continueFromEnergyResult(view, asOf);
+    view = chooseOnboardingPace(view, "recommended", asOf);
+    view = continueFromCalorieTarget(view, asOf);
+
+    expect(view.step).toBe("nutrition_target");
+    expect(view.nutritionTarget?.formattedCalories).toBe("2,250 kcal");
+    expect(view.nutritionTarget?.formattedProtein).toBe("180 g");
+    expect(view.nutritionTarget?.formattedFat).toBe("57 g");
+    expect(view.nutritionTarget?.formattedCarbohydrates).toBe("254 g");
+    expect(view.nutritionTarget?.explanationRows).toEqual([
+      { label: "Protein", value: "1 g per lb of body weight" },
+      { label: "Fat", value: "0.7 g per kg of body weight" },
+      { label: "Carbohydrates", value: "Remaining calories after protein and fat" },
+    ]);
+    expect(JSON.stringify(view.nutritionTarget)).not.toMatch(/%|percent|percentage/i);
+    expect(view.nutritionTarget?.draft.inputSnapshot.proteinGramsPerLb).toBe(1);
+    expect(view.nutritionTarget?.draft.macroPolicyVersion).toBe("macro-policy-v1");
   });
 });

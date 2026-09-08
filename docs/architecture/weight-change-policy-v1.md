@@ -12,7 +12,7 @@ Turn the current goal, current weight, current TDEE, and a selected pace into:
 2. a daily calorie adjustment
 3. a daily calorie target
 
-V1 does **not** compute macros, meal plans, or adaptive calibration.
+This policy computes the calorie target only. Macro breakdown is `macro-policy-v1`.
 
 ## Goal mapping
 

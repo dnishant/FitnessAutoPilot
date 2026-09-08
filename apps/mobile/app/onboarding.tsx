@@ -21,6 +21,7 @@ import {
   chooseOnboardingPace,
   chooseOnboardingRmrSource,
   chooseOnboardingWearable,
+  continueFromCalorieTarget,
   continueFromEnergyResult,
   createOnboardingView,
   paceOptionsForGoal,
@@ -56,7 +57,8 @@ export default function OnboardingScreen() {
     }
     const result = view.result;
     const calorieTarget = view.calorieTarget;
-    if (!result || !calorieTarget) {
+    const nutritionTarget = view.nutritionTarget;
+    if (!result || !calorieTarget || !nutritionTarget) {
       return;
     }
     setBusy(true);
@@ -301,6 +303,38 @@ export default function OnboardingScreen() {
           </Pressable>
           {showCalculation
             ? view.calorieTarget.explanationRows.map((row) => (
+                <View key={row.label} style={styles.explainRow}>
+                  <Text style={styles.explainLabel}>{row.label}</Text>
+                  <Text style={styles.explainValue}>{row.value}</Text>
+                </View>
+              ))
+            : null}
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+          <Pressable
+            style={styles.primary}
+            onPress={() => setView((current) => continueFromCalorieTarget(current))}
+          >
+            <Text style={styles.primaryText}>Continue</Text>
+          </Pressable>
+        </>
+      ) : null}
+
+      {view.step === "nutrition_target" && view.nutritionTarget ? (
+        <>
+          <Text style={styles.title}>Your Daily Nutrition Target</Text>
+          <Text style={styles.kicker}>Calories</Text>
+          <Text style={styles.rmrValue}>{view.nutritionTarget.formattedCalories}</Text>
+          <Text style={styles.kicker}>Protein</Text>
+          <Text style={styles.goalValue}>{view.nutritionTarget.formattedProtein}</Text>
+          <Text style={styles.kicker}>Fat</Text>
+          <Text style={styles.goalValue}>{view.nutritionTarget.formattedFat}</Text>
+          <Text style={styles.kicker}>Carbohydrates</Text>
+          <Text style={styles.goalValue}>{view.nutritionTarget.formattedCarbohydrates}</Text>
+          <Pressable style={styles.secondary} onPress={() => setShowCalculation((open) => !open)}>
+            <Text style={styles.secondaryText}>How was this calculated?</Text>
+          </Pressable>
+          {showCalculation
+            ? view.nutritionTarget.explanationRows.map((row) => (
                 <View key={row.label} style={styles.explainRow}>
                   <Text style={styles.explainLabel}>{row.label}</Text>
                   <Text style={styles.explainValue}>{row.value}</Text>

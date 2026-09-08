@@ -28,10 +28,18 @@ import {
   localSaveOnboardingGoal,
   localSaveProfile,
   localSaveCalorieTarget,
+  localSaveNutritionTarget,
   localSaveRmrEstimate,
   localSaveTdeeEstimate,
 } from "../lib/local-planner";
-import { mapCalorieTargetRow, mapGoalRow, mapProfileRow, mapRmrRow, mapTdeeRow } from "../lib/rmr-mappers";
+import {
+  mapCalorieTargetRow,
+  mapGoalRow,
+  mapNutritionTargetRow,
+  mapProfileRow,
+  mapRmrRow,
+  mapTdeeRow,
+} from "../lib/rmr-mappers";
 
 type SessionUser = { id: string; email: string };
 
@@ -52,7 +60,14 @@ type SessionValue = {
   completeOnboarding: (
     request: CompleteOnboardingRequest,
   ) => Promise<
-    | { ok: true; rmr: RmrEstimate; tdee: TdeeEstimate; goal: Goal; calorieTarget: CalorieTarget }
+    | {
+        ok: true;
+        rmr: RmrEstimate;
+        tdee: TdeeEstimate;
+        goal: Goal;
+        calorieTarget: CalorieTarget;
+        nutritionTarget: NutritionTarget;
+      }
     | { ok: false; error: string }
   >;
   saveGoal: (
@@ -69,12 +84,20 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
   currentRmr: RmrEstimate | null;
   currentTdee: TdeeEstimate | null;
   currentCalorieTarget: CalorieTarget | null;
+  currentNutritionTarget: NutritionTarget | null;
   goal: Goal | null;
 }> {
   if (!supabase) {
-    return { profile: null, currentRmr: null, currentTdee: null, currentCalorieTarget: null, goal: null };
+    return {
+      profile: null,
+      currentRmr: null,
+      currentTdee: null,
+      currentCalorieTarget: null,
+      currentNutritionTarget: null,
+      goal: null,
+    };
   }
-  const [profileRes, rmrRes, tdeeRes, calorieRes, goalRes] = await Promise.all([
+  const [profileRes, rmrRes, tdeeRes, calorieRes, nutritionRes, goalRes] = await Promise.all([
     supabase
       .from("user_profiles")
       .select("user_id, date_of_birth, biological_sex, height_cm, weight_kg")
@@ -102,6 +125,13 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
       .limit(1)
       .maybeSingle(),
     supabase
+      .from("nutrition_targets")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
       .from("goals")
       .select("*")
       .eq("user_id", userId)
@@ -116,6 +146,7 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
     currentRmr: rmrRes.data ? mapRmrRow(rmrRes.data) : null,
     currentTdee: tdeeRes.data ? mapTdeeRow(tdeeRes.data) : null,
     currentCalorieTarget: calorieRes.data ? mapCalorieTargetRow(calorieRes.data) : null,
+    currentNutritionTarget: nutritionRes.data ? mapNutritionTargetRow(nutritionRes.data) : null,
     goal: goalRes.data ? mapGoalRow(goalRes.data) : null,
   };
 }
@@ -164,6 +195,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               setCurrentRmr(loaded.currentRmr);
               setCurrentTdee(loaded.currentTdee);
               setCurrentCalorieTarget(loaded.currentCalorieTarget);
+              setNutritionTarget(loaded.currentNutritionTarget);
               setGoal(loaded.goal);
             }
           }
@@ -234,6 +266,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setCurrentRmr(loaded.currentRmr);
         setCurrentTdee(loaded.currentTdee);
         setCurrentCalorieTarget(loaded.currentCalorieTarget);
+        setNutritionTarget(loaded.currentNutritionTarget);
         setGoal(loaded.goal);
         return { ok: true };
       },
@@ -313,10 +346,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               goalId: savedGoal.id,
               tdeeEstimateId: savedTdee.id,
             });
+            const savedNutritionTarget = localSaveNutritionTarget(user.id, completed.value.nutritionTarget, {
+              goalId: savedGoal.id,
+              calorieTargetId: savedCalorieTarget.id,
+              tdeeKcal: savedCalorieTarget.tdeeKcal,
+              targetLbPerWeek: savedCalorieTarget.targetLbPerWeek,
+            });
             setProfile(savedProfile);
             setCurrentRmr(savedRmr);
             setCurrentTdee(savedTdee);
             setCurrentCalorieTarget(savedCalorieTarget);
+            setNutritionTarget(savedNutritionTarget);
             setGoal(savedGoal);
             return {
               ok: true,
@@ -324,6 +364,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               tdee: savedTdee,
               goal: savedGoal,
               calorieTarget: savedCalorieTarget,
+              nutritionTarget: savedNutritionTarget,
             };
           }
           if (!supabase || !user) {
@@ -341,11 +382,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             tdee: TdeeEstimate;
             goal: Goal;
             calorieTarget: CalorieTarget;
+            nutritionTarget: NutritionTarget;
           };
           setProfile(payload.profile);
           setCurrentRmr(payload.rmr);
           setCurrentTdee(payload.tdee);
           setCurrentCalorieTarget(payload.calorieTarget);
+          setNutritionTarget(payload.nutritionTarget);
           setGoal(payload.goal);
           return {
             ok: true,
@@ -353,6 +396,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             tdee: payload.tdee,
             goal: payload.goal,
             calorieTarget: payload.calorieTarget,
+            nutritionTarget: payload.nutritionTarget,
           };
         } catch (e) {
           return {

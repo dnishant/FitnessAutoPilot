@@ -1,6 +1,7 @@
 import type {
   CalorieTarget,
   Goal,
+  NutritionTarget,
   ProfileBasics,
   RmrEstimate,
   TdeeEstimate,
@@ -108,6 +109,38 @@ export function mapCalorieTargetRow(row: Record<string, unknown>): CalorieTarget
       row.policyVersion ??
       "weight-change-policy-v1") as CalorieTarget["policyVersion"],
     inputSnapshot: (row.input_snapshot ?? row.inputSnapshot) as CalorieTarget["inputSnapshot"],
+    createdAt: String(row.created_at ?? row.createdAt),
+  };
+}
+
+export function mapNutritionTargetRow(row: Record<string, unknown>): NutritionTarget {
+  const fatG = Number(row.fat_g ?? row.fatG ?? row.fat_min_g ?? row.fatMinG);
+  return {
+    id: String(row.id),
+    userId: String(row.user_id ?? row.userId),
+    goalId: String(row.goal_id ?? row.goalId),
+    calorieTargetId: row.calorie_target_id
+      ? String(row.calorie_target_id)
+      : row.calorieTargetId
+        ? String(row.calorieTargetId)
+        : undefined,
+    estimatedMaintenanceCalories: Number(
+      row.estimated_maintenance_calories ?? row.estimatedMaintenanceCalories,
+    ),
+    targetCalories: Number(row.target_calories ?? row.targetCalories),
+    proteinG: Number(row.protein_g ?? row.proteinG),
+    fatG,
+    fatMinG: Number(row.fat_min_g ?? row.fatMinG),
+    fatMaxG: Number(row.fat_max_g ?? row.fatMaxG),
+    carbohydrateG: Number(row.carbohydrate_g ?? row.carbohydrateG),
+    desiredRateKgPerWeek: Number(row.desired_rate_kg_per_week ?? row.desiredRateKgPerWeek),
+    algorithmName: "nutrition-target",
+    algorithmVersion: String(row.algorithm_version ?? row.algorithmVersion),
+    macroPolicyName: (row.macro_policy_name ?? row.macroPolicyName) as NutritionTarget["macroPolicyName"],
+    macroPolicyVersion: (row.macro_policy_version ??
+      row.macroPolicyVersion) as NutritionTarget["macroPolicyVersion"],
+    inputSnapshot: (row.input_snapshot ?? row.inputSnapshot ?? {}) as NutritionTarget["inputSnapshot"],
+    validFrom: String(row.valid_from ?? row.validFrom),
     createdAt: String(row.created_at ?? row.createdAt),
   };
 }

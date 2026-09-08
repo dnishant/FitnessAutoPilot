@@ -14,15 +14,20 @@ import type {
 import { UserProfileSchema } from "@fitness-autopilot/contracts";
 import {
   appendCalorieTarget,
+  appendNutritionTarget,
   appendRmrEstimate,
   appendTdeeEstimate,
   calculateNutritionTarget,
+  lbToKg,
+  nutritionTargetPersistFields,
   planOneDay,
   selectCurrentCalorieTarget,
+  selectCurrentNutritionTarget,
   selectCurrentRmr,
   selectCurrentTdee,
   utcDateKey,
   type CalorieTargetDraft,
+  type MacroTargetDraft,
   type NutritionTargetCalculation,
   type RmrEstimateDraft,
   type TdeeEstimateDraft,
@@ -49,6 +54,8 @@ export type LocalStore = {
   currentTdee: TdeeEstimate | null;
   calorieTargetHistory: CalorieTarget[];
   currentCalorieTarget: CalorieTarget | null;
+  nutritionTargetHistory: NutritionTarget[];
+  currentNutritionTarget: NutritionTarget | null;
   goal: Goal | null;
   nutritionTarget: (NutritionTarget & { calculation?: NutritionTargetCalculation }) | null;
   dailyPlan: DailyPlan | null;
@@ -76,6 +83,8 @@ export function ensureLocalUser(email: string, password: string): LocalStore {
     currentTdee: null,
     calorieTargetHistory: [],
     currentCalorieTarget: null,
+    nutritionTargetHistory: [],
+    currentNutritionTarget: null,
     goal: null,
     nutritionTarget: null,
     dailyPlan: null,
@@ -198,6 +207,43 @@ export function localSaveCalorieTarget(
   return saved;
 }
 
+export function localSaveNutritionTarget(
+  userId: string,
+  draft: MacroTargetDraft,
+  refs: { goalId: string; calorieTargetId: string; tdeeKcal: number; targetLbPerWeek: number },
+): NutritionTarget {
+  const store = memory.get(userId);
+  if (!store) {
+    throw new Error("Local user missing");
+  }
+  const previous = store.nutritionTargetHistory.map((row) => ({ ...row }));
+  const now = draft.createdAt;
+  const fields = nutritionTargetPersistFields({
+    macros: draft,
+    tdeeKcal: refs.tdeeKcal,
+    desiredRateKgPerWeek: lbToKg(refs.targetLbPerWeek),
+  });
+  const saved: NutritionTarget = {
+    id: uuidFromSeed(`nutrition:${userId}:${draft.targetCalories}:${now}:${store.nutritionTargetHistory.length}`),
+    userId,
+    goalId: refs.goalId,
+    calorieTargetId: refs.calorieTargetId,
+    ...fields,
+    validFrom: now,
+    createdAt: now,
+  };
+  store.nutritionTargetHistory = appendNutritionTarget(store.nutritionTargetHistory, saved);
+  store.currentNutritionTarget = selectCurrentNutritionTarget(store.nutritionTargetHistory);
+  store.nutritionTarget = saved;
+  previous.forEach((row, index) => {
+    const current = store.nutritionTargetHistory[index];
+    if (JSON.stringify(current) !== JSON.stringify(row)) {
+      throw new Error("Nutrition target history mutation is not allowed");
+    }
+  });
+  return saved;
+}
+
 export function localSaveOnboardingGoal(userId: string, goalType: OnboardingGoalType, asOf: Date): Goal {
   return localSaveGoal(userId, {
     goalType,
@@ -228,6 +274,7 @@ export function localSaveGoal(userId: string, request: CreateGoalRequest): Goal 
   };
   store.goal = goal;
   store.nutritionTarget = null;
+  store.currentNutritionTarget = null;
   store.dailyPlan = null;
   return goal;
 }

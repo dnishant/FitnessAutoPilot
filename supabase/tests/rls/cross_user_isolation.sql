@@ -160,8 +160,17 @@ begin
   select count(*) into n from public.goals where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
   if n <> 0 then raise exception 'RLS FAIL: user A can read user B goals'; end if;
 
+  select count(*) into n from public.nutrition_targets where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  if n <> 1 then raise exception 'RLS FAIL: user A cannot read own nutrition target'; end if;
+
   select count(*) into n from public.nutrition_targets where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
   if n <> 0 then raise exception 'RLS FAIL: user A can read user B nutrition targets'; end if;
+
+  update public.nutrition_targets
+    set target_calories = 1
+    where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'RLS FAIL: user A can modify user B nutrition target'; end if;
 
   select count(*) into n from public.daily_plans where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
   if n <> 0 then raise exception 'RLS FAIL: user A can read user B daily plans'; end if;
@@ -274,6 +283,34 @@ begin
       '{"goalType":"muscle_gain","weightChangeDirection":"weight_gain","pace":"recommended","weightKg":80,"weightLb":176.37,"tdeeKcal":2800,"targetRatePerWeek":0.0025,"policyVersion":"weight-change-policy-v1"}'::jsonb
     );
     raise exception 'RLS FAIL: user A can insert calorie target for user B';
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
+
+  begin
+    insert into public.nutrition_targets (
+      user_id, goal_id, estimated_maintenance_calories, target_calories, protein_g,
+      fat_min_g, fat_max_g, carbohydrate_g, desired_rate_kg_per_week, algorithm_name,
+      algorithm_version, input_snapshot, valid_from
+    ) values (
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0001',
+      2800,
+      3025,
+      180,
+      57,
+      57,
+      254,
+      0.2,
+      'nutrition-target',
+      'macro-policy-v1',
+      '{}'::jsonb,
+      now()
+    );
+    raise exception 'RLS FAIL: user A can insert nutrition target for user B';
   exception
     when others then
       if sqlerrm like 'RLS FAIL:%' then

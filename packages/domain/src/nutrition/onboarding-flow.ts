@@ -44,6 +44,14 @@ import {
   type CalorieTargetDraft,
   type CalorieTargetError,
 } from "./calorie-target";
+import {
+  calculateMacroTargets,
+  formatMacroGrams,
+  formatNutritionCalories,
+  nutritionTargetExplanationRows,
+  type MacroTargetDraft,
+  type MacroTargetError,
+} from "./macros";
 
 export type OnboardingStep =
   | "goal"
@@ -54,7 +62,8 @@ export type OnboardingStep =
   | "dexa_details"
   | "result"
   | "pace"
-  | "calorie_target";
+  | "calorie_target"
+  | "nutrition_target";
 
 export type OnboardingDraft = {
   goalType: OnboardingGoalType | "";
@@ -97,15 +106,25 @@ export type CalorieTargetView = {
   draft: CalorieTargetDraft;
 };
 
+export type NutritionTargetView = {
+  formattedCalories: string;
+  formattedProtein: string;
+  formattedFat: string;
+  formattedCarbohydrates: string;
+  explanationRows: Array<{ label: string; value: string }>;
+  draft: MacroTargetDraft;
+};
+
 export type OnboardingView = {
   step: OnboardingStep;
   draft: OnboardingDraft;
   error: string | null;
   result: OnboardingResultView | null;
   calorieTarget: CalorieTargetView | null;
+  nutritionTarget: NutritionTargetView | null;
 };
 
-export type OnboardingError = RmrError | TdeeError | CalorieTargetError;
+export type OnboardingError = RmrError | TdeeError | CalorieTargetError | MacroTargetError;
 
 export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): OnboardingView {
   return {
@@ -127,6 +146,7 @@ export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): 
     error: null,
     result: null,
     calorieTarget: null,
+    nutritionTarget: null,
   };
 }
 
@@ -211,6 +231,17 @@ function buildCalorieTargetView(
   };
 }
 
+function buildNutritionTargetView(draft: MacroTargetDraft): NutritionTargetView {
+  return {
+    formattedCalories: formatNutritionCalories(draft.targetCalories),
+    formattedProtein: formatMacroGrams(draft.proteinGrams),
+    formattedFat: formatMacroGrams(draft.fatGrams),
+    formattedCarbohydrates: formatMacroGrams(draft.carbohydrateGrams),
+    explanationRows: nutritionTargetExplanationRows(),
+    draft,
+  };
+}
+
 function withCalorieTarget(
   view: OnboardingView,
   calorieDraft: CalorieTargetDraft,
@@ -221,6 +252,15 @@ function withCalorieTarget(
     step: "calorie_target",
     error: null,
     calorieTarget: buildCalorieTargetView(calorieDraft, goalType),
+  };
+}
+
+function withNutritionTarget(view: OnboardingView, draft: MacroTargetDraft): OnboardingView {
+  return {
+    ...view,
+    step: "nutrition_target",
+    error: null,
+    nutritionTarget: buildNutritionTargetView(draft),
   };
 }
 
@@ -453,6 +493,27 @@ export function chooseOnboardingPace(
   );
 }
 
+export function continueFromCalorieTarget(
+  view: OnboardingView,
+  asOf: Date = new Date(),
+): OnboardingView {
+  if (!view.calorieTarget) {
+    return withError(view, {
+      code: "invalid_calorie_target",
+      message: "Establish a daily calorie target before calculating macros.",
+    });
+  }
+  const created = calculateMacroTargets({
+    targetCalories: view.calorieTarget.draft.targetCalories,
+    weightKg: view.calorieTarget.draft.bodyWeightKg,
+    asOf,
+  });
+  if (!created.ok) {
+    return withError(view, created.error);
+  }
+  return withNutritionTarget(view, created.value);
+}
+
 export function completeOnboarding(input: {
   dateOfBirth: string;
   biologicalSex: RmrBiologicalSex;
@@ -478,6 +539,7 @@ export function completeOnboarding(input: {
     tdee: TdeeEstimateDraft;
     goalType: OnboardingGoalType;
     calorieTarget: CalorieTargetDraft;
+    nutritionTarget: MacroTargetDraft;
   },
   OnboardingError
 > {
@@ -530,11 +592,20 @@ export function completeOnboarding(input: {
   if (!calorieTarget.ok) {
     return calorieTarget;
   }
+  const nutritionTarget = calculateMacroTargets({
+    targetCalories: calorieTarget.value.targetCalories,
+    weightKg: input.weightKg,
+    asOf,
+  });
+  if (!nutritionTarget.ok) {
+    return nutritionTarget;
+  }
   return ok({
     profile: rmrCompleted.value.profile,
     rmr: rmrCompleted.value.rmr,
     tdee: tdee.value,
     goalType: goal.value,
     calorieTarget: calorieTarget.value,
+    nutritionTarget: nutritionTarget.value,
   });
 }

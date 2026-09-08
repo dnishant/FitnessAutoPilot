@@ -8,6 +8,11 @@ import type {
 import { ok, err, type Result } from "../../validation/index.ts";
 import { requireAllowedEligibility, type SafetyFailure } from "../safety/eligibility";
 import { roundKcal, roundMacroG } from "../common/rounding";
+import {
+  CARB_KCAL_PER_GRAM,
+  FAT_KCAL_PER_GRAM,
+  PROTEIN_KCAL_PER_GRAM,
+} from "./energy";
 import { calculateAgeFromDateOfBirth, mifflinStJeorRaw } from "./rmr";
 
 export const NUTRITION_TARGET_ALGORITHM_NAME = "nutrition-target" as const;
@@ -38,9 +43,9 @@ export const NutritionTargetV1Policy = {
   proteinGPerKg: 1.6,
   proteinClampG: { min: 80, max: 220 },
   fatCalorieFraction: { min: 0.2, max: 0.35 },
-  proteinKcalPerG: 4,
-  carbKcalPerG: 4,
-  fatKcalPerG: 9,
+  proteinKcalPerG: PROTEIN_KCAL_PER_GRAM,
+  carbKcalPerG: CARB_KCAL_PER_GRAM,
+  fatKcalPerG: FAT_KCAL_PER_GRAM,
 } as const;
 
 export type NutritionTargetCalculation = {
