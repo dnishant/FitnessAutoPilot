@@ -7,26 +7,29 @@ import {
   type ReactNode,
 } from "react";
 import type {
-  CompleteRmrOnboardingRequest,
+  CompleteOnboardingRequest,
   CreateGoalRequest,
   DailyPlan,
   Goal,
   NutritionTarget,
   ProfileBasics,
   RmrEstimate,
+  TdeeEstimate,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { completeRmrOnboarding as completeRmrOnboardingDomain } from "@fitness-autopilot/domain";
+import { completeOnboarding as completeOnboardingDomain } from "@fitness-autopilot/domain";
 import { supabase, useLocalPlanner } from "../lib/supabase";
 import {
   ensureLocalUser,
   getLocalStore,
   localGeneratePlan,
   localSaveGoal,
+  localSaveOnboardingGoal,
   localSaveProfile,
   localSaveRmrEstimate,
+  localSaveTdeeEstimate,
 } from "../lib/local-planner";
-import { mapProfileRow, mapRmrRow } from "../lib/rmr-mappers";
+import { mapGoalRow, mapProfileRow, mapRmrRow, mapTdeeRow } from "../lib/rmr-mappers";
 
 type SessionUser = { id: string; email: string };
 
@@ -36,15 +39,19 @@ type SessionValue = {
   user: SessionUser | null;
   profile: ProfileBasics | null;
   currentRmr: RmrEstimate | null;
+  currentTdee: TdeeEstimate | null;
   goal: Goal | null;
   nutritionTarget: NutritionTarget | null;
   dailyPlan: DailyPlan | null;
   signIn: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signUp: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => Promise<void>;
-  completeRmrOnboarding: (
-    request: CompleteRmrOnboardingRequest,
-  ) => Promise<{ ok: true; rmr: RmrEstimate } | { ok: false; error: string }>;
+  completeOnboarding: (
+    request: CompleteOnboardingRequest,
+  ) => Promise<
+    | { ok: true; rmr: RmrEstimate; tdee: TdeeEstimate; goal: Goal }
+    | { ok: false; error: string }
+  >;
   saveGoal: (
     request: CreateGoalRequest,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -54,29 +61,50 @@ type SessionValue = {
 const SessionContext = createContext<SessionValue | null>(null);
 const LOCAL_USER_KEY = "fa.local.user";
 
-async function loadRemoteProfileAndRmr(userId: string): Promise<{
+async function loadRemoteOnboardingState(userId: string): Promise<{
   profile: ProfileBasics | null;
   currentRmr: RmrEstimate | null;
+  currentTdee: TdeeEstimate | null;
+  goal: Goal | null;
 }> {
   if (!supabase) {
-    return { profile: null, currentRmr: null };
+    return { profile: null, currentRmr: null, currentTdee: null, goal: null };
   }
-  const profileRes = await supabase
-    .from("user_profiles")
-    .select("user_id, date_of_birth, biological_sex, height_cm, weight_kg")
-    .eq("user_id", userId)
-    .maybeSingle();
-  const rmrRes = await supabase
-    .from("rmr_estimates")
-    .select("*")
-    .eq("user_id", userId)
-    .order("calculated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const [profileRes, rmrRes, tdeeRes, goalRes] = await Promise.all([
+    supabase
+      .from("user_profiles")
+      .select("user_id, date_of_birth, biological_sex, height_cm, weight_kg")
+      .eq("user_id", userId)
+      .maybeSingle(),
+    supabase
+      .from("rmr_estimates")
+      .select("*")
+      .eq("user_id", userId)
+      .order("calculated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("tdee_estimates")
+      .select("*")
+      .eq("user_id", userId)
+      .order("calculated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("goals")
+      .select("*")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   return {
     profile: profileRes.data ? mapProfileRow(profileRes.data) : null,
     currentRmr: rmrRes.data ? mapRmrRow(rmrRes.data) : null,
+    currentTdee: tdeeRes.data ? mapTdeeRow(tdeeRes.data) : null,
+    goal: goalRes.data ? mapGoalRow(goalRes.data) : null,
   };
 }
 
@@ -85,6 +113,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [profile, setProfile] = useState<ProfileBasics | null>(null);
   const [currentRmr, setCurrentRmr] = useState<RmrEstimate | null>(null);
+  const [currentTdee, setCurrentTdee] = useState<TdeeEstimate | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [nutritionTarget, setNutritionTarget] = useState<NutritionTarget | null>(null);
   const [dailyPlan, setDailyPlan] = useState<DailyPlan | null>(null);
@@ -102,6 +131,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               setUser({ id: store.userId, email: store.email });
               setProfile(store.profile);
               setCurrentRmr(store.currentRmr);
+              setCurrentTdee(store.currentTdee);
               setGoal(store.goal);
               setNutritionTarget(store.nutritionTarget);
               setDailyPlan(store.dailyPlan);
@@ -114,10 +144,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               id: data.session.user.id,
               email: data.session.user.email ?? "",
             });
-            const loaded = await loadRemoteProfileAndRmr(data.session.user.id);
+            const loaded = await loadRemoteOnboardingState(data.session.user.id);
             if (!cancelled) {
               setProfile(loaded.profile);
               setCurrentRmr(loaded.currentRmr);
+              setCurrentTdee(loaded.currentTdee);
+              setGoal(loaded.goal);
             }
           }
         }
@@ -139,6 +171,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       user,
       profile,
       currentRmr,
+      currentTdee,
       goal,
       nutritionTarget,
       dailyPlan,
@@ -155,6 +188,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             setUser(next);
             setProfile(store.profile);
             setCurrentRmr(store.currentRmr);
+            setCurrentTdee(store.currentTdee);
             setGoal(store.goal);
             setNutritionTarget(store.nutritionTarget);
             setDailyPlan(store.dailyPlan);
@@ -178,9 +212,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return { ok: false, error: "Sign-in succeeded but user is missing." };
         }
         setUser({ id: data.user.id, email: data.user.email ?? email });
-        const loaded = await loadRemoteProfileAndRmr(data.user.id);
+        const loaded = await loadRemoteOnboardingState(data.user.id);
         setProfile(loaded.profile);
         setCurrentRmr(loaded.currentRmr);
+        setCurrentTdee(loaded.currentTdee);
+        setGoal(loaded.goal);
         return { ok: true };
       },
       async signUp(email, password) {
@@ -191,6 +227,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setUser(next);
           setProfile(store.profile);
           setCurrentRmr(store.currentRmr);
+          setCurrentTdee(store.currentTdee);
           setGoal(store.goal);
           setNutritionTarget(store.nutritionTarget);
           setDailyPlan(store.dailyPlan);
@@ -223,19 +260,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setUser(null);
         setProfile(null);
         setCurrentRmr(null);
+        setCurrentTdee(null);
         setGoal(null);
         setNutritionTarget(null);
         setDailyPlan(null);
       },
-      async completeRmrOnboarding(request) {
+      async completeOnboarding(request) {
         try {
           if (useLocalPlanner) {
             if (!user) {
               return { ok: false, error: "Not signed in" };
             }
-            const completed = completeRmrOnboardingDomain({
+            const asOf = new Date();
+            const completed = completeOnboardingDomain({
               ...request,
-              asOf: new Date(),
+              asOf,
             });
             if (!completed.ok) {
               return { ok: false, error: completed.error.message };
@@ -248,9 +287,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               weightKg: completed.value.profile.weightKg,
             });
             const savedRmr = localSaveRmrEstimate(user.id, completed.value.rmr);
+            const savedTdee = localSaveTdeeEstimate(user.id, completed.value.tdee);
+            const savedGoal = localSaveOnboardingGoal(user.id, completed.value.goalType, asOf);
             setProfile(savedProfile);
             setCurrentRmr(savedRmr);
-            return { ok: true, rmr: savedRmr };
+            setCurrentTdee(savedTdee);
+            setGoal(savedGoal);
+            return { ok: true, rmr: savedRmr, tdee: savedTdee, goal: savedGoal };
           }
           if (!supabase || !user) {
             return { ok: false, error: "Supabase is not configured." };
@@ -261,14 +304,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           if (error) {
             return { ok: false, error: error.message };
           }
-          const payload = data as { profile: ProfileBasics; rmr: RmrEstimate };
+          const payload = data as {
+            profile: ProfileBasics;
+            rmr: RmrEstimate;
+            tdee: TdeeEstimate;
+            goal: Goal;
+          };
           setProfile(payload.profile);
           setCurrentRmr(payload.rmr);
-          return { ok: true, rmr: payload.rmr };
+          setCurrentTdee(payload.tdee);
+          setGoal(payload.goal);
+          return { ok: true, rmr: payload.rmr, tdee: payload.tdee, goal: payload.goal };
         } catch (e) {
           return {
             ok: false,
-            error: e instanceof Error ? e.message : "Failed to save RMR",
+            error: e instanceof Error ? e.message : "Failed to save onboarding",
           };
         }
       },
@@ -336,7 +386,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [loading, user, profile, currentRmr, goal, nutritionTarget, dailyPlan],
+    [loading, user, profile, currentRmr, currentTdee, goal, nutritionTarget, dailyPlan],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

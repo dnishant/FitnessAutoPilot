@@ -1,5 +1,6 @@
 export * from "./profile";
 export * from "./rmr";
+export * from "./tdee";
 export * from "./goal";
 export * from "./nutrition";
 export * from "./recipe";

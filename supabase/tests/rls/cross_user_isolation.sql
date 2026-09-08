@@ -70,6 +70,38 @@ insert into public.rmr_estimates (
   )
 on conflict (id) do nothing;
 
+insert into public.tdee_estimates (
+  id, user_id, tdee_kcal, source, wearable, wearable_calories_kcal,
+  rmr_kcal_used, algorithm_name, algorithm_version, input_snapshot, calculated_at
+) values
+  (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0005',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    2400,
+    'apple_watch_active_plus_rmr',
+    'apple_watch',
+    650,
+    1750,
+    'apple_watch_active_plus_rmr',
+    'tdee-v1',
+    '{"wearable":"apple_watch","wearableCaloriesKcal":650,"rmrKcal":1750,"rmrSource":"estimated_mifflin_st_jeor","goalType":"fat_loss"}'::jsonb,
+    now()
+  ),
+  (
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0005',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    2800,
+    'whoop_daily_calories',
+    'whoop',
+    2800,
+    null,
+    null,
+    null,
+    '{"wearable":"whoop","wearableCaloriesKcal":2800,"rmrKcal":1782,"rmrSource":"user_reported_dexa","goalType":"muscle_gain"}'::jsonb,
+    now()
+  )
+on conflict (id) do nothing;
+
 -- Become user A
 set local role authenticated;
 set local request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -106,6 +138,18 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'RLS FAIL: user A can modify user B RMR'; end if;
 
+  select count(*) into n from public.tdee_estimates where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  if n <> 1 then raise exception 'RLS FAIL: user A cannot read own TDEE'; end if;
+
+  select count(*) into n from public.tdee_estimates where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  if n <> 0 then raise exception 'RLS FAIL: user A can read user B TDEE'; end if;
+
+  update public.tdee_estimates
+    set tdee_kcal = 1
+    where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'RLS FAIL: user A can modify user B TDEE'; end if;
+
   begin
     insert into public.rmr_estimates (
       user_id, rmr_kcal, source, algorithm_name, algorithm_version,
@@ -121,6 +165,30 @@ begin
       now()
     );
     raise exception 'RLS FAIL: user A can insert RMR for user B';
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
+
+  begin
+    insert into public.tdee_estimates (
+      user_id, tdee_kcal, source, wearable, wearable_calories_kcal,
+      rmr_kcal_used, algorithm_name, algorithm_version, input_snapshot, calculated_at
+    ) values (
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      2500,
+      'whoop_daily_calories',
+      'whoop',
+      2500,
+      null,
+      null,
+      null,
+      '{"wearable":"whoop","wearableCaloriesKcal":2500,"rmrKcal":1782,"rmrSource":"user_reported_dexa","goalType":"muscle_gain"}'::jsonb,
+      now()
+    );
+    raise exception 'RLS FAIL: user A can insert TDEE for user B';
   exception
     when others then
       if sqlerrm like 'RLS FAIL:%' then

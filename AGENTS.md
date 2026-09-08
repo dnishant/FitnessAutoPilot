@@ -16,9 +16,9 @@ Do not turn the product into a generic fitness metrics dashboard.
 
 Foundation + first meal-planning vertical slice only:
 
-profile → goal → deterministic nutrition target → structured recipes → deterministic portioning → one valid day of meals → Today screen.
+profile → goal → wearable TDEE → deterministic RMR → Today screen.
 
-Do **not** build: weekly planning, AI recipe selection, groceries, meal-prep optimization, workouts, wearables, Action Engine, notifications, weekly review, recovery adaptation, analytics dashboards.
+Do **not** build: weekly planning, AI recipe selection, groceries, meal-prep optimization, workouts, wearable APIs, Action Engine, notifications, weekly review, recovery adaptation, analytics dashboards, calorie targets, macros, or meal plans.
 
 ## Architecture
 

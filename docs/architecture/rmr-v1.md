@@ -13,7 +13,7 @@ Users either:
 1. Enter an RMR from a DEXA / body-composition report (`user_reported_dexa`)
 2. Let the app estimate RMR with Mifflin-St Jeor (`estimated_mifflin_st_jeor`)
 
-V1 does **not** compute TDEE, calorie targets, macros, or meal plans.
+RMR collection does **not** compute calorie targets, macros, or meal plans. Wearable TDEE is a separate engine (`tdee-v1`).
 
 ## Inputs
 
