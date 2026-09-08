@@ -4,6 +4,7 @@ import type {
   RmrSource,
   TdeeSource,
   Wearable,
+  WeightChangePace,
 } from "../../contracts/index.ts";
 import { onboardingGoalLabel } from "../../contracts/index.ts";
 import { err, ok, type Result } from "../../validation/index.ts";
@@ -29,6 +30,20 @@ import {
   type TdeeError,
   type TdeeEstimateDraft,
 } from "./tdee";
+import {
+  calorieTargetGoalLabel,
+  calorieTargetPaceLabel,
+  createCalorieTarget,
+  formatLbPerWeek,
+  formatPercentPerWeek,
+  formatSignedKcalPerDay,
+  formatTargetCaloriesPerDay,
+  mapGoalToWeightChangeDirection,
+  paceOptionsForGoal,
+  pacePromptForGoal,
+  type CalorieTargetDraft,
+  type CalorieTargetError,
+} from "./calorie-target";
 
 export type OnboardingStep =
   | "goal"
@@ -37,7 +52,9 @@ export type OnboardingStep =
   | "basics"
   | "source"
   | "dexa_details"
-  | "result";
+  | "result"
+  | "pace"
+  | "calorie_target";
 
 export type OnboardingDraft = {
   goalType: OnboardingGoalType | "";
@@ -50,6 +67,7 @@ export type OnboardingDraft = {
   knowsRmr: boolean | null;
   reportedRmrKcal: string;
   reportDate: string;
+  pace: WeightChangePace | "";
 };
 
 export type OnboardingResultView = {
@@ -69,14 +87,25 @@ export type OnboardingResultView = {
   goalLabel: string;
 };
 
+export type CalorieTargetView = {
+  formattedMaintenance: string;
+  goalLabel: string;
+  paceLabel: string;
+  formattedTargetRate: string;
+  formattedTargetCalories: string;
+  explanationRows: Array<{ label: string; value: string }>;
+  draft: CalorieTargetDraft;
+};
+
 export type OnboardingView = {
   step: OnboardingStep;
   draft: OnboardingDraft;
   error: string | null;
   result: OnboardingResultView | null;
+  calorieTarget: CalorieTargetView | null;
 };
 
-export type OnboardingError = RmrError | TdeeError;
+export type OnboardingError = RmrError | TdeeError | CalorieTargetError;
 
 export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): OnboardingView {
   return {
@@ -92,10 +121,12 @@ export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): 
       knowsRmr: null,
       reportedRmrKcal: "",
       reportDate: "",
+      pace: "",
       ...overrides,
     },
     error: null,
     result: null,
+    calorieTarget: null,
   };
 }
 
@@ -153,6 +184,44 @@ function parseWearableCalories(draft: OnboardingDraft): Result<number, Onboardin
 
 function withError(view: OnboardingView, error: OnboardingError): OnboardingView {
   return { ...view, error: error.message };
+}
+
+function buildCalorieTargetView(
+  draft: CalorieTargetDraft,
+  goalType: OnboardingGoalType,
+): CalorieTargetView {
+  return {
+    formattedMaintenance: formatTargetCaloriesPerDay(draft.tdeeKcal),
+    goalLabel: calorieTargetGoalLabel(goalType),
+    paceLabel: calorieTargetPaceLabel(draft.pace),
+    formattedTargetRate: formatLbPerWeek(draft.targetLbPerWeek),
+    formattedTargetCalories: formatTargetCaloriesPerDay(draft.targetCalories),
+    explanationRows: [
+      {
+        label: "Current weight",
+        value: `${draft.bodyWeightKg.toFixed(1)} kg (${draft.bodyWeightLb.toFixed(1)} lb)`,
+      },
+      { label: "Selected rate", value: `${formatPercentPerWeek(draft.targetRatePerWeek)} / week` },
+      { label: "Target change", value: formatLbPerWeek(draft.targetLbPerWeek) },
+      { label: "Daily calorie adjustment", value: formatSignedKcalPerDay(draft.dailyCalorieAdjustment) },
+      { label: "TDEE", value: formatTargetCaloriesPerDay(draft.tdeeKcal) },
+      { label: "Target calories", value: formatTargetCaloriesPerDay(draft.targetCalories) },
+    ],
+    draft,
+  };
+}
+
+function withCalorieTarget(
+  view: OnboardingView,
+  calorieDraft: CalorieTargetDraft,
+  goalType: OnboardingGoalType,
+): OnboardingView {
+  return {
+    ...view,
+    step: "calorie_target",
+    error: null,
+    calorieTarget: buildCalorieTargetView(calorieDraft, goalType),
+  };
 }
 
 function withResult(
@@ -322,6 +391,68 @@ export function submitOnboardingDexa(
   );
 }
 
+export { paceOptionsForGoal, pacePromptForGoal };
+
+export function continueFromEnergyResult(
+  view: OnboardingView,
+  asOf: Date = new Date(),
+): OnboardingView {
+  if (!view.result) {
+    return withError(view, {
+      code: "invalid_input",
+      message: "Establish RMR and TDEE before choosing a pace.",
+    });
+  }
+  const direction = mapGoalToWeightChangeDirection(view.draft.goalType);
+  if (!direction.ok) {
+    return withError(view, direction.error);
+  }
+  if (direction.value === "maintenance") {
+    return chooseOnboardingPace(view, "recommended", asOf);
+  }
+  return {
+    ...view,
+    step: "pace",
+    error: null,
+  };
+}
+
+export function chooseOnboardingPace(
+  view: OnboardingView,
+  pace: WeightChangePace,
+  asOf: Date = new Date(),
+): OnboardingView {
+  if (!view.result) {
+    return withError(view, {
+      code: "invalid_input",
+      message: "Establish RMR and TDEE before choosing a pace.",
+    });
+  }
+  const goal = validateOnboardingGoalType(view.draft.goalType);
+  if (!goal.ok) {
+    return withError(view, goal.error);
+  }
+  const weight = parseRequiredNumber(view.draft.weightKg, "Weight");
+  if (!weight.ok) {
+    return withError(view, weight.error);
+  }
+  const created = createCalorieTarget({
+    goalType: goal.value,
+    pace,
+    weightKg: weight.value,
+    tdeeKcal: view.result.tdeeKcal,
+    asOf,
+  });
+  if (!created.ok) {
+    return withError(view, created.error);
+  }
+  return withCalorieTarget(
+    { ...view, draft: { ...view.draft, pace } },
+    created.value,
+    goal.value,
+  );
+}
+
 export function completeOnboarding(input: {
   dateOfBirth: string;
   biologicalSex: RmrBiologicalSex;
@@ -333,6 +464,7 @@ export function completeOnboarding(input: {
   goalType: OnboardingGoalType;
   wearable: Wearable;
   wearableCaloriesKcal: number;
+  pace?: WeightChangePace;
   asOf?: Date;
 }): Result<
   {
@@ -345,6 +477,7 @@ export function completeOnboarding(input: {
     rmr: RmrEstimateDraft;
     tdee: TdeeEstimateDraft;
     goalType: OnboardingGoalType;
+    calorieTarget: CalorieTargetDraft;
   },
   OnboardingError
 > {
@@ -381,10 +514,27 @@ export function completeOnboarding(input: {
   if (!tdee.ok) {
     return tdee;
   }
+  const direction = mapGoalToWeightChangeDirection(goal.value);
+  if (!direction.ok) {
+    return direction;
+  }
+  const pace: WeightChangePace =
+    direction.value === "maintenance" ? "recommended" : (input.pace ?? "recommended");
+  const calorieTarget = createCalorieTarget({
+    goalType: goal.value,
+    pace,
+    weightKg: input.weightKg,
+    tdeeKcal: tdee.value.tdeeKcal,
+    asOf,
+  });
+  if (!calorieTarget.ok) {
+    return calorieTarget;
+  }
   return ok({
     profile: rmrCompleted.value.profile,
     rmr: rmrCompleted.value.rmr,
     tdee: tdee.value,
     goalType: goal.value,
+    calorieTarget: calorieTarget.value,
   });
 }

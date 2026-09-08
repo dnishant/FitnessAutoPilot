@@ -10,7 +10,7 @@ This document is product policy for V1 onboarding, not medical certainty.
 
 After the user chooses a goal and wearable, establish a current TDEE from wearable calories plus the current RMR.
 
-V1 does **not** compute calorie targets, macros, or meal plans from this TDEE.
+V1 TDEE collection does **not** compute macros or meal plans. Starting calorie targets use a separate engine (`weight-change-policy-v1`).
 
 ## Inputs
 

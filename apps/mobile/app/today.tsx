@@ -2,7 +2,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { onboardingGoalLabel, type OnboardingGoalType } from "@fitness-autopilot/contracts";
 import {
+  calorieTargetGoalLabel,
+  calorieTargetPaceLabel,
+  formatLbPerWeek,
   formatRmrKcalPerDay,
+  formatTargetCaloriesPerDay,
   formatTdeeKcalPerDay,
   RMR_EXPLANATION,
   rmrHomeSourceLabel,
@@ -12,7 +16,7 @@ import {
 import { useSession } from "../src/state/session";
 
 export default function TodayScreen() {
-  const { currentRmr, currentTdee, goal, signOut } = useSession();
+  const { currentRmr, currentTdee, currentCalorieTarget, goal, signOut } = useSession();
   const goalType =
     goal &&
     (goal.goalType === "muscle_gain" ||
@@ -24,7 +28,26 @@ export default function TodayScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Today</Text>
-      <Text style={styles.help}>What should I do now? Start from your current energy baseline.</Text>
+      <Text style={styles.help}>What should I do now? Eat to your starting calorie target.</Text>
+
+      {currentCalorieTarget ? (
+        <View style={styles.targetBox}>
+          <Text style={styles.rmrLabel}>Daily calorie target</Text>
+          <Text style={styles.rmrValue}>
+            {formatTargetCaloriesPerDay(currentCalorieTarget.targetCalories)}
+          </Text>
+          <Text style={styles.rmrSource}>
+            {calorieTargetPaceLabel(currentCalorieTarget.pace)} ·{" "}
+            {formatLbPerWeek(currentCalorieTarget.targetLbPerWeek)}
+          </Text>
+          <Text style={styles.rmrMeta}>
+            {calorieTargetGoalLabel(
+              currentCalorieTarget.inputSnapshot.goalType,
+            )}{" "}
+            from {formatTargetCaloriesPerDay(currentCalorieTarget.tdeeKcal)} maintenance.
+          </Text>
+        </View>
+      ) : null}
 
       {goalType ? (
         <View style={styles.goalBox}>
@@ -94,6 +117,12 @@ const styles = StyleSheet.create({
   },
   tdeeBox: {
     backgroundColor: "#1F6F4A",
+    borderRadius: 10,
+    padding: 16,
+    gap: 6,
+  },
+  targetBox: {
+    backgroundColor: "#145C3B",
     borderRadius: 10,
     padding: 16,
     gap: 6,

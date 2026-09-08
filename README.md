@@ -11,7 +11,8 @@ Consumer fitness app foundation with a **structured recipe selection + determini
 - **Recipe nutrition + portioning engines** (pure TypeScript, heavily tested)
 - **One-day meal planner** (rule-based, no AI)
 - **Supabase** schema, RLS, seed catalog, Edge Functions for trusted prescriptions
-- **Minimal mobile UI**: auth → goal + wearable + RMR onboarding → Today
+- **Starting calorie target** (`weight-change-policy-v1`) from goal, weight, TDEE, and pace
+- **Minimal mobile UI**: auth → goal + wearable + RMR onboarding → pace → calorie target → Today
 
 ## Requirements
 
