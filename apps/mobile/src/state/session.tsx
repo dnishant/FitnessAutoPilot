@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import type {
+  CalorieTarget,
   CompleteOnboardingRequest,
   CreateGoalRequest,
   DailyPlan,
@@ -26,10 +27,11 @@ import {
   localSaveGoal,
   localSaveOnboardingGoal,
   localSaveProfile,
+  localSaveCalorieTarget,
   localSaveRmrEstimate,
   localSaveTdeeEstimate,
 } from "../lib/local-planner";
-import { mapGoalRow, mapProfileRow, mapRmrRow, mapTdeeRow } from "../lib/rmr-mappers";
+import { mapCalorieTargetRow, mapGoalRow, mapProfileRow, mapRmrRow, mapTdeeRow } from "../lib/rmr-mappers";
 
 type SessionUser = { id: string; email: string };
 
@@ -40,6 +42,7 @@ type SessionValue = {
   profile: ProfileBasics | null;
   currentRmr: RmrEstimate | null;
   currentTdee: TdeeEstimate | null;
+  currentCalorieTarget: CalorieTarget | null;
   goal: Goal | null;
   nutritionTarget: NutritionTarget | null;
   dailyPlan: DailyPlan | null;
@@ -49,7 +52,7 @@ type SessionValue = {
   completeOnboarding: (
     request: CompleteOnboardingRequest,
   ) => Promise<
-    | { ok: true; rmr: RmrEstimate; tdee: TdeeEstimate; goal: Goal }
+    | { ok: true; rmr: RmrEstimate; tdee: TdeeEstimate; goal: Goal; calorieTarget: CalorieTarget }
     | { ok: false; error: string }
   >;
   saveGoal: (
@@ -65,12 +68,13 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
   profile: ProfileBasics | null;
   currentRmr: RmrEstimate | null;
   currentTdee: TdeeEstimate | null;
+  currentCalorieTarget: CalorieTarget | null;
   goal: Goal | null;
 }> {
   if (!supabase) {
-    return { profile: null, currentRmr: null, currentTdee: null, goal: null };
+    return { profile: null, currentRmr: null, currentTdee: null, currentCalorieTarget: null, goal: null };
   }
-  const [profileRes, rmrRes, tdeeRes, goalRes] = await Promise.all([
+  const [profileRes, rmrRes, tdeeRes, calorieRes, goalRes] = await Promise.all([
     supabase
       .from("user_profiles")
       .select("user_id, date_of_birth, biological_sex, height_cm, weight_kg")
@@ -91,6 +95,13 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
       .limit(1)
       .maybeSingle(),
     supabase
+      .from("calorie_targets")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
       .from("goals")
       .select("*")
       .eq("user_id", userId)
@@ -104,6 +115,7 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
     profile: profileRes.data ? mapProfileRow(profileRes.data) : null,
     currentRmr: rmrRes.data ? mapRmrRow(rmrRes.data) : null,
     currentTdee: tdeeRes.data ? mapTdeeRow(tdeeRes.data) : null,
+    currentCalorieTarget: calorieRes.data ? mapCalorieTargetRow(calorieRes.data) : null,
     goal: goalRes.data ? mapGoalRow(goalRes.data) : null,
   };
 }
@@ -114,6 +126,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ProfileBasics | null>(null);
   const [currentRmr, setCurrentRmr] = useState<RmrEstimate | null>(null);
   const [currentTdee, setCurrentTdee] = useState<TdeeEstimate | null>(null);
+  const [currentCalorieTarget, setCurrentCalorieTarget] = useState<CalorieTarget | null>(null);
   const [goal, setGoal] = useState<Goal | null>(null);
   const [nutritionTarget, setNutritionTarget] = useState<NutritionTarget | null>(null);
   const [dailyPlan, setDailyPlan] = useState<DailyPlan | null>(null);
@@ -132,6 +145,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               setProfile(store.profile);
               setCurrentRmr(store.currentRmr);
               setCurrentTdee(store.currentTdee);
+              setCurrentCalorieTarget(store.currentCalorieTarget);
               setGoal(store.goal);
               setNutritionTarget(store.nutritionTarget);
               setDailyPlan(store.dailyPlan);
@@ -149,6 +163,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               setProfile(loaded.profile);
               setCurrentRmr(loaded.currentRmr);
               setCurrentTdee(loaded.currentTdee);
+              setCurrentCalorieTarget(loaded.currentCalorieTarget);
               setGoal(loaded.goal);
             }
           }
@@ -172,6 +187,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       profile,
       currentRmr,
       currentTdee,
+      currentCalorieTarget,
       goal,
       nutritionTarget,
       dailyPlan,
@@ -189,6 +205,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             setProfile(store.profile);
             setCurrentRmr(store.currentRmr);
             setCurrentTdee(store.currentTdee);
+            setCurrentCalorieTarget(store.currentCalorieTarget);
             setGoal(store.goal);
             setNutritionTarget(store.nutritionTarget);
             setDailyPlan(store.dailyPlan);
@@ -216,6 +233,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setProfile(loaded.profile);
         setCurrentRmr(loaded.currentRmr);
         setCurrentTdee(loaded.currentTdee);
+        setCurrentCalorieTarget(loaded.currentCalorieTarget);
         setGoal(loaded.goal);
         return { ok: true };
       },
@@ -228,6 +246,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setProfile(store.profile);
           setCurrentRmr(store.currentRmr);
           setCurrentTdee(store.currentTdee);
+          setCurrentCalorieTarget(store.currentCalorieTarget);
           setGoal(store.goal);
           setNutritionTarget(store.nutritionTarget);
           setDailyPlan(store.dailyPlan);
@@ -261,6 +280,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setProfile(null);
         setCurrentRmr(null);
         setCurrentTdee(null);
+        setCurrentCalorieTarget(null);
         setGoal(null);
         setNutritionTarget(null);
         setDailyPlan(null);
@@ -289,11 +309,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             const savedRmr = localSaveRmrEstimate(user.id, completed.value.rmr);
             const savedTdee = localSaveTdeeEstimate(user.id, completed.value.tdee);
             const savedGoal = localSaveOnboardingGoal(user.id, completed.value.goalType, asOf);
+            const savedCalorieTarget = localSaveCalorieTarget(user.id, completed.value.calorieTarget, {
+              goalId: savedGoal.id,
+              tdeeEstimateId: savedTdee.id,
+            });
             setProfile(savedProfile);
             setCurrentRmr(savedRmr);
             setCurrentTdee(savedTdee);
+            setCurrentCalorieTarget(savedCalorieTarget);
             setGoal(savedGoal);
-            return { ok: true, rmr: savedRmr, tdee: savedTdee, goal: savedGoal };
+            return {
+              ok: true,
+              rmr: savedRmr,
+              tdee: savedTdee,
+              goal: savedGoal,
+              calorieTarget: savedCalorieTarget,
+            };
           }
           if (!supabase || !user) {
             return { ok: false, error: "Supabase is not configured." };
@@ -309,12 +340,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             rmr: RmrEstimate;
             tdee: TdeeEstimate;
             goal: Goal;
+            calorieTarget: CalorieTarget;
           };
           setProfile(payload.profile);
           setCurrentRmr(payload.rmr);
           setCurrentTdee(payload.tdee);
+          setCurrentCalorieTarget(payload.calorieTarget);
           setGoal(payload.goal);
-          return { ok: true, rmr: payload.rmr, tdee: payload.tdee, goal: payload.goal };
+          return {
+            ok: true,
+            rmr: payload.rmr,
+            tdee: payload.tdee,
+            goal: payload.goal,
+            calorieTarget: payload.calorieTarget,
+          };
         } catch (e) {
           return {
             ok: false,
@@ -386,7 +425,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [loading, user, profile, currentRmr, currentTdee, goal, nutritionTarget, dailyPlan],
+    [loading, user, profile, currentRmr, currentTdee, currentCalorieTarget, goal, nutritionTarget, dailyPlan],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

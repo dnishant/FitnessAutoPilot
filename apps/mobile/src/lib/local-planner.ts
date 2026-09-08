@@ -1,4 +1,5 @@
 import type {
+  CalorieTarget,
   CreateGoalRequest,
   DailyPlan,
   Goal,
@@ -12,13 +13,16 @@ import type {
 } from "@fitness-autopilot/contracts";
 import { UserProfileSchema } from "@fitness-autopilot/contracts";
 import {
+  appendCalorieTarget,
   appendRmrEstimate,
   appendTdeeEstimate,
   calculateNutritionTarget,
   planOneDay,
+  selectCurrentCalorieTarget,
   selectCurrentRmr,
   selectCurrentTdee,
   utcDateKey,
+  type CalorieTargetDraft,
   type NutritionTargetCalculation,
   type RmrEstimateDraft,
   type TdeeEstimateDraft,
@@ -43,6 +47,8 @@ export type LocalStore = {
   currentRmr: RmrEstimate | null;
   tdeeHistory: TdeeEstimate[];
   currentTdee: TdeeEstimate | null;
+  calorieTargetHistory: CalorieTarget[];
+  currentCalorieTarget: CalorieTarget | null;
   goal: Goal | null;
   nutritionTarget: (NutritionTarget & { calculation?: NutritionTargetCalculation }) | null;
   dailyPlan: DailyPlan | null;
@@ -68,6 +74,8 @@ export function ensureLocalUser(email: string, password: string): LocalStore {
     currentRmr: null,
     tdeeHistory: [],
     currentTdee: null,
+    calorieTargetHistory: [],
+    currentCalorieTarget: null,
     goal: null,
     nutritionTarget: null,
     dailyPlan: null,
@@ -144,6 +152,47 @@ export function localSaveTdeeEstimate(userId: string, draft: TdeeEstimateDraft):
     const current = store.tdeeHistory[index];
     if (JSON.stringify(current) !== JSON.stringify(row)) {
       throw new Error("TDEE history mutation is not allowed");
+    }
+  });
+  return saved;
+}
+
+export function localSaveCalorieTarget(
+  userId: string,
+  draft: CalorieTargetDraft,
+  refs: { goalId: string; tdeeEstimateId: string },
+): CalorieTarget {
+  const store = memory.get(userId);
+  if (!store) {
+    throw new Error("Local user missing");
+  }
+  const previous = store.calorieTargetHistory.map((row) => ({ ...row }));
+  const now = draft.createdAt;
+  const saved: CalorieTarget = {
+    id: uuidFromSeed(`calorie:${userId}:${draft.pace}:${draft.targetCalories}:${now}:${store.calorieTargetHistory.length}`),
+    userId,
+    goalId: refs.goalId,
+    tdeeEstimateId: refs.tdeeEstimateId,
+    tdeeKcal: draft.tdeeKcal,
+    bodyWeightKg: draft.bodyWeightKg,
+    bodyWeightLb: draft.bodyWeightLb,
+    pace: draft.pace,
+    targetRatePerWeek: draft.targetRatePerWeek,
+    targetLbPerWeek: draft.targetLbPerWeek,
+    weeklyCalorieAdjustment: draft.weeklyCalorieAdjustment,
+    dailyCalorieAdjustment: draft.dailyCalorieAdjustment,
+    targetCalories: draft.targetCalories,
+    policyName: draft.policyName,
+    policyVersion: draft.policyVersion,
+    inputSnapshot: draft.inputSnapshot,
+    createdAt: now,
+  };
+  store.calorieTargetHistory = appendCalorieTarget(store.calorieTargetHistory, saved);
+  store.currentCalorieTarget = selectCurrentCalorieTarget(store.calorieTargetHistory);
+  previous.forEach((row, index) => {
+    const current = store.calorieTargetHistory[index];
+    if (JSON.stringify(current) !== JSON.stringify(row)) {
+      throw new Error("Calorie target history mutation is not allowed");
     }
   });
   return saved;

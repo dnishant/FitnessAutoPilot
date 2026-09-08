@@ -102,6 +102,49 @@ insert into public.tdee_estimates (
   )
 on conflict (id) do nothing;
 
+insert into public.calorie_targets (
+  id, user_id, goal_id, tdee_estimate_id, tdee_kcal, body_weight_kg, body_weight_lb,
+  pace, target_rate_per_week, target_lb_per_week, weekly_calorie_adjustment,
+  daily_calorie_adjustment, target_calories, policy_name, policy_version, input_snapshot
+) values
+  (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0006',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0001',
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaa0005',
+    2400,
+    81.6466266,
+    180,
+    'recommended',
+    -0.005,
+    -0.9,
+    -3150,
+    -450,
+    1950,
+    'weight-change-policy',
+    'weight-change-policy-v1',
+    '{"goalType":"fat_loss","weightChangeDirection":"weight_loss","pace":"recommended","weightKg":81.6466266,"weightLb":180,"tdeeKcal":2400,"targetRatePerWeek":-0.005,"policyVersion":"weight-change-policy-v1"}'::jsonb
+  ),
+  (
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0006',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0001',
+    'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0005',
+    2800,
+    81.6466266,
+    180,
+    'recommended',
+    0.0025,
+    0.45,
+    1575,
+    225,
+    3025,
+    'weight-change-policy',
+    'weight-change-policy-v1',
+    '{"goalType":"muscle_gain","weightChangeDirection":"weight_gain","pace":"recommended","weightKg":81.6466266,"weightLb":180,"tdeeKcal":2800,"targetRatePerWeek":0.0025,"policyVersion":"weight-change-policy-v1"}'::jsonb
+  )
+on conflict (id) do nothing;
+
 -- Become user A
 set local role authenticated;
 set local request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -150,6 +193,18 @@ begin
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'RLS FAIL: user A can modify user B TDEE'; end if;
 
+  select count(*) into n from public.calorie_targets where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  if n <> 1 then raise exception 'RLS FAIL: user A cannot read own calorie target'; end if;
+
+  select count(*) into n from public.calorie_targets where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  if n <> 0 then raise exception 'RLS FAIL: user A can read user B calorie target'; end if;
+
+  update public.calorie_targets
+    set target_calories = 1
+    where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'RLS FAIL: user A can modify user B calorie target'; end if;
+
   begin
     insert into public.rmr_estimates (
       user_id, rmr_kcal, source, algorithm_name, algorithm_version,
@@ -189,6 +244,36 @@ begin
       now()
     );
     raise exception 'RLS FAIL: user A can insert TDEE for user B';
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
+
+  begin
+    insert into public.calorie_targets (
+      user_id, goal_id, tdee_estimate_id, tdee_kcal, body_weight_kg, body_weight_lb,
+      pace, target_rate_per_week, target_lb_per_week, weekly_calorie_adjustment,
+      daily_calorie_adjustment, target_calories, policy_name, policy_version, input_snapshot
+    ) values (
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0001',
+      'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbb0005',
+      2800,
+      80,
+      176.37,
+      'recommended',
+      0.0025,
+      0.44,
+      1540,
+      220,
+      3020,
+      'weight-change-policy',
+      'weight-change-policy-v1',
+      '{"goalType":"muscle_gain","weightChangeDirection":"weight_gain","pace":"recommended","weightKg":80,"weightLb":176.37,"tdeeKcal":2800,"targetRatePerWeek":0.0025,"policyVersion":"weight-change-policy-v1"}'::jsonb
+    );
+    raise exception 'RLS FAIL: user A can insert calorie target for user B';
   exception
     when others then
       if sqlerrm like 'RLS FAIL:%' then
