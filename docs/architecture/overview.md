@@ -10,7 +10,9 @@ Fitness Autopilot is a modular monolith.
    - safety eligibility
    - RMR v1 (Mifflin-St Jeor estimate or user-reported DEXA)
    - TDEE v1 (Whoop daily calories, or Apple Watch active calories + current RMR)
+   - weight-change policy v1 (goal + pace + weight + TDEE → starting calorie target)
    - nutrition target v1
+   - macro-policy-v1 (protein / fat / carbs from calorie target + weight)
    - food / recipe nutrition
    - portioning
    - one-day planner
@@ -30,4 +32,4 @@ Client JWT + anon key
 
 ## Rounding rules
 
-Documented in [nutrition-rounding.md](./nutrition-rounding.md), [rmr-v1.md](./rmr-v1.md), [tdee-v1.md](./tdee-v1.md), and [nutrition-target-v1.md](./nutrition-target-v1.md).
+Documented in [nutrition-rounding.md](./nutrition-rounding.md), [rmr-v1.md](./rmr-v1.md), [tdee-v1.md](./tdee-v1.md), [weight-change-policy-v1.md](./weight-change-policy-v1.md), [macro-policy-v1.md](./macro-policy-v1.md), and [nutrition-target-v1.md](./nutrition-target-v1.md).

@@ -1,4 +1,11 @@
-import type { Goal, ProfileBasics, RmrEstimate, TdeeEstimate } from "@fitness-autopilot/contracts";
+import type {
+  CalorieTarget,
+  Goal,
+  NutritionTarget,
+  ProfileBasics,
+  RmrEstimate,
+  TdeeEstimate,
+} from "@fitness-autopilot/contracts";
 
 export function mapProfileRow(row: Record<string, unknown>): ProfileBasics {
   return {
@@ -75,5 +82,65 @@ export function mapGoalRow(row: Record<string, unknown>): Goal {
     status: (row.status ?? "active") as Goal["status"],
     createdAt: String(row.created_at ?? row.createdAt),
     updatedAt: String(row.updated_at ?? row.updatedAt),
+  };
+}
+
+export function mapCalorieTargetRow(row: Record<string, unknown>): CalorieTarget {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id ?? row.userId),
+    goalId: String(row.goal_id ?? row.goalId),
+    tdeeEstimateId: String(row.tdee_estimate_id ?? row.tdeeEstimateId),
+    tdeeKcal: Number(row.tdee_kcal ?? row.tdeeKcal),
+    bodyWeightKg: Number(row.body_weight_kg ?? row.bodyWeightKg),
+    bodyWeightLb: Number(row.body_weight_lb ?? row.bodyWeightLb),
+    pace: (row.pace ?? "recommended") as CalorieTarget["pace"],
+    targetRatePerWeek: Number(row.target_rate_per_week ?? row.targetRatePerWeek),
+    targetLbPerWeek: Number(row.target_lb_per_week ?? row.targetLbPerWeek),
+    weeklyCalorieAdjustment: Number(
+      row.weekly_calorie_adjustment ?? row.weeklyCalorieAdjustment,
+    ),
+    dailyCalorieAdjustment: Number(
+      row.daily_calorie_adjustment ?? row.dailyCalorieAdjustment,
+    ),
+    targetCalories: Number(row.target_calories ?? row.targetCalories),
+    policyName: (row.policy_name ?? row.policyName ?? "weight-change-policy") as CalorieTarget["policyName"],
+    policyVersion: (row.policy_version ??
+      row.policyVersion ??
+      "weight-change-policy-v1") as CalorieTarget["policyVersion"],
+    inputSnapshot: (row.input_snapshot ?? row.inputSnapshot) as CalorieTarget["inputSnapshot"],
+    createdAt: String(row.created_at ?? row.createdAt),
+  };
+}
+
+export function mapNutritionTargetRow(row: Record<string, unknown>): NutritionTarget {
+  const fatG = Number(row.fat_g ?? row.fatG ?? row.fat_min_g ?? row.fatMinG);
+  return {
+    id: String(row.id),
+    userId: String(row.user_id ?? row.userId),
+    goalId: String(row.goal_id ?? row.goalId),
+    calorieTargetId: row.calorie_target_id
+      ? String(row.calorie_target_id)
+      : row.calorieTargetId
+        ? String(row.calorieTargetId)
+        : undefined,
+    estimatedMaintenanceCalories: Number(
+      row.estimated_maintenance_calories ?? row.estimatedMaintenanceCalories,
+    ),
+    targetCalories: Number(row.target_calories ?? row.targetCalories),
+    proteinG: Number(row.protein_g ?? row.proteinG),
+    fatG,
+    fatMinG: Number(row.fat_min_g ?? row.fatMinG),
+    fatMaxG: Number(row.fat_max_g ?? row.fatMaxG),
+    carbohydrateG: Number(row.carbohydrate_g ?? row.carbohydrateG),
+    desiredRateKgPerWeek: Number(row.desired_rate_kg_per_week ?? row.desiredRateKgPerWeek),
+    algorithmName: "nutrition-target",
+    algorithmVersion: String(row.algorithm_version ?? row.algorithmVersion),
+    macroPolicyName: (row.macro_policy_name ?? row.macroPolicyName) as NutritionTarget["macroPolicyName"],
+    macroPolicyVersion: (row.macro_policy_version ??
+      row.macroPolicyVersion) as NutritionTarget["macroPolicyVersion"],
+    inputSnapshot: (row.input_snapshot ?? row.inputSnapshot ?? {}) as NutritionTarget["inputSnapshot"],
+    validFrom: String(row.valid_from ?? row.validFrom),
+    createdAt: String(row.created_at ?? row.createdAt),
   };
 }

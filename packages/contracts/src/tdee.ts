@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { WeightChangePaceSchema } from "./calorie-target";
 import { OnboardingGoalTypeSchema } from "./goal";
 import { IsoDateSchema, RmrSourceSchema } from "./rmr";
 
@@ -58,6 +59,7 @@ export const CompleteOnboardingRequestSchema = z.object({
   goalType: OnboardingGoalTypeSchema,
   wearable: WearableSchema,
   wearableCaloriesKcal: z.number(),
+  pace: WeightChangePaceSchema.optional(),
 });
 
 export type Wearable = z.infer<typeof WearableSchema>;

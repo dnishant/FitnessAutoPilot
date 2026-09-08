@@ -15,11 +15,17 @@ import {
   type OnboardingGoalType,
   type RmrBiologicalSex,
   type Wearable,
+  type WeightChangePace,
 } from "@fitness-autopilot/contracts";
 import {
+  chooseOnboardingPace,
   chooseOnboardingRmrSource,
   chooseOnboardingWearable,
+  continueFromCalorieTarget,
+  continueFromEnergyResult,
   createOnboardingView,
+  paceOptionsForGoal,
+  pacePromptForGoal,
   submitOnboardingBasics,
   submitOnboardingDexa,
   submitOnboardingGoal,
@@ -33,6 +39,7 @@ export default function OnboardingScreen() {
   const [view, setView] = useState(() => createOnboardingView());
   const [busy, setBusy] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
+  const [showCalculation, setShowCalculation] = useState(false);
 
   function updateDraft<K extends keyof typeof view.draft>(key: K, value: (typeof view.draft)[K]) {
     setView((current) => ({
@@ -49,7 +56,9 @@ export default function OnboardingScreen() {
       return;
     }
     const result = view.result;
-    if (!result) {
+    const calorieTarget = view.calorieTarget;
+    const nutritionTarget = view.nutritionTarget;
+    if (!result || !calorieTarget || !nutritionTarget) {
       return;
     }
     setBusy(true);
@@ -66,6 +75,7 @@ export default function OnboardingScreen() {
       goalType: result.goalType,
       wearable: view.draft.wearable as Wearable,
       wearableCaloriesKcal: Number(view.draft.wearableCaloriesKcal),
+      pace: calorieTarget.draft.pace,
     });
     setBusy(false);
     if (!saved.ok) {
@@ -246,7 +256,93 @@ export default function OnboardingScreen() {
           <Text style={styles.rmrValue}>{view.result.formattedTdee}</Text>
           <Text style={styles.source}>{view.result.tdeeSourceLabel}</Text>
           <Text style={styles.help}>{view.result.tdeeExplanation}</Text>
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+          <Pressable
+            style={styles.primary}
+            onPress={() => setView((current) => continueFromEnergyResult(current))}
+          >
+            <Text style={styles.primaryText}>Continue</Text>
+          </Pressable>
+        </>
+      ) : null}
+
+      {view.step === "pace" && view.result ? (
+        <>
+          <Text style={styles.title}>{pacePromptForGoal(view.result.goalType)}</Text>
+          {paceOptionsForGoal(view.result.goalType).map((option) => (
+            <Pressable
+              key={option.pace}
+              style={styles.option}
+              onPress={() =>
+                setView((current) => chooseOnboardingPace(current, option.pace as WeightChangePace))
+              }
+            >
+              <Text style={styles.optionLabel}>{option.label}</Text>
+              <Text style={styles.optionDetail}>{option.detail}</Text>
+            </Pressable>
+          ))}
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+        </>
+      ) : null}
+
+      {view.step === "calorie_target" && view.calorieTarget ? (
+        <>
+          <Text style={styles.title}>Your Starting Calorie Target</Text>
+          <Text style={styles.kicker}>Estimated maintenance</Text>
+          <Text style={styles.goalValue}>{view.calorieTarget.formattedMaintenance}</Text>
+          <Text style={styles.kicker}>Goal</Text>
+          <Text style={styles.goalValue}>{view.calorieTarget.goalLabel}</Text>
+          <Text style={styles.kicker}>Pace</Text>
+          <Text style={styles.goalValue}>{view.calorieTarget.paceLabel}</Text>
+          <Text style={styles.kicker}>Target rate</Text>
+          <Text style={styles.goalValue}>{view.calorieTarget.formattedTargetRate}</Text>
+          <Text style={styles.kicker}>Daily calorie target</Text>
+          <Text style={styles.rmrValue}>{view.calorieTarget.formattedTargetCalories}</Text>
+          <Pressable style={styles.secondary} onPress={() => setShowCalculation((open) => !open)}>
+            <Text style={styles.secondaryText}>How was this calculated?</Text>
+          </Pressable>
+          {showCalculation
+            ? view.calorieTarget.explanationRows.map((row) => (
+                <View key={row.label} style={styles.explainRow}>
+                  <Text style={styles.explainLabel}>{row.label}</Text>
+                  <Text style={styles.explainValue}>{row.value}</Text>
+                </View>
+              ))
+            : null}
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
+          <Pressable
+            style={styles.primary}
+            onPress={() => setView((current) => continueFromCalorieTarget(current))}
+          >
+            <Text style={styles.primaryText}>Continue</Text>
+          </Pressable>
+        </>
+      ) : null}
+
+      {view.step === "nutrition_target" && view.nutritionTarget ? (
+        <>
+          <Text style={styles.title}>Your Daily Nutrition Target</Text>
+          <Text style={styles.kicker}>Calories</Text>
+          <Text style={styles.rmrValue}>{view.nutritionTarget.formattedCalories}</Text>
+          <Text style={styles.kicker}>Protein</Text>
+          <Text style={styles.goalValue}>{view.nutritionTarget.formattedProtein}</Text>
+          <Text style={styles.kicker}>Fat</Text>
+          <Text style={styles.goalValue}>{view.nutritionTarget.formattedFat}</Text>
+          <Text style={styles.kicker}>Carbohydrates</Text>
+          <Text style={styles.goalValue}>{view.nutritionTarget.formattedCarbohydrates}</Text>
+          <Pressable style={styles.secondary} onPress={() => setShowCalculation((open) => !open)}>
+            <Text style={styles.secondaryText}>How was this calculated?</Text>
+          </Pressable>
+          {showCalculation
+            ? view.nutritionTarget.explanationRows.map((row) => (
+                <View key={row.label} style={styles.explainRow}>
+                  <Text style={styles.explainLabel}>{row.label}</Text>
+                  <Text style={styles.explainValue}>{row.value}</Text>
+                </View>
+              ))
+            : null}
           {persistError ? <Text style={styles.error}>{persistError}</Text> : null}
+          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
           <Pressable style={styles.primary} disabled={busy} onPress={persistResult}>
             {busy ? (
               <ActivityIndicator color="#fff" />
@@ -326,4 +422,9 @@ const styles = StyleSheet.create({
   rmrValue: { fontSize: 36, fontWeight: "800", color: "#0B1F17" },
   goalValue: { fontSize: 24, fontWeight: "800", color: "#0B1F17", marginBottom: 8 },
   source: { fontSize: 16, color: "#1F6F4A", fontWeight: "600" },
+  secondary: { paddingVertical: 8 },
+  secondaryText: { color: "#1F6F4A", fontWeight: "700" },
+  explainRow: { gap: 2 },
+  explainLabel: { color: "#3D5A4C", fontWeight: "600" },
+  explainValue: { color: "#0B1F17" },
 });

@@ -1,5 +1,7 @@
 import { json, requireUser, getServiceClient } from "../_shared/http.ts";
 import { completeOnboarding } from "../_shared/domain/nutrition/onboarding-flow.ts";
+import { nutritionTargetPersistFields } from "../_shared/domain/nutrition/macros.ts";
+import { lbToKg } from "../_shared/domain/common/units.ts";
 
 function mapRmr(row: Record<string, unknown>) {
   return {
@@ -45,6 +47,53 @@ function mapProfile(row: Record<string, unknown>) {
   };
 }
 
+function mapCalorieTarget(row: Record<string, unknown>) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    goalId: row.goal_id,
+    tdeeEstimateId: row.tdee_estimate_id,
+    tdeeKcal: Number(row.tdee_kcal),
+    bodyWeightKg: Number(row.body_weight_kg),
+    bodyWeightLb: Number(row.body_weight_lb),
+    pace: row.pace,
+    targetRatePerWeek: Number(row.target_rate_per_week),
+    targetLbPerWeek: Number(row.target_lb_per_week),
+    weeklyCalorieAdjustment: Number(row.weekly_calorie_adjustment),
+    dailyCalorieAdjustment: Number(row.daily_calorie_adjustment),
+    targetCalories: Number(row.target_calories),
+    policyName: row.policy_name,
+    policyVersion: row.policy_version,
+    inputSnapshot: row.input_snapshot,
+    createdAt: row.created_at,
+  };
+}
+
+function mapNutritionTarget(row: Record<string, unknown>) {
+  const fatG = Number(row.fat_g ?? row.fat_min_g);
+  return {
+    id: row.id,
+    userId: row.user_id,
+    goalId: row.goal_id,
+    calorieTargetId: row.calorie_target_id ?? undefined,
+    estimatedMaintenanceCalories: Number(row.estimated_maintenance_calories),
+    targetCalories: Number(row.target_calories),
+    proteinG: Number(row.protein_g),
+    fatG,
+    fatMinG: Number(row.fat_min_g),
+    fatMaxG: Number(row.fat_max_g),
+    carbohydrateG: Number(row.carbohydrate_g),
+    desiredRateKgPerWeek: Number(row.desired_rate_kg_per_week),
+    algorithmName: row.algorithm_name,
+    algorithmVersion: row.algorithm_version,
+    macroPolicyName: row.macro_policy_name ?? undefined,
+    macroPolicyVersion: row.macro_policy_version ?? undefined,
+    inputSnapshot: row.input_snapshot,
+    validFrom: row.valid_from,
+    createdAt: row.created_at,
+  };
+}
+
 function mapGoal(row: Record<string, unknown>) {
   return {
     id: row.id,
@@ -79,6 +128,7 @@ Deno.serve(async (req) => {
     goalType: body.goalType,
     wearable: body.wearable,
     wearableCaloriesKcal: Number(body.wearableCaloriesKcal),
+    pace: body.pace,
     asOf: new Date(),
   });
 
@@ -161,10 +211,69 @@ Deno.serve(async (req) => {
     return json({ error: tdeeError?.message ?? "Failed to save TDEE" }, 400);
   }
 
+  const { data: calorieTarget, error: calorieError } = await service
+    .from("calorie_targets")
+    .insert({
+      user_id: auth.user.id,
+      goal_id: goal.id,
+      tdee_estimate_id: tdee.id,
+      tdee_kcal: completed.value.calorieTarget.tdeeKcal,
+      body_weight_kg: completed.value.calorieTarget.bodyWeightKg,
+      body_weight_lb: completed.value.calorieTarget.bodyWeightLb,
+      pace: completed.value.calorieTarget.pace,
+      target_rate_per_week: completed.value.calorieTarget.targetRatePerWeek,
+      target_lb_per_week: completed.value.calorieTarget.targetLbPerWeek,
+      weekly_calorie_adjustment: completed.value.calorieTarget.weeklyCalorieAdjustment,
+      daily_calorie_adjustment: completed.value.calorieTarget.dailyCalorieAdjustment,
+      target_calories: completed.value.calorieTarget.targetCalories,
+      policy_name: completed.value.calorieTarget.policyName,
+      policy_version: completed.value.calorieTarget.policyVersion,
+      input_snapshot: completed.value.calorieTarget.inputSnapshot,
+    })
+    .select()
+    .single();
+  if (calorieError || !calorieTarget) {
+    return json({ error: calorieError?.message ?? "Failed to save calorie target" }, 400);
+  }
+
+  const nutritionFields = nutritionTargetPersistFields({
+    macros: completed.value.nutritionTarget,
+    tdeeKcal: completed.value.calorieTarget.tdeeKcal,
+    desiredRateKgPerWeek: lbToKg(completed.value.calorieTarget.targetLbPerWeek),
+  });
+  const { data: nutritionTarget, error: nutritionError } = await service
+    .from("nutrition_targets")
+    .insert({
+      user_id: auth.user.id,
+      goal_id: goal.id,
+      calorie_target_id: calorieTarget.id,
+      estimated_maintenance_calories: nutritionFields.estimatedMaintenanceCalories,
+      target_calories: nutritionFields.targetCalories,
+      protein_g: nutritionFields.proteinG,
+      fat_g: nutritionFields.fatG,
+      fat_min_g: nutritionFields.fatMinG,
+      fat_max_g: nutritionFields.fatMaxG,
+      carbohydrate_g: nutritionFields.carbohydrateG,
+      desired_rate_kg_per_week: nutritionFields.desiredRateKgPerWeek,
+      algorithm_name: nutritionFields.algorithmName,
+      algorithm_version: nutritionFields.algorithmVersion,
+      macro_policy_name: nutritionFields.macroPolicyName,
+      macro_policy_version: nutritionFields.macroPolicyVersion,
+      input_snapshot: nutritionFields.inputSnapshot,
+      valid_from: completed.value.nutritionTarget.createdAt,
+    })
+    .select()
+    .single();
+  if (nutritionError || !nutritionTarget) {
+    return json({ error: nutritionError?.message ?? "Failed to save nutrition target" }, 400);
+  }
+
   return json({
     profile: mapProfile(profile),
     rmr: mapRmr(rmr),
     tdee: mapTdee(tdee),
     goal: mapGoal(goal),
+    calorieTarget: mapCalorieTarget(calorieTarget),
+    nutritionTarget: mapNutritionTarget(nutritionTarget),
   });
 });
