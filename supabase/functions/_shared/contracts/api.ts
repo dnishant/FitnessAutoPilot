@@ -4,9 +4,13 @@ import { GoalTypeSchema } from "./goal";
 
 export const UpsertProfileRequestSchema = UserProfileSchema.omit({ userId: true }).partial({
   cuisinePreferences: true,
+  proteinPreferences: true,
   allergies: true,
+  dietaryRestrictions: true,
   dislikedFoods: true,
   preferredFoods: true,
+  experiencePreferences: true,
+  varietyLevel: true,
   cookingEquipment: true,
   safetyRestrictions: true,
 }).extend({

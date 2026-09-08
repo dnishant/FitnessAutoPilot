@@ -145,6 +145,18 @@ insert into public.calorie_targets (
   )
 on conflict (id) do nothing;
 
+update public.user_profiles
+set
+  cuisine_preferences = array['mexican'],
+  protein_preferences = array['beef'],
+  allergies = array['Shellfish'],
+  dietary_restrictions = array['Pork'],
+  disliked_foods = array['Olives'],
+  experience_preferences = array['spicy'],
+  variety_level = 'high',
+  meal_preferences_completed_at = now()
+where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
 -- Become user A
 set local role authenticated;
 set local request.jwt.claim.sub = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -177,6 +189,32 @@ begin
 
   select count(*) into n from public.user_profiles where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   if n <> 1 then raise exception 'RLS FAIL: user A cannot read own profile'; end if;
+
+  select count(*) into n from public.user_profiles
+    where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+      and (
+        cuisine_preferences is not null
+        or protein_preferences is not null
+        or allergies is not null
+        or dietary_restrictions is not null
+        or disliked_foods is not null
+        or experience_preferences is not null
+        or variety_level is not null
+      );
+  if n <> 0 then raise exception 'RLS FAIL: user A can read user B meal preferences'; end if;
+
+  update public.user_profiles
+    set
+      cuisine_preferences = array['indian'],
+      protein_preferences = array['chicken'],
+      allergies = array['Peanuts'],
+      dietary_restrictions = array['Pork'],
+      disliked_foods = array['Olives'],
+      experience_preferences = array['spicy'],
+      variety_level = 'high'
+    where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'RLS FAIL: user A can modify user B meal preferences'; end if;
 
   select count(*) into n from public.rmr_estimates where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   if n <> 1 then raise exception 'RLS FAIL: user A cannot read own RMR'; end if;

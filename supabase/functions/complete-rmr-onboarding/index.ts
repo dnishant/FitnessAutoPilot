@@ -1,6 +1,7 @@
 import { json, requireUser, getServiceClient } from "../_shared/http.ts";
 import { completeOnboarding } from "../_shared/domain/nutrition/onboarding-flow.ts";
 import { nutritionTargetPersistFields } from "../_shared/domain/nutrition/macros.ts";
+import { mealPreferenceDbColumns } from "../_shared/domain/nutrition/meal-preferences.ts";
 import { lbToKg } from "../_shared/domain/common/units.ts";
 
 function mapRmr(row: Record<string, unknown>) {
@@ -94,6 +95,21 @@ function mapNutritionTarget(row: Record<string, unknown>) {
   };
 }
 
+function mapMealPreferences(row: Record<string, unknown>) {
+  return {
+    userId: row.user_id,
+    cuisines: row.cuisine_preferences ?? [],
+    proteinPreferences: row.protein_preferences ?? [],
+    allergies: row.allergies ?? [],
+    dietaryRestrictions: row.dietary_restrictions ?? [],
+    dislikes: row.disliked_foods ?? [],
+    experiencePreferences: row.experience_preferences ?? [],
+    varietyLevel: row.variety_level,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function mapGoal(row: Record<string, unknown>) {
   return {
     id: row.id,
@@ -129,6 +145,7 @@ Deno.serve(async (req) => {
     wearable: body.wearable,
     wearableCaloriesKcal: Number(body.wearableCaloriesKcal),
     pace: body.pace,
+    mealPreferences: body.mealPreferences,
     asOf: new Date(),
   });
 
@@ -138,6 +155,7 @@ Deno.serve(async (req) => {
 
   const service = getServiceClient();
   const now = new Date().toISOString();
+  const preferenceColumns = mealPreferenceDbColumns(completed.value.mealPreferences, now);
   const { data: profile, error: profileError } = await service
     .from("user_profiles")
     .upsert({
@@ -146,6 +164,7 @@ Deno.serve(async (req) => {
       biological_sex: completed.value.profile.biologicalSex,
       height_cm: completed.value.profile.heightCm,
       weight_kg: completed.value.profile.weightKg,
+      ...preferenceColumns,
     })
     .select()
     .single();
@@ -275,5 +294,6 @@ Deno.serve(async (req) => {
     goal: mapGoal(goal),
     calorieTarget: mapCalorieTarget(calorieTarget),
     nutritionTarget: mapNutritionTarget(nutritionTarget),
+    mealPreferences: mapMealPreferences(profile),
   });
 });

@@ -4,6 +4,7 @@ export * from "./tdee";
 export * from "./calorie-target";
 export * from "./goal";
 export * from "./nutrition";
+export * from "./meal-preferences";
 export * from "./recipe";
 export * from "./plan";
 export * from "./api";

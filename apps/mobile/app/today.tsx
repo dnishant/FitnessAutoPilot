@@ -21,7 +21,8 @@ import {
 import { useSession } from "../src/state/session";
 
 export default function TodayScreen() {
-  const { currentRmr, currentTdee, currentCalorieTarget, nutritionTarget, goal, signOut } = useSession();
+  const { currentRmr, currentTdee, currentCalorieTarget, nutritionTarget, mealPreferences, goal, signOut } =
+    useSession();
   const goalType =
     goal &&
     (goal.goalType === "muscle_gain" ||
@@ -105,6 +106,28 @@ export default function TodayScreen() {
         </View>
       )}
 
+      {mealPreferences ? (
+        <View style={styles.prefsBox}>
+          <Text style={styles.goalLabel}>Food preferences</Text>
+          <Text style={styles.prefSummary}>
+            {mealPreferences.cuisines.length || mealPreferences.proteinPreferences.length
+              ? "Saved likes, exclusions, and variety intent."
+              : "No explicit food likes yet. Exclusions and variety are saved."}
+          </Text>
+          <Pressable style={styles.editButton} onPress={() => router.push("/preferences")}>
+            <Text style={styles.editButtonText}>Edit food preferences</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.prefsBox}>
+          <Text style={styles.goalLabel}>Food preferences</Text>
+          <Text style={styles.prefSummary}>Tell us what you enjoy so later meals can follow along.</Text>
+          <Pressable style={styles.editButton} onPress={() => router.push("/preferences")}>
+            <Text style={styles.editButtonText}>Add food preferences</Text>
+          </Pressable>
+        </View>
+      )}
+
       <Pressable
         style={styles.secondary}
         onPress={async () => {
@@ -130,6 +153,15 @@ const styles = StyleSheet.create({
   },
   goalLabel: { color: "#3D5A4C", fontWeight: "600" },
   goalValue: { color: "#0B1F17", fontSize: 22, fontWeight: "800" },
+  prefsBox: {
+    backgroundColor: "#E4F0E8",
+    borderRadius: 10,
+    padding: 16,
+    gap: 8,
+  },
+  prefSummary: { color: "#0B1F17" },
+  editButton: { paddingVertical: 4 },
+  editButtonText: { color: "#1F6F4A", fontWeight: "700" },
   rmrBox: {
     backgroundColor: "#0B1F17",
     borderRadius: 10,
