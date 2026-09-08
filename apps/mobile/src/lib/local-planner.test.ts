@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { createEstimatedRmr, createTdeeFromWearable, createUserReportedRmr } from "@fitness-autopilot/domain";
+import {
+  createCalorieTarget,
+  createEstimatedRmr,
+  createTdeeFromWearable,
+  createUserReportedRmr,
+} from "@fitness-autopilot/domain";
+import { lbToKg } from "@fitness-autopilot/domain";
 import {
   ensureLocalUser,
+  localSaveCalorieTarget,
   localSaveOnboardingGoal,
   localSaveProfile,
   localSaveRmrEstimate,
@@ -102,5 +109,59 @@ describe("local RMR persistence", () => {
     expect(store.currentTdee?.algorithmVersion).toBe("tdee-v1");
     expect(goal.goalType).toBe("fat_loss");
     expect(goal.status).toBe("active");
+  });
+
+  it("stores a calorie target without mutating prior rows", () => {
+    const store = ensureLocalUser("calorie-history@example.com", "test-password");
+    const tdeeDraft = createTdeeFromWearable({
+      wearable: "whoop",
+      wearableCaloriesKcal: 2700,
+      rmrKcal: 1750,
+      rmrSource: "estimated_mifflin_st_jeor",
+      goalType: "fat_loss",
+      asOf,
+    });
+    expect(tdeeDraft.ok).toBe(true);
+    if (!tdeeDraft.ok) {
+      return;
+    }
+    const tdee = localSaveTdeeEstimate(store.userId, tdeeDraft.value);
+    const goal = localSaveOnboardingGoal(store.userId, "fat_loss", asOf);
+    const firstDraft = createCalorieTarget({
+      goalType: "fat_loss",
+      pace: "recommended",
+      weightKg: lbToKg(180),
+      tdeeKcal: 2700,
+      asOf,
+    });
+    expect(firstDraft.ok).toBe(true);
+    if (!firstDraft.ok) {
+      return;
+    }
+    const first = localSaveCalorieTarget(store.userId, firstDraft.value, {
+      goalId: goal.id,
+      tdeeEstimateId: tdee.id,
+    });
+    const firstSnapshot = structuredClone(first);
+    const secondDraft = createCalorieTarget({
+      goalType: "fat_loss",
+      pace: "faster",
+      weightKg: lbToKg(180),
+      tdeeKcal: 2700,
+      asOf: new Date("2026-09-08T02:00:00.000Z"),
+    });
+    expect(secondDraft.ok).toBe(true);
+    if (!secondDraft.ok) {
+      return;
+    }
+    localSaveCalorieTarget(store.userId, secondDraft.value, {
+      goalId: goal.id,
+      tdeeEstimateId: tdee.id,
+    });
+    expect(store.calorieTargetHistory).toHaveLength(2);
+    expect(store.calorieTargetHistory[0]).toEqual(firstSnapshot);
+    expect(store.currentCalorieTarget?.pace).toBe("faster");
+    expect(store.currentCalorieTarget?.targetCalories).toBe(2025);
+    expect(store.currentCalorieTarget?.policyVersion).toBe("weight-change-policy-v1");
   });
 });
