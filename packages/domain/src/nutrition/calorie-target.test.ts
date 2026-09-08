@@ -101,11 +101,23 @@ describe("180 lb hand-calculated examples", () => {
       bodyWeightLb: 180,
       targetRatePerWeek: -0.0075,
     });
-    expect(change).toEqual({ ok: true, value: -1.35 });
-    const daily = calculateDailyCalorieAdjustment({
+    expect(change.ok).toBe(true);
+    if (!change.ok) {
+      return;
+    }
+    // 180 * 0.0075 is not a dyadic rational; keep full precision and compare closely.
+    expect(change.value).toBeCloseTo(-1.35, 12);
+    const dailyFromExact = calculateDailyCalorieAdjustment({
       targetWeightChangeLbPerWeek: -1.35,
     });
-    expect(daily).toEqual({ ok: true, value: -675 });
+    expect(dailyFromExact).toEqual({ ok: true, value: -675 });
+    const dailyFromFullPrecision = calculateDailyCalorieAdjustment({
+      targetWeightChangeLbPerWeek: change.value,
+    });
+    expect(dailyFromFullPrecision.ok).toBe(true);
+    if (dailyFromFullPrecision.ok) {
+      expect(dailyFromFullPrecision.value).toBeCloseTo(-675, 10);
+    }
   });
 
   it("recommended bulk is +0.45 lb/week and +225 kcal/day", () => {
