@@ -4,6 +4,8 @@ import type {
   DailyPlan,
   Goal,
   MealInstance,
+  CookingPreferences,
+  CookingPreferencesInput,
   MealPreferences,
   MealPreferencesInput,
   NutritionTarget,
@@ -27,6 +29,7 @@ import {
   selectCurrentNutritionTarget,
   selectCurrentRmr,
   selectCurrentTdee,
+  upsertCurrentCookingPreferences,
   upsertCurrentMealPreferences,
   utcDateKey,
   type CalorieTargetDraft,
@@ -60,6 +63,7 @@ export type LocalStore = {
   nutritionTargetHistory: NutritionTarget[];
   currentNutritionTarget: NutritionTarget | null;
   mealPreferences: MealPreferences | null;
+  cookingPreferences: CookingPreferences | null;
   goal: Goal | null;
   nutritionTarget: (NutritionTarget & { calculation?: NutritionTargetCalculation }) | null;
   dailyPlan: DailyPlan | null;
@@ -90,6 +94,7 @@ export function ensureLocalUser(email: string, password: string): LocalStore {
     nutritionTargetHistory: [],
     currentNutritionTarget: null,
     mealPreferences: null,
+    cookingPreferences: null,
     goal: null,
     nutritionTarget: null,
     dailyPlan: null,
@@ -268,6 +273,28 @@ export function localSaveMealPreferences(
     throw new Error(saved.error.message);
   }
   store.mealPreferences = saved.value;
+  return saved.value;
+}
+
+export function localSaveCookingPreferences(
+  userId: string,
+  next: CookingPreferencesInput,
+  asOf: Date = new Date(),
+): CookingPreferences {
+  const store = memory.get(userId);
+  if (!store) {
+    throw new Error("Local user missing");
+  }
+  const saved = upsertCurrentCookingPreferences({
+    userId,
+    current: store.cookingPreferences,
+    next,
+    asOf,
+  });
+  if (!saved.ok) {
+    throw new Error(saved.error.message);
+  }
+  store.cookingPreferences = saved.value;
   return saved.value;
 }
 

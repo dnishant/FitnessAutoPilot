@@ -154,7 +154,13 @@ set
   disliked_foods = array['Olives'],
   experience_preferences = array['spicy'],
   variety_level = 'high',
-  meal_preferences_completed_at = now()
+  meal_preferences_completed_at = now(),
+  prep_frequency = 'twice_weekly',
+  max_prep_session_minutes = 60,
+  cooking_style = 'fresh_focused',
+  max_finish_minutes = 15,
+  use_dinner_prep_for_next_lunch = true,
+  cooking_preferences_completed_at = now()
 where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
 
 -- Become user A
@@ -215,6 +221,27 @@ begin
     where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
   get diagnostics n = row_count;
   if n <> 0 then raise exception 'RLS FAIL: user A can modify user B meal preferences'; end if;
+
+  select count(*) into n from public.user_profiles
+    where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'
+      and (
+        prep_frequency is not null
+        or cooking_style is not null
+        or max_finish_minutes is not null
+        or use_dinner_prep_for_next_lunch is not null
+      );
+  if n <> 0 then raise exception 'RLS FAIL: user A can read user B cooking preferences'; end if;
+
+  update public.user_profiles
+    set
+      prep_frequency = 'once_weekly',
+      max_prep_session_minutes = 90,
+      cooking_style = 'mostly_ready',
+      max_finish_minutes = 0,
+      use_dinner_prep_for_next_lunch = false
+    where user_id = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+  get diagnostics n = row_count;
+  if n <> 0 then raise exception 'RLS FAIL: user A can modify user B cooking preferences'; end if;
 
   select count(*) into n from public.rmr_estimates where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
   if n <> 1 then raise exception 'RLS FAIL: user A cannot read own RMR'; end if;

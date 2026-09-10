@@ -34,6 +34,7 @@ import {
   type OnboardingView,
 } from "@fitness-autopilot/domain";
 import { useSession } from "../src/state/session";
+import { CookingPreferenceSteps } from "../src/components/cooking-preference-steps";
 import { MealPreferenceSteps } from "../src/components/meal-preference-steps";
 
 export default function OnboardingScreen() {
@@ -61,7 +62,8 @@ export default function OnboardingScreen() {
     const calorieTarget = nextView.calorieTarget;
     const nutritionTarget = nextView.nutritionTarget;
     const mealPreferences = nextView.mealPreferences;
-    if (!result || !calorieTarget || !nutritionTarget || !mealPreferences) {
+    const cookingPreferences = nextView.cookingPreferences;
+    if (!result || !calorieTarget || !nutritionTarget || !mealPreferences || !cookingPreferences) {
       return;
     }
     setBusy(true);
@@ -80,6 +82,7 @@ export default function OnboardingScreen() {
       wearableCaloriesKcal: Number(nextView.draft.wearableCaloriesKcal),
       pace: calorieTarget.draft.pace,
       mealPreferences,
+      cookingPreferences,
     });
     setBusy(false);
     if (!saved.ok) {
@@ -356,6 +359,12 @@ export default function OnboardingScreen() {
       ) : null}
 
       <MealPreferenceSteps
+        view={view}
+        onChange={setView}
+        onComplete={setView}
+        persistError={persistError}
+      />
+      <CookingPreferenceSteps
         view={view}
         onChange={setView}
         onComplete={(next) => {

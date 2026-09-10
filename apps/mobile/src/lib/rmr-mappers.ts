@@ -1,5 +1,6 @@
 import type {
   CalorieTarget,
+  CookingPreferences,
   Goal,
   MealPreferences,
   NutritionTarget,
@@ -8,6 +9,7 @@ import type {
   TdeeEstimate,
 } from "@fitness-autopilot/contracts";
 import {
+  CookingPreferencesSchema,
   CuisineValueSchema,
   ExperienceValueSchema,
   MealPreferencesSchema,
@@ -56,6 +58,28 @@ export function mapMealPreferencesRow(row: Record<string, unknown>): MealPrefere
       row.experience_preferences ?? row.experiencePreferences,
     ).filter((value) => ExperienceValueSchema.safeParse(value).success),
     varietyLevel: varietyParsed.success ? varietyParsed.data : "balanced",
+    createdAt: String(row.created_at ?? row.createdAt ?? completedAt),
+    updatedAt: String(row.updated_at ?? row.updatedAt ?? completedAt),
+  });
+  return parsed.success ? parsed.data : null;
+}
+
+export function mapCookingPreferencesRow(row: Record<string, unknown>): CookingPreferences | null {
+  const completedAt = row.cooking_preferences_completed_at ?? row.cookingPreferencesCompletedAt;
+  if (completedAt == null || String(completedAt).trim() === "") {
+    return null;
+  }
+  const parsed = CookingPreferencesSchema.safeParse({
+    userId: String(row.user_id ?? row.userId),
+    prepFrequency: row.prep_frequency ?? row.prepFrequency,
+    maxPrepSessionMinutes:
+      row.max_prep_session_minutes === undefined
+        ? row.maxPrepSessionMinutes
+        : row.max_prep_session_minutes,
+    cookingStyle: row.cooking_style ?? row.cookingStyle,
+    maxFinishMinutes: row.max_finish_minutes ?? row.maxFinishMinutes,
+    useDinnerPrepForNextLunch:
+      row.use_dinner_prep_for_next_lunch ?? row.useDinnerPrepForNextLunch,
     createdAt: String(row.created_at ?? row.createdAt ?? completedAt),
     updatedAt: String(row.updated_at ?? row.updatedAt ?? completedAt),
   });

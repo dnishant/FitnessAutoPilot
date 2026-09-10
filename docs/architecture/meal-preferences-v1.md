@@ -19,3 +19,5 @@ Empty selections are valid. Option values live in `@fitness-autopilot/contracts`
 ## Persistence
 
 One current record per user on `user_profiles`. Completion is `meal_preferences_completed_at IS NOT NULL`. Variety is not defaulted in the database so incomplete users are not skipped.
+
+PLAN-002 cooking preferences follow the same profile row. See [cooking-preferences-v1.md](./cooking-preferences-v1.md).

@@ -36,7 +36,7 @@ describe("CompleteOnboardingRequestSchema", () => {
     expect(result.success).toBe(true);
   });
 
-  it("accepts meal preference intent on complete onboarding", () => {
+  it("accepts meal and cooking preference intent on complete onboarding", () => {
     const result = CompleteOnboardingRequestSchema.safeParse({
       dateOfBirth: "1990-05-01",
       biologicalSex: "male",
@@ -54,6 +54,13 @@ describe("CompleteOnboardingRequestSchema", () => {
         dislikes: ["Olives"],
         experiencePreferences: ["spicy"],
         varietyLevel: "balanced",
+      },
+      cookingPreferences: {
+        prepFrequency: "once_weekly",
+        maxPrepSessionMinutes: 90,
+        cookingStyle: "ready_lunch_fresh_dinner",
+        maxFinishMinutes: 10,
+        useDinnerPrepForNextLunch: true,
       },
     });
     expect(result.success).toBe(true);
