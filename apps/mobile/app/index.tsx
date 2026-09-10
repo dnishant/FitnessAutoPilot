@@ -11,6 +11,7 @@ export default function Index() {
     currentCalorieTarget,
     nutritionTarget,
     mealPreferences,
+    cookingPreferences,
     goal,
     loading,
   } = useSession();
@@ -31,6 +32,9 @@ export default function Index() {
   }
   if (!mealPreferences) {
     return <Redirect href="/preferences" />;
+  }
+  if (!cookingPreferences) {
+    return <Redirect href="/cooking-preferences" />;
   }
   return <Redirect href="/today" />;
 }

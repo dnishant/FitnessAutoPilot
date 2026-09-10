@@ -1,6 +1,7 @@
 import { json, requireUser, getServiceClient } from "../_shared/http.ts";
 import { completeOnboarding } from "../_shared/domain/nutrition/onboarding-flow.ts";
 import { nutritionTargetPersistFields } from "../_shared/domain/nutrition/macros.ts";
+import { cookingPreferenceDbColumns } from "../_shared/domain/nutrition/cooking-preferences.ts";
 import { mealPreferenceDbColumns } from "../_shared/domain/nutrition/meal-preferences.ts";
 import { lbToKg } from "../_shared/domain/common/units.ts";
 
@@ -95,6 +96,19 @@ function mapNutritionTarget(row: Record<string, unknown>) {
   };
 }
 
+function mapCookingPreferences(row: Record<string, unknown>) {
+  return {
+    userId: row.user_id,
+    prepFrequency: row.prep_frequency,
+    maxPrepSessionMinutes: row.max_prep_session_minutes ?? null,
+    cookingStyle: row.cooking_style,
+    maxFinishMinutes: row.max_finish_minutes,
+    useDinnerPrepForNextLunch: row.use_dinner_prep_for_next_lunch,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
 function mapMealPreferences(row: Record<string, unknown>) {
   return {
     userId: row.user_id,
@@ -146,6 +160,7 @@ Deno.serve(async (req) => {
     wearableCaloriesKcal: Number(body.wearableCaloriesKcal),
     pace: body.pace,
     mealPreferences: body.mealPreferences,
+    cookingPreferences: body.cookingPreferences,
     asOf: new Date(),
   });
 
@@ -155,7 +170,10 @@ Deno.serve(async (req) => {
 
   const service = getServiceClient();
   const now = new Date().toISOString();
-  const preferenceColumns = mealPreferenceDbColumns(completed.value.mealPreferences, now);
+  const preferenceColumns = {
+    ...mealPreferenceDbColumns(completed.value.mealPreferences, now),
+    ...cookingPreferenceDbColumns(completed.value.cookingPreferences, now),
+  };
   const { data: profile, error: profileError } = await service
     .from("user_profiles")
     .upsert({
@@ -295,5 +313,6 @@ Deno.serve(async (req) => {
     calorieTarget: mapCalorieTarget(calorieTarget),
     nutritionTarget: mapNutritionTarget(nutritionTarget),
     mealPreferences: mapMealPreferences(profile),
+    cookingPreferences: mapCookingPreferences(profile),
   });
 });

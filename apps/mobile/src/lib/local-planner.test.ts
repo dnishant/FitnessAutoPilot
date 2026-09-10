@@ -10,6 +10,7 @@ import { lbToKg } from "@fitness-autopilot/domain";
 import {
   ensureLocalUser,
   localSaveCalorieTarget,
+  localSaveCookingPreferences,
   localSaveMealPreferences,
   localSaveNutritionTarget,
   localSaveOnboardingGoal,
@@ -275,5 +276,40 @@ describe("local RMR persistence", () => {
     expect(second.updatedAt).not.toBe(first.updatedAt);
     expect(second.cuisines).toEqual(["indian", "mexican", "surprise_me"]);
     expect(second.varietyLevel).toBe("high");
+  });
+
+  it("upserts one current cooking-preference profile and restores it for editing", () => {
+    const store = ensureLocalUser("cooking-prefs@example.com", "test-password");
+    const first = localSaveCookingPreferences(
+      store.userId,
+      {
+        prepFrequency: "twice_weekly",
+        maxPrepSessionMinutes: 60,
+        cookingStyle: "fresh_focused",
+        maxFinishMinutes: 15,
+        useDinnerPrepForNextLunch: false,
+      },
+      asOf,
+    );
+    expect(store.cookingPreferences).toEqual(first);
+    expect(first.useDinnerPrepForNextLunch).toBe(false);
+
+    const second = localSaveCookingPreferences(
+      store.userId,
+      {
+        ...first,
+        prepFrequency: "once_weekly",
+        maxPrepSessionMinutes: 90,
+        cookingStyle: "ready_lunch_fresh_dinner",
+        maxFinishMinutes: 10,
+        useDinnerPrepForNextLunch: true,
+      },
+      new Date("2026-09-10T02:00:00.000Z"),
+    );
+    expect(store.cookingPreferences).toEqual(second);
+    expect(second.createdAt).toBe(first.createdAt);
+    expect(second.updatedAt).not.toBe(first.updatedAt);
+    expect(second.useDinnerPrepForNextLunch).toBe(true);
+    expect(second.cookingStyle).toBe("ready_lunch_fresh_dinner");
   });
 });

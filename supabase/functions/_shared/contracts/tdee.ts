@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { WeightChangePaceSchema } from "./calorie-target";
 import { OnboardingGoalTypeSchema } from "./goal";
+import { CookingPreferencesInputSchema } from "./cooking-preferences";
 import { MealPreferencesInputSchema } from "./meal-preferences";
 import { IsoDateSchema, RmrSourceSchema } from "./rmr";
 
@@ -62,6 +63,7 @@ export const CompleteOnboardingRequestSchema = z.object({
   wearableCaloriesKcal: z.number(),
   pace: WeightChangePaceSchema.optional(),
   mealPreferences: MealPreferencesInputSchema.optional(),
+  cookingPreferences: CookingPreferencesInputSchema.optional(),
 });
 
 export type Wearable = z.infer<typeof WearableSchema>;

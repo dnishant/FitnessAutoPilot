@@ -1,15 +1,22 @@
 import type {
+  CookingPreferences,
+  CookingPreferencesInput,
   CuisineValue,
   ExperienceValue,
+  FreshFinishMinutes,
+  MaxFinishMinutes,
+  MaxPrepSessionMinutes,
   MealPreferences,
   MealPreferencesInput,
   OnboardingGoalType,
+  PrepFrequency,
   ProteinValue,
   RmrBiologicalSex,
   RmrSource,
   TdeeSource,
   VarietyLevel,
   Wearable,
+  WeeklyCookingStyle,
   WeightChangePace,
 } from "../../contracts/index.ts";
 import { onboardingGoalLabel } from "../../contracts/index.ts";
@@ -69,6 +76,20 @@ import {
   type MealPreferenceError,
   type MealPreferencesDraft,
 } from "./meal-preferences";
+import {
+  applyCookingStyleChange,
+  createCookingPreferencesDraft,
+  DEFAULT_COOKING_STYLE,
+  DEFAULT_MAX_FINISH_MINUTES,
+  DEFAULT_MAX_PREP_SESSION_MINUTES,
+  DEFAULT_PREP_FREQUENCY,
+  DEFAULT_USE_DINNER_PREP_FOR_NEXT_LUNCH,
+  isFreshEnabledCookingStyle,
+  isFreshFinishMinutes,
+  validateCookingPreferences,
+  type CookingPreferenceError,
+  type CookingPreferencesDraft,
+} from "./cooking-preferences";
 
 export type OnboardingStep =
   | "goal"
@@ -85,7 +106,12 @@ export type OnboardingStep =
   | "proteins"
   | "exclusions"
   | "experience"
-  | "variety";
+  | "variety"
+  | "prep_frequency"
+  | "prep_session_time"
+  | "cooking_style"
+  | "finish_time"
+  | "dinner_prep";
 
 export type OnboardingDraft = {
   goalType: OnboardingGoalType | "";
@@ -109,6 +135,12 @@ export type OnboardingDraft = {
   allergyDraft: string;
   restrictionDraft: string;
   dislikeDraft: string;
+  prepFrequency: PrepFrequency;
+  maxPrepSessionMinutes: MaxPrepSessionMinutes;
+  cookingStyle: WeeklyCookingStyle;
+  maxFinishMinutes: MaxFinishMinutes;
+  useDinnerPrepForNextLunch: boolean;
+  rememberedMaxFinishMinutes: FreshFinishMinutes;
 };
 
 export type OnboardingResultView = {
@@ -155,6 +187,7 @@ export type OnboardingView = {
   calorieTarget: CalorieTargetView | null;
   nutritionTarget: NutritionTargetView | null;
   mealPreferences: MealPreferencesDraft | null;
+  cookingPreferences: CookingPreferencesDraft | null;
 };
 
 export type OnboardingError =
@@ -162,7 +195,8 @@ export type OnboardingError =
   | TdeeError
   | CalorieTargetError
   | MacroTargetError
-  | MealPreferenceError;
+  | MealPreferenceError
+  | CookingPreferenceError;
 
 export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): OnboardingView {
   return {
@@ -189,6 +223,12 @@ export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): 
       allergyDraft: "",
       restrictionDraft: "",
       dislikeDraft: "",
+      prepFrequency: DEFAULT_PREP_FREQUENCY,
+      maxPrepSessionMinutes: DEFAULT_MAX_PREP_SESSION_MINUTES,
+      cookingStyle: DEFAULT_COOKING_STYLE,
+      maxFinishMinutes: DEFAULT_MAX_FINISH_MINUTES,
+      useDinnerPrepForNextLunch: DEFAULT_USE_DINNER_PREP_FOR_NEXT_LUNCH,
+      rememberedMaxFinishMinutes: DEFAULT_MAX_FINISH_MINUTES,
       ...overrides,
     },
     error: null,
@@ -196,6 +236,7 @@ export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): 
     calorieTarget: null,
     nutritionTarget: null,
     mealPreferences: null,
+    cookingPreferences: null,
   };
 }
 
@@ -209,6 +250,36 @@ function mealPreferencesFromDraft(draft: OnboardingDraft): MealPreferencesDraft 
     experiencePreferences: draft.experiencePreferences,
     varietyLevel: draft.varietyLevel || DEFAULT_VARIETY_LEVEL,
   });
+}
+
+function cookingPreferencesFromDraft(draft: OnboardingDraft): CookingPreferencesDraft {
+  return createCookingPreferencesDraft({
+    prepFrequency: draft.prepFrequency,
+    maxPrepSessionMinutes: draft.maxPrepSessionMinutes,
+    cookingStyle: draft.cookingStyle,
+    maxFinishMinutes: draft.maxFinishMinutes,
+    useDinnerPrepForNextLunch: draft.useDinnerPrepForNextLunch,
+  });
+}
+
+function withCookingDraft(
+  view: OnboardingView,
+  prefs: CookingPreferencesDraft,
+  rememberedMaxFinishMinutes: FreshFinishMinutes = view.draft.rememberedMaxFinishMinutes,
+): OnboardingView {
+  return {
+    ...view,
+    error: null,
+    draft: {
+      ...view.draft,
+      prepFrequency: prefs.prepFrequency,
+      maxPrepSessionMinutes: prefs.maxPrepSessionMinutes,
+      cookingStyle: prefs.cookingStyle,
+      maxFinishMinutes: prefs.maxFinishMinutes,
+      useDinnerPrepForNextLunch: prefs.useDinnerPrepForNextLunch,
+      rememberedMaxFinishMinutes,
+    },
+  };
 }
 
 function parseRequiredNumber(value: string, label: string): Result<number, OnboardingError> {
@@ -771,10 +842,169 @@ export function continueFromVariety(view: OnboardingView): OnboardingView {
   if (!validated.ok) {
     return withError(view, validated.error);
   }
-  return {
+  return startCookingPreferencesOnboarding({
     ...view,
     error: null,
     mealPreferences: validated.value,
+  });
+}
+
+export function startCookingPreferencesOnboarding(
+  view: OnboardingView,
+  existing?: Partial<CookingPreferencesDraft> | CookingPreferences | null,
+): OnboardingView {
+  const prefs = createCookingPreferencesDraft({
+    prepFrequency: view.draft.prepFrequency,
+    maxPrepSessionMinutes: view.draft.maxPrepSessionMinutes,
+    cookingStyle: view.draft.cookingStyle,
+    maxFinishMinutes: view.draft.maxFinishMinutes,
+    useDinnerPrepForNextLunch: view.draft.useDinnerPrepForNextLunch,
+    ...existing,
+  });
+  const remembered = isFreshFinishMinutes(prefs.maxFinishMinutes)
+    ? prefs.maxFinishMinutes
+    : view.draft.rememberedMaxFinishMinutes;
+  return {
+    ...withCookingDraft(view, prefs, remembered),
+    step: "prep_frequency",
+    cookingPreferences: null,
+  };
+}
+
+export function chooseOnboardingPrepFrequency(
+  view: OnboardingView,
+  prepFrequency: PrepFrequency,
+): OnboardingView {
+  const validated = validateCookingPreferences({
+    ...cookingPreferencesFromDraft(view.draft),
+    prepFrequency,
+  });
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return withCookingDraft(view, validated.value);
+}
+
+export function continueFromPrepFrequency(view: OnboardingView): OnboardingView {
+  const validated = validateCookingPreferences(cookingPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return {
+    ...withCookingDraft(view, validated.value),
+    step: "prep_session_time",
+  };
+}
+
+export function chooseOnboardingPrepSessionTime(
+  view: OnboardingView,
+  maxPrepSessionMinutes: MaxPrepSessionMinutes,
+): OnboardingView {
+  const validated = validateCookingPreferences({
+    ...cookingPreferencesFromDraft(view.draft),
+    maxPrepSessionMinutes,
+  });
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return withCookingDraft(view, validated.value);
+}
+
+export function continueFromPrepSessionTime(view: OnboardingView): OnboardingView {
+  const validated = validateCookingPreferences(cookingPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return {
+    ...withCookingDraft(view, validated.value),
+    step: "cooking_style",
+  };
+}
+
+export function chooseOnboardingCookingStyle(
+  view: OnboardingView,
+  cookingStyle: WeeklyCookingStyle,
+): OnboardingView {
+  const changed = applyCookingStyleChange({
+    current: cookingPreferencesFromDraft(view.draft),
+    nextStyle: cookingStyle,
+    rememberedMaxFinishMinutes: view.draft.rememberedMaxFinishMinutes,
+  });
+  const validated = validateCookingPreferences(changed.draft);
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return withCookingDraft(view, validated.value, changed.rememberedMaxFinishMinutes);
+}
+
+export function continueFromCookingStyle(view: OnboardingView): OnboardingView {
+  const validated = validateCookingPreferences(cookingPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  if (!isFreshEnabledCookingStyle(validated.value.cookingStyle)) {
+    return {
+      ...withCookingDraft(view, validated.value),
+      cookingPreferences: validated.value,
+    };
+  }
+  return {
+    ...withCookingDraft(view, validated.value),
+    step: "finish_time",
+  };
+}
+
+export function chooseOnboardingFinishTime(
+  view: OnboardingView,
+  maxFinishMinutes: MaxFinishMinutes,
+): OnboardingView {
+  const validated = validateCookingPreferences({
+    ...cookingPreferencesFromDraft(view.draft),
+    maxFinishMinutes,
+  });
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  const remembered =
+    validated.value.maxFinishMinutes === 0
+      ? view.draft.rememberedMaxFinishMinutes
+      : (validated.value.maxFinishMinutes as FreshFinishMinutes);
+  return withCookingDraft(view, validated.value, remembered);
+}
+
+export function continueFromFinishTime(view: OnboardingView): OnboardingView {
+  const validated = validateCookingPreferences(cookingPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return {
+    ...withCookingDraft(view, validated.value),
+    step: "dinner_prep",
+  };
+}
+
+export function chooseOnboardingDinnerPrep(
+  view: OnboardingView,
+  useDinnerPrepForNextLunch: boolean,
+): OnboardingView {
+  const validated = validateCookingPreferences({
+    ...cookingPreferencesFromDraft(view.draft),
+    useDinnerPrepForNextLunch,
+  });
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return withCookingDraft(view, validated.value);
+}
+
+export function continueFromDinnerPrep(view: OnboardingView): OnboardingView {
+  const validated = validateCookingPreferences(cookingPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return {
+    ...withCookingDraft(view, validated.value),
+    cookingPreferences: validated.value,
   };
 }
 
@@ -791,6 +1021,7 @@ export function completeOnboarding(input: {
   wearableCaloriesKcal: number;
   pace?: WeightChangePace;
   mealPreferences?: MealPreferencesInput;
+  cookingPreferences?: CookingPreferencesInput;
   asOf?: Date;
 }): Result<
   {
@@ -806,6 +1037,7 @@ export function completeOnboarding(input: {
     calorieTarget: CalorieTargetDraft;
     nutritionTarget: MacroTargetDraft;
     mealPreferences: MealPreferencesDraft;
+    cookingPreferences: CookingPreferencesDraft;
   },
   OnboardingError
 > {
@@ -872,6 +1104,12 @@ export function completeOnboarding(input: {
   if (!mealPreferences.ok) {
     return mealPreferences;
   }
+  const cookingPreferences = validateCookingPreferences(
+    createCookingPreferencesDraft(input.cookingPreferences),
+  );
+  if (!cookingPreferences.ok) {
+    return cookingPreferences;
+  }
   return ok({
     profile: rmrCompleted.value.profile,
     rmr: rmrCompleted.value.rmr,
@@ -880,5 +1118,6 @@ export function completeOnboarding(input: {
     calorieTarget: calorieTarget.value,
     nutritionTarget: nutritionTarget.value,
     mealPreferences: mealPreferences.value,
+    cookingPreferences: cookingPreferences.value,
   });
 }

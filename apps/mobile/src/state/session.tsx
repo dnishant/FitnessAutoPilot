@@ -12,6 +12,8 @@ import type {
   CreateGoalRequest,
   DailyPlan,
   Goal,
+  CookingPreferences,
+  CookingPreferencesInput,
   MealPreferences,
   MealPreferencesInput,
   NutritionTarget,
@@ -27,6 +29,7 @@ import {
   getLocalStore,
   localGeneratePlan,
   localSaveGoal,
+  localSaveCookingPreferences,
   localSaveMealPreferences,
   localSaveOnboardingGoal,
   localSaveProfile,
@@ -37,6 +40,7 @@ import {
 } from "../lib/local-planner";
 import {
   mapCalorieTargetRow,
+  mapCookingPreferencesRow,
   mapGoalRow,
   mapMealPreferencesRow,
   mapNutritionTargetRow,
@@ -58,6 +62,7 @@ type SessionValue = {
   goal: Goal | null;
   nutritionTarget: NutritionTarget | null;
   mealPreferences: MealPreferences | null;
+  cookingPreferences: CookingPreferences | null;
   dailyPlan: DailyPlan | null;
   signIn: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signUp: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -73,6 +78,7 @@ type SessionValue = {
         calorieTarget: CalorieTarget;
         nutritionTarget: NutritionTarget;
         mealPreferences: MealPreferences;
+        cookingPreferences: CookingPreferences;
       }
     | { ok: false; error: string }
   >;
@@ -80,6 +86,12 @@ type SessionValue = {
     request: MealPreferencesInput,
   ) => Promise<
     | { ok: true; mealPreferences: MealPreferences }
+    | { ok: false; error: string }
+  >;
+  saveCookingPreferences: (
+    request: CookingPreferencesInput,
+  ) => Promise<
+    | { ok: true; cookingPreferences: CookingPreferences }
     | { ok: false; error: string }
   >;
   saveGoal: (
@@ -98,6 +110,7 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
   currentCalorieTarget: CalorieTarget | null;
   currentNutritionTarget: NutritionTarget | null;
   mealPreferences: MealPreferences | null;
+  cookingPreferences: CookingPreferences | null;
   goal: Goal | null;
 }> {
   if (!supabase) {
@@ -108,6 +121,7 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
       currentCalorieTarget: null,
       currentNutritionTarget: null,
       mealPreferences: null,
+      cookingPreferences: null,
       goal: null,
     };
   }
@@ -115,7 +129,7 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
     supabase
       .from("user_profiles")
       .select(
-        "user_id, date_of_birth, biological_sex, height_cm, weight_kg, cuisine_preferences, protein_preferences, allergies, dietary_restrictions, disliked_foods, experience_preferences, variety_level, meal_preferences_completed_at, created_at, updated_at",
+        "user_id, date_of_birth, biological_sex, height_cm, weight_kg, cuisine_preferences, protein_preferences, allergies, dietary_restrictions, disliked_foods, experience_preferences, variety_level, meal_preferences_completed_at, prep_frequency, max_prep_session_minutes, cooking_style, max_finish_minutes, use_dinner_prep_for_next_lunch, cooking_preferences_completed_at, created_at, updated_at",
       )
       .eq("user_id", userId)
       .maybeSingle(),
@@ -164,6 +178,7 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
     currentCalorieTarget: calorieRes.data ? mapCalorieTargetRow(calorieRes.data) : null,
     currentNutritionTarget: nutritionRes.data ? mapNutritionTargetRow(nutritionRes.data) : null,
     mealPreferences: profileRes.data ? mapMealPreferencesRow(profileRes.data) : null,
+    cookingPreferences: profileRes.data ? mapCookingPreferencesRow(profileRes.data) : null,
     goal: goalRes.data ? mapGoalRow(goalRes.data) : null,
   };
 }
@@ -178,6 +193,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [goal, setGoal] = useState<Goal | null>(null);
   const [nutritionTarget, setNutritionTarget] = useState<NutritionTarget | null>(null);
   const [mealPreferences, setMealPreferences] = useState<MealPreferences | null>(null);
+  const [cookingPreferences, setCookingPreferences] = useState<CookingPreferences | null>(null);
   const [dailyPlan, setDailyPlan] = useState<DailyPlan | null>(null);
 
   useEffect(() => {
@@ -198,6 +214,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               setGoal(store.goal);
               setNutritionTarget(store.nutritionTarget);
               setMealPreferences(store.mealPreferences);
+              setCookingPreferences(store.cookingPreferences);
               setDailyPlan(store.dailyPlan);
             }
           }
@@ -216,6 +233,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               setCurrentCalorieTarget(loaded.currentCalorieTarget);
               setNutritionTarget(loaded.currentNutritionTarget);
               setMealPreferences(loaded.mealPreferences);
+              setCookingPreferences(loaded.cookingPreferences);
               setGoal(loaded.goal);
             }
           }
@@ -243,6 +261,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       goal,
       nutritionTarget,
       mealPreferences,
+      cookingPreferences,
       dailyPlan,
       async signIn(email, password) {
         if (useLocalPlanner) {
@@ -262,6 +281,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             setGoal(store.goal);
             setNutritionTarget(store.nutritionTarget);
             setMealPreferences(store.mealPreferences);
+            setCookingPreferences(store.cookingPreferences);
             setDailyPlan(store.dailyPlan);
             return { ok: true };
           } catch (e) {
@@ -290,6 +310,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setCurrentCalorieTarget(loaded.currentCalorieTarget);
         setNutritionTarget(loaded.currentNutritionTarget);
         setMealPreferences(loaded.mealPreferences);
+        setCookingPreferences(loaded.cookingPreferences);
         setGoal(loaded.goal);
         return { ok: true };
       },
@@ -306,6 +327,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setGoal(store.goal);
           setNutritionTarget(store.nutritionTarget);
           setMealPreferences(store.mealPreferences);
+          setCookingPreferences(store.cookingPreferences);
           setDailyPlan(store.dailyPlan);
           return { ok: true };
         }
@@ -341,6 +363,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setGoal(null);
         setNutritionTarget(null);
         setMealPreferences(null);
+        setCookingPreferences(null);
         setDailyPlan(null);
       },
       async completeOnboarding(request) {
@@ -382,12 +405,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               completed.value.mealPreferences,
               asOf,
             );
+            const savedCookingPreferences = localSaveCookingPreferences(
+              user.id,
+              completed.value.cookingPreferences,
+              asOf,
+            );
             setProfile(savedProfile);
             setCurrentRmr(savedRmr);
             setCurrentTdee(savedTdee);
             setCurrentCalorieTarget(savedCalorieTarget);
             setNutritionTarget(savedNutritionTarget);
             setMealPreferences(savedMealPreferences);
+            setCookingPreferences(savedCookingPreferences);
             setGoal(savedGoal);
             return {
               ok: true,
@@ -397,6 +426,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               calorieTarget: savedCalorieTarget,
               nutritionTarget: savedNutritionTarget,
               mealPreferences: savedMealPreferences,
+              cookingPreferences: savedCookingPreferences,
             };
           }
           if (!supabase || !user) {
@@ -416,6 +446,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             calorieTarget: CalorieTarget;
             nutritionTarget: NutritionTarget;
             mealPreferences: MealPreferences;
+            cookingPreferences: CookingPreferences;
           };
           setProfile(payload.profile);
           setCurrentRmr(payload.rmr);
@@ -423,6 +454,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           setCurrentCalorieTarget(payload.calorieTarget);
           setNutritionTarget(payload.nutritionTarget);
           setMealPreferences(payload.mealPreferences);
+          setCookingPreferences(payload.cookingPreferences);
           setGoal(payload.goal);
           return {
             ok: true,
@@ -432,11 +464,41 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             calorieTarget: payload.calorieTarget,
             nutritionTarget: payload.nutritionTarget,
             mealPreferences: payload.mealPreferences,
+            cookingPreferences: payload.cookingPreferences,
           };
         } catch (e) {
           return {
             ok: false,
             error: e instanceof Error ? e.message : "Failed to save onboarding",
+          };
+        }
+      },
+      async saveCookingPreferences(request) {
+        try {
+          if (useLocalPlanner) {
+            if (!user) {
+              return { ok: false, error: "Not signed in" };
+            }
+            const saved = localSaveCookingPreferences(user.id, request);
+            setCookingPreferences(saved);
+            return { ok: true, cookingPreferences: saved };
+          }
+          if (!supabase || !user) {
+            return { ok: false, error: "Supabase is not configured." };
+          }
+          const { data, error } = await supabase.functions.invoke("upsert-cooking-preferences", {
+            body: request,
+          });
+          if (error) {
+            return { ok: false, error: error.message };
+          }
+          const payload = data as { cookingPreferences: CookingPreferences };
+          setCookingPreferences(payload.cookingPreferences);
+          return { ok: true, cookingPreferences: payload.cookingPreferences };
+        } catch (e) {
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "Failed to save cooking preferences",
           };
         }
       },
@@ -533,7 +595,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         }
       },
     }),
-    [loading, user, profile, currentRmr, currentTdee, currentCalorieTarget, goal, nutritionTarget, mealPreferences, dailyPlan],
+    [loading, user, profile, currentRmr, currentTdee, currentCalorieTarget, goal, nutritionTarget, mealPreferences, cookingPreferences, dailyPlan],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

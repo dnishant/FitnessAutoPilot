@@ -8,6 +8,7 @@ export * from "./nutrition/calorie-target";
 export * from "./nutrition/energy";
 export * from "./nutrition/macros";
 export * from "./nutrition/meal-preferences";
+export * from "./nutrition/cooking-preferences";
 export * from "./nutrition/onboarding-flow";
 export * from "./nutrition/target";
 export * from "./recipes/nutrition";

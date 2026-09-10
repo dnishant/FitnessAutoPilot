@@ -12,8 +12,19 @@ import {
   continueFromExperience,
   continueFromNutritionTarget,
   continueFromProteins,
+  continueFromCookingStyle,
+  continueFromDinnerPrep,
+  continueFromFinishTime,
+  continueFromPrepFrequency,
+  continueFromPrepSessionTime,
   continueFromVariety,
+  chooseOnboardingCookingStyle,
+  chooseOnboardingDinnerPrep,
+  chooseOnboardingFinishTime,
+  chooseOnboardingPrepFrequency,
+  chooseOnboardingPrepSessionTime,
   createOnboardingView,
+  startCookingPreferencesOnboarding,
   startMealPreferencesOnboarding,
   addOnboardingAllergy,
   addOnboardingDislike,
@@ -221,6 +232,13 @@ describe("completeOnboarding", () => {
     expect(result.value.nutritionTarget.inputSnapshot.targetCalories).toBe(2025);
     expect(result.value.mealPreferences.varietyLevel).toBe("balanced");
     expect(result.value.mealPreferences.cuisines).toEqual([]);
+    expect(result.value.cookingPreferences).toEqual({
+      prepFrequency: "once_weekly",
+      maxPrepSessionMinutes: 90,
+      cookingStyle: "ready_lunch_fresh_dinner",
+      maxFinishMinutes: 10,
+      useDinnerPrepForNextLunch: true,
+    });
   });
 });
 
@@ -372,6 +390,12 @@ describe("meal preference onboarding", () => {
     view = continueFromVariety(view);
     expect(view.mealPreferences?.cuisines).toEqual([]);
     expect(view.mealPreferences?.varietyLevel).toBe("balanced");
+    expect(view.step).toBe("prep_frequency");
+    expect(view.draft.prepFrequency).toBe("once_weekly");
+    expect(view.draft.maxPrepSessionMinutes).toBe(90);
+    expect(view.draft.cookingStyle).toBe("ready_lunch_fresh_dinner");
+    expect(view.draft.maxFinishMinutes).toBe(10);
+    expect(view.draft.useDinnerPrepForNextLunch).toBe(true);
   });
 
   it("keeps multiple cuisine, protein, and experience selections including Surprise me", () => {
@@ -426,5 +450,87 @@ describe("meal preference onboarding", () => {
     expect(view.draft.dislikes).toEqual(["Olives"]);
     expect(view.draft.experiencePreferences).toEqual(["comforting", "fresh"]);
     expect(view.draft.varietyLevel).toBe("simple");
+  });
+});
+
+describe("cooking preference onboarding", () => {
+  function reachVariety() {
+    let view = createOnboardingView({
+      dateOfBirth: "1990-03-01",
+      biologicalSex: "male",
+      heightCm: "180",
+      weightKg: String(lbToKg(180)),
+      wearableCaloriesKcal: "2700",
+    });
+    view = submitOnboardingGoal(view, "fat_loss");
+    view = chooseOnboardingWearable(view, "whoop");
+    view = submitOnboardingWearableCalories(view);
+    view = submitOnboardingBasics(view, asOf);
+    view = chooseOnboardingRmrSource(view, false, asOf);
+    view = continueFromEnergyResult(view, asOf);
+    view = chooseOnboardingPace(view, "recommended", asOf);
+    view = continueFromCalorieTarget(view, asOf);
+    view = continueFromNutritionTarget(view);
+    view = continueFromCuisine(view);
+    view = continueFromProteins(view);
+    view = continueFromExclusions(view);
+    view = continueFromExperience(view);
+    return view;
+  }
+
+  it("collects cooking preferences after variety and hides finish questions for mostly ready", () => {
+    let view = continueFromVariety(reachVariety());
+    expect(view.step).toBe("prep_frequency");
+    view = chooseOnboardingPrepFrequency(view, "twice_weekly");
+    view = continueFromPrepFrequency(view);
+    expect(view.step).toBe("prep_session_time");
+    view = chooseOnboardingPrepSessionTime(view, 60);
+    view = continueFromPrepSessionTime(view);
+    expect(view.step).toBe("cooking_style");
+    view = chooseOnboardingCookingStyle(view, "mostly_ready");
+    expect(view.draft.maxFinishMinutes).toBe(0);
+    expect(view.draft.useDinnerPrepForNextLunch).toBe(false);
+    view = continueFromCookingStyle(view);
+    expect(view.step).toBe("cooking_style");
+    expect(view.cookingPreferences).toEqual({
+      prepFrequency: "twice_weekly",
+      maxPrepSessionMinutes: 60,
+      cookingStyle: "mostly_ready",
+      maxFinishMinutes: 0,
+      useDinnerPrepForNextLunch: false,
+    });
+  });
+
+  it("shows finish time and dinner-prep questions for fresh styles", () => {
+    let view = continueFromVariety(reachVariety());
+    view = continueFromPrepFrequency(view);
+    view = continueFromPrepSessionTime(view);
+    view = chooseOnboardingCookingStyle(view, "fresh_focused");
+    view = continueFromCookingStyle(view);
+    expect(view.step).toBe("finish_time");
+    view = chooseOnboardingFinishTime(view, 20);
+    view = continueFromFinishTime(view);
+    expect(view.step).toBe("dinner_prep");
+    view = chooseOnboardingDinnerPrep(view, false);
+    view = continueFromDinnerPrep(view);
+    expect(view.cookingPreferences?.maxFinishMinutes).toBe(20);
+    expect(view.cookingPreferences?.useDinnerPrepForNextLunch).toBe(false);
+  });
+
+  it("restores existing cooking selections when editing later", () => {
+    const view = startCookingPreferencesOnboarding(createOnboardingView(), {
+      prepFrequency: "throughout_week",
+      maxPrepSessionMinutes: null,
+      cookingStyle: "fresh_focused",
+      maxFinishMinutes: 15,
+      useDinnerPrepForNextLunch: false,
+    });
+    expect(view.step).toBe("prep_frequency");
+    expect(view.draft.prepFrequency).toBe("throughout_week");
+    expect(view.draft.maxPrepSessionMinutes).toBeNull();
+    expect(view.draft.cookingStyle).toBe("fresh_focused");
+    expect(view.draft.maxFinishMinutes).toBe(15);
+    expect(view.draft.useDinnerPrepForNextLunch).toBe(false);
+    expect(view.draft.rememberedMaxFinishMinutes).toBe(15);
   });
 });

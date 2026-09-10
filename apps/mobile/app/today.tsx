@@ -21,8 +21,16 @@ import {
 import { useSession } from "../src/state/session";
 
 export default function TodayScreen() {
-  const { currentRmr, currentTdee, currentCalorieTarget, nutritionTarget, mealPreferences, goal, signOut } =
-    useSession();
+  const {
+    currentRmr,
+    currentTdee,
+    currentCalorieTarget,
+    nutritionTarget,
+    mealPreferences,
+    cookingPreferences,
+    goal,
+    signOut,
+  } = useSession();
   const goalType =
     goal &&
     (goal.goalType === "muscle_gain" ||
@@ -124,6 +132,28 @@ export default function TodayScreen() {
           <Text style={styles.prefSummary}>Tell us what you enjoy so later meals can follow along.</Text>
           <Pressable style={styles.editButton} onPress={() => router.push("/preferences")}>
             <Text style={styles.editButtonText}>Add food preferences</Text>
+          </Pressable>
+        </View>
+      )}
+
+      {cookingPreferences ? (
+        <View style={styles.prefsBox}>
+          <Text style={styles.goalLabel}>Cooking preferences</Text>
+          <Text style={styles.prefSummary}>
+            Saved prep frequency, session time, and weekly cooking style.
+          </Text>
+          <Pressable style={styles.editButton} onPress={() => router.push("/cooking-preferences")}>
+            <Text style={styles.editButtonText}>Edit cooking preferences</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <View style={styles.prefsBox}>
+          <Text style={styles.goalLabel}>Cooking preferences</Text>
+          <Text style={styles.prefSummary}>
+            Tell us how you like to prep so later meals can follow along.
+          </Text>
+          <Pressable style={styles.editButton} onPress={() => router.push("/cooking-preferences")}>
+            <Text style={styles.editButtonText}>Add cooking preferences</Text>
           </Pressable>
         </View>
       )}

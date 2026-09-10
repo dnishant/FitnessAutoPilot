@@ -18,6 +18,7 @@ export default function RootLayout() {
         <Stack.Screen name="auth" options={{ title: "Sign in" }} />
         <Stack.Screen name="onboarding" options={{ title: "Onboarding" }} />
         <Stack.Screen name="preferences" options={{ title: "Food preferences" }} />
+        <Stack.Screen name="cooking-preferences" options={{ title: "Cooking preferences" }} />
         <Stack.Screen name="goal" options={{ title: "Your goal" }} />
         <Stack.Screen name="generate" options={{ title: "Generate plan" }} />
         <Stack.Screen name="today" options={{ title: "Today" }} />

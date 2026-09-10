@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mapMealPreferencesRow } from "./rmr-mappers";
+import { mapCookingPreferencesRow, mapMealPreferencesRow } from "./rmr-mappers";
 
 describe("mapMealPreferencesRow", () => {
   it("returns null until meal preferences are completed", () => {
@@ -34,6 +34,39 @@ describe("mapMealPreferencesRow", () => {
       dislikes: ["Olives"],
       experiencePreferences: ["saucy_flavorful", "fresh"],
       varietyLevel: "simple",
+    });
+  });
+});
+
+describe("mapCookingPreferencesRow", () => {
+  it("returns null until cooking preferences are completed", () => {
+    expect(
+      mapCookingPreferencesRow({
+        user_id: "11111111-1111-1111-1111-111111111111",
+        prep_frequency: "once_weekly",
+        cooking_preferences_completed_at: null,
+      }),
+    ).toBeNull();
+  });
+
+  it("restores existing cooking selections for later editing", () => {
+    const mapped = mapCookingPreferencesRow({
+      user_id: "11111111-1111-1111-1111-111111111111",
+      prep_frequency: "twice_weekly",
+      max_prep_session_minutes: 60,
+      cooking_style: "fresh_focused",
+      max_finish_minutes: 15,
+      use_dinner_prep_for_next_lunch: false,
+      cooking_preferences_completed_at: "2026-09-10T00:00:00.000Z",
+      created_at: "2026-09-10T00:00:00.000Z",
+      updated_at: "2026-09-10T01:00:00.000Z",
+    });
+    expect(mapped).toMatchObject({
+      prepFrequency: "twice_weekly",
+      maxPrepSessionMinutes: 60,
+      cookingStyle: "fresh_focused",
+      maxFinishMinutes: 15,
+      useDinnerPrepForNextLunch: false,
     });
   });
 });
