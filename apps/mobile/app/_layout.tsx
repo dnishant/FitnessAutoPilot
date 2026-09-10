@@ -22,6 +22,7 @@ export default function RootLayout() {
         <Stack.Screen name="goal" options={{ title: "Your goal" }} />
         <Stack.Screen name="generate" options={{ title: "Generate plan" }} />
         <Stack.Screen name="today" options={{ title: "Today" }} />
+        <Stack.Screen name="recipe-preview" options={{ title: "Recipe Preview" }} />
       </Stack>
     </SessionProvider>
   );

@@ -37,6 +37,14 @@ Never expose these to Expo / `EXPO_PUBLIC_*`.
 
 `POST /functions/v1/generate-recipe`
 
+## Mobile preview (PLAN-003.5)
+
+Internal screen: `/recipe-preview` (entry from Today → **Dev: Recipe Preview**).
+
+- Builds a `RecipeGenerationRequest` from the signed-in user's nutrition target + PLAN-001/002 preferences
+- Calls the Edge Function via `session.generateRecipe` (never Gemini from the client)
+- Shows loading/error/success, generation context, AI metadata, and raw `RecipeCandidate` JSON
+
 ## Out of scope
 
 Weekly generation, USDA resolution, portion solving, web recipe discovery, leftovers/prep timelines.
