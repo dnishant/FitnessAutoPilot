@@ -103,12 +103,12 @@ export function applyCookingPreferenceDefaults(
       ? cookingStyle === "mostly_ready"
         ? 0
         : DEFAULT_MAX_FINISH_MINUTES
-      : input.maxFinishMinutes,
+      : input.maxFinishMinutes ?? DEFAULT_MAX_FINISH_MINUTES,
     useDinnerPrepForNextLunch: omittedDinner
       ? cookingStyle === "mostly_ready"
         ? false
         : DEFAULT_USE_DINNER_PREP_FOR_NEXT_LUNCH
-      : input.useDinnerPrepForNextLunch,
+      : Boolean(input.useDinnerPrepForNextLunch),
   };
 }
 

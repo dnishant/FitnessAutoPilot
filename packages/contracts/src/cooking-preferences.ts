@@ -67,6 +67,7 @@ export const WEEKLY_COOKING_STYLE_OPTIONS = [
     value: "mostly_ready",
     label: "Mostly ready to eat",
     detail: "Prepare most lunches/dinners ahead; minimal weekday cooking.",
+    recommended: false,
   },
   {
     value: "ready_lunch_fresh_dinner",
@@ -78,12 +79,13 @@ export const WEEKLY_COOKING_STYLE_OPTIONS = [
     value: "fresh_focused",
     label: "Prep ingredients, cook more fresh",
     detail: "Less batch cooking; more meals made from prepped components.",
+    recommended: false,
   },
 ] as const satisfies ReadonlyArray<{
   value: z.infer<typeof WeeklyCookingStyleSchema>;
   label: string;
   detail: string;
-  recommended?: boolean;
+  recommended: boolean;
 }>;
 
 export const FINISH_TIME_OPTIONS = [
