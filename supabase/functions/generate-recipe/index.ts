@@ -1,4 +1,4 @@
-import { json, requireUser } from "../_shared/http.ts";
+import { json, requireUser, serveWithCors } from "../_shared/http.ts";
 import {
   RECIPE_GENERATION_PROMPT_VERSION,
   parseRecipeGenerationRequest,
@@ -39,7 +39,7 @@ function asRecipeGenerationError(error: unknown): RecipeGenerationError {
   };
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
   }

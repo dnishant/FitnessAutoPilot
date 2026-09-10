@@ -1,4 +1,4 @@
-import { json, requireUser, getServiceClient } from "../_shared/http.ts";
+import { json, requireUser, getServiceClient, serveWithCors } from "../_shared/http.ts";
 import { createMealPreferencesDraft, mealPreferenceDbColumns, validateMealPreferences } from "../_shared/domain/nutrition/meal-preferences.ts";
 
 function mapMealPreferences(row: Record<string, unknown>) {
@@ -16,7 +16,7 @@ function mapMealPreferences(row: Record<string, unknown>) {
   };
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
   }

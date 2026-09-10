@@ -1,6 +1,6 @@
-import { json, requireUser, getServiceClient } from "../_shared/http.ts";
+import { json, requireUser, getServiceClient, serveWithCors } from "../_shared/http.ts";
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
   }

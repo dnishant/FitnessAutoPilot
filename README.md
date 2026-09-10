@@ -52,6 +52,18 @@ supabase start
 supabase db reset   # applies migrations + seed.sql
 ```
 
+### Hosted Edge Functions (Vercel web)
+
+The Expo web app calls functions from the browser, so CORS + in-function JWT verification are required ([ADR-014](./docs/adr/ADR-014-edge-function-cors.md)). After changing functions:
+
+```bash
+npx supabase login
+npx supabase link --project-ref <project-ref>
+npx supabase functions deploy
+```
+
+A Vercel rebuild is not required for function CORS changes.
+
 ### Mobile app
 
 ```bash
