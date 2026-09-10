@@ -18,6 +18,8 @@ import type {
   MealPreferencesInput,
   NutritionTarget,
   ProfileBasics,
+  RecipeCandidate,
+  RecipeGenerationRequest,
   RmrEstimate,
   TdeeEstimate,
 } from "@fitness-autopilot/contracts";
@@ -48,6 +50,10 @@ import {
   mapRmrRow,
   mapTdeeRow,
 } from "../lib/rmr-mappers";
+import {
+  invokeGenerateRecipe,
+  type RecipeGenerationMeta,
+} from "../lib/recipe-preview";
 
 type SessionUser = { id: string; email: string };
 
@@ -98,6 +104,12 @@ type SessionValue = {
     request: CreateGoalRequest,
   ) => Promise<{ ok: true } | { ok: false; error: string }>;
   generateTodayPlan: () => Promise<{ ok: true } | { ok: false; error: string }>;
+  generateRecipe: (
+    request: RecipeGenerationRequest,
+  ) => Promise<
+    | { ok: true; recipe: RecipeCandidate; meta?: RecipeGenerationMeta }
+    | { ok: false; error: string; code?: string; diagnostics?: string }
+  >;
 };
 
 const SessionContext = createContext<SessionValue | null>(null);
@@ -591,6 +603,55 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return {
             ok: false,
             error: e instanceof Error ? e.message : "Failed to generate plan",
+          };
+        }
+      },
+      async generateRecipe(request) {
+        try {
+          if (useLocalPlanner) {
+            return {
+              ok: false,
+              error:
+                "Recipe generation requires Supabase remote mode with server-side GEMINI_API_KEY. Local planner mode cannot call Gemini.",
+              code: "LLM_CONFIGURATION_ERROR",
+            };
+          }
+          if (!supabase) {
+            return {
+              ok: false,
+              error: "Supabase is not configured.",
+              code: "LLM_CONFIGURATION_ERROR",
+            };
+          }
+          if (!user) {
+            return { ok: false, error: "Not signed in" };
+          }
+          const client = supabase;
+          const result = await invokeGenerateRecipe(
+            (functionName, options) =>
+              client.functions.invoke(functionName, options) as Promise<{
+                data: unknown;
+                error: { message: string } | null;
+              }>,
+            request,
+          );
+          if (!result.ok) {
+            return {
+              ok: false,
+              error: result.error.message,
+              code: result.error.code,
+              diagnostics: result.error.diagnostics,
+            };
+          }
+          return {
+            ok: true,
+            recipe: result.recipe,
+            meta: result.meta,
+          };
+        } catch (e) {
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "Failed to generate recipe",
           };
         }
       },
