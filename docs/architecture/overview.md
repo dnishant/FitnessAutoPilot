@@ -27,11 +27,13 @@ Fitness Autopilot is a modular monolith.
 Client JWT + anon key
         │
         ▼
-  Edge Function  ──► domain engines ──► persist snapshots
+  Edge Function (CORS + requireUser JWT)  ──► domain engines ──► persist snapshots
         │
         ▼
   Postgres RLS (auth.uid() = user_id)
 ```
+
+Gateway JWT verification is off so browser `OPTIONS` preflight can reach the worker. See [ADR-014](../adr/ADR-014-edge-function-cors.md).
 
 ## Rounding rules
 

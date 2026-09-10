@@ -1,4 +1,4 @@
-import { json, requireUser, getServiceClient } from "../_shared/http.ts";
+import { json, requireUser, getServiceClient, serveWithCors } from "../_shared/http.ts";
 import { completeOnboarding } from "../_shared/domain/nutrition/onboarding-flow.ts";
 import { nutritionTargetPersistFields } from "../_shared/domain/nutrition/macros.ts";
 import { cookingPreferenceDbColumns } from "../_shared/domain/nutrition/cooking-preferences.ts";
@@ -139,7 +139,7 @@ function mapGoal(row: Record<string, unknown>) {
   };
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
   }

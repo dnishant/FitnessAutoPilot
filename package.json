@@ -8,7 +8,7 @@
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "test:unit": "pnpm --filter @fitness-autopilot/domain test && pnpm --filter @fitness-autopilot/contracts test && pnpm --filter @fitness-autopilot/llm test && pnpm --filter @fitness-autopilot/mobile test",
+    "test:unit": "pnpm --filter @fitness-autopilot/domain test && pnpm --filter @fitness-autopilot/contracts test && pnpm --filter @fitness-autopilot/llm test && pnpm --filter @fitness-autopilot/mobile test && pnpm exec vitest run supabase/functions/_shared/cors.test.ts",
     "build": "pnpm -r --if-present build",
     "mobile": "pnpm --filter @fitness-autopilot/mobile start",
     "mobile:web": "pnpm --filter @fitness-autopilot/mobile web",

@@ -30,4 +30,5 @@ enable_confirmations = false
 
 [functions]
 import_map = "./functions/import_map.json"
-verify_jwt = true
+# Gateway JWT rejects CORS OPTIONS (no Authorization). Auth stays in requireUser().
+verify_jwt = false
