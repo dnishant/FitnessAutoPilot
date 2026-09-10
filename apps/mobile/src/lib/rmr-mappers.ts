@@ -1,11 +1,26 @@
 import type {
   CalorieTarget,
   Goal,
+  MealPreferences,
   NutritionTarget,
   ProfileBasics,
   RmrEstimate,
   TdeeEstimate,
 } from "@fitness-autopilot/contracts";
+import {
+  CuisineValueSchema,
+  ExperienceValueSchema,
+  MealPreferencesSchema,
+  ProteinValueSchema,
+  VarietyLevelSchema,
+} from "@fitness-autopilot/contracts";
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === "string");
+}
 
 export function mapProfileRow(row: Record<string, unknown>): ProfileBasics {
   return {
@@ -15,6 +30,36 @@ export function mapProfileRow(row: Record<string, unknown>): ProfileBasics {
     heightCm: Number(row.height_cm ?? row.heightCm),
     weightKg: Number(row.weight_kg ?? row.weightKg),
   };
+}
+
+export function mapMealPreferencesRow(row: Record<string, unknown>): MealPreferences | null {
+  const completedAt = row.meal_preferences_completed_at ?? row.mealPreferencesCompletedAt;
+  if (completedAt == null || String(completedAt).trim() === "") {
+    return null;
+  }
+  const varietyRaw = row.variety_level ?? row.varietyLevel ?? "balanced";
+  const varietyParsed = VarietyLevelSchema.safeParse(varietyRaw);
+  const parsed = MealPreferencesSchema.safeParse({
+    userId: String(row.user_id ?? row.userId),
+    cuisines: asStringArray(row.cuisine_preferences ?? row.cuisinePreferences).filter(
+      (value) => CuisineValueSchema.safeParse(value).success,
+    ),
+    proteinPreferences: asStringArray(
+      row.protein_preferences ?? row.proteinPreferences,
+    ).filter((value) => ProteinValueSchema.safeParse(value).success),
+    allergies: asStringArray(row.allergies),
+    dietaryRestrictions: asStringArray(
+      row.dietary_restrictions ?? row.dietaryRestrictions,
+    ),
+    dislikes: asStringArray(row.disliked_foods ?? row.dislikedFoods ?? row.dislikes),
+    experiencePreferences: asStringArray(
+      row.experience_preferences ?? row.experiencePreferences,
+    ).filter((value) => ExperienceValueSchema.safeParse(value).success),
+    varietyLevel: varietyParsed.success ? varietyParsed.data : "balanced",
+    createdAt: String(row.created_at ?? row.createdAt ?? completedAt),
+    updatedAt: String(row.updated_at ?? row.updatedAt ?? completedAt),
+  });
+  return parsed.success ? parsed.data : null;
 }
 
 export function mapRmrRow(row: Record<string, unknown>): RmrEstimate {

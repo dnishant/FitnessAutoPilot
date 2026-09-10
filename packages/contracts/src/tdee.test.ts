@@ -36,6 +36,29 @@ describe("CompleteOnboardingRequestSchema", () => {
     expect(result.success).toBe(true);
   });
 
+  it("accepts meal preference intent on complete onboarding", () => {
+    const result = CompleteOnboardingRequestSchema.safeParse({
+      dateOfBirth: "1990-05-01",
+      biologicalSex: "male",
+      heightCm: 180,
+      weightKg: 80,
+      source: "estimated_mifflin_st_jeor",
+      goalType: "muscle_gain",
+      wearable: "whoop",
+      wearableCaloriesKcal: 2800,
+      mealPreferences: {
+        cuisines: ["indian", "surprise_me"],
+        proteinPreferences: ["chicken"],
+        allergies: ["Peanuts"],
+        dietaryRestrictions: ["Pork"],
+        dislikes: ["Olives"],
+        experiencePreferences: ["spicy"],
+        varietyLevel: "balanced",
+      },
+    });
+    expect(result.success).toBe(true);
+  });
+
   it("rejects an unsupported onboarding goal", () => {
     const result = CompleteOnboardingRequestSchema.safeParse({
       dateOfBirth: "1990-05-01",

@@ -1,8 +1,14 @@
 import type {
+  CuisineValue,
+  ExperienceValue,
+  MealPreferences,
+  MealPreferencesInput,
   OnboardingGoalType,
+  ProteinValue,
   RmrBiologicalSex,
   RmrSource,
   TdeeSource,
+  VarietyLevel,
   Wearable,
   WeightChangePace,
 } from "../../contracts/index.ts";
@@ -52,6 +58,17 @@ import {
   type MacroTargetDraft,
   type MacroTargetError,
 } from "./macros";
+import {
+  addPreferenceTag,
+  createMealPreferencesDraft,
+  DEFAULT_VARIETY_LEVEL,
+  removePreferenceTag,
+  toggleCuisine,
+  toggleSelection,
+  validateMealPreferences,
+  type MealPreferenceError,
+  type MealPreferencesDraft,
+} from "./meal-preferences";
 
 export type OnboardingStep =
   | "goal"
@@ -63,7 +80,12 @@ export type OnboardingStep =
   | "result"
   | "pace"
   | "calorie_target"
-  | "nutrition_target";
+  | "nutrition_target"
+  | "cuisine"
+  | "proteins"
+  | "exclusions"
+  | "experience"
+  | "variety";
 
 export type OnboardingDraft = {
   goalType: OnboardingGoalType | "";
@@ -77,6 +99,16 @@ export type OnboardingDraft = {
   reportedRmrKcal: string;
   reportDate: string;
   pace: WeightChangePace | "";
+  cuisines: CuisineValue[];
+  proteinPreferences: ProteinValue[];
+  allergies: string[];
+  dietaryRestrictions: string[];
+  dislikes: string[];
+  experiencePreferences: ExperienceValue[];
+  varietyLevel: VarietyLevel;
+  allergyDraft: string;
+  restrictionDraft: string;
+  dislikeDraft: string;
 };
 
 export type OnboardingResultView = {
@@ -122,9 +154,15 @@ export type OnboardingView = {
   result: OnboardingResultView | null;
   calorieTarget: CalorieTargetView | null;
   nutritionTarget: NutritionTargetView | null;
+  mealPreferences: MealPreferencesDraft | null;
 };
 
-export type OnboardingError = RmrError | TdeeError | CalorieTargetError | MacroTargetError;
+export type OnboardingError =
+  | RmrError
+  | TdeeError
+  | CalorieTargetError
+  | MacroTargetError
+  | MealPreferenceError;
 
 export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): OnboardingView {
   return {
@@ -141,13 +179,36 @@ export function createOnboardingView(overrides: Partial<OnboardingDraft> = {}): 
       reportedRmrKcal: "",
       reportDate: "",
       pace: "",
+      cuisines: [],
+      proteinPreferences: [],
+      allergies: [],
+      dietaryRestrictions: [],
+      dislikes: [],
+      experiencePreferences: [],
+      varietyLevel: DEFAULT_VARIETY_LEVEL,
+      allergyDraft: "",
+      restrictionDraft: "",
+      dislikeDraft: "",
       ...overrides,
     },
     error: null,
     result: null,
     calorieTarget: null,
     nutritionTarget: null,
+    mealPreferences: null,
   };
+}
+
+function mealPreferencesFromDraft(draft: OnboardingDraft): MealPreferencesDraft {
+  return createMealPreferencesDraft({
+    cuisines: draft.cuisines,
+    proteinPreferences: draft.proteinPreferences,
+    allergies: draft.allergies,
+    dietaryRestrictions: draft.dietaryRestrictions,
+    dislikes: draft.dislikes,
+    experiencePreferences: draft.experiencePreferences,
+    varietyLevel: draft.varietyLevel || DEFAULT_VARIETY_LEVEL,
+  });
 }
 
 function parseRequiredNumber(value: string, label: string): Result<number, OnboardingError> {
@@ -514,6 +575,209 @@ export function continueFromCalorieTarget(
   return withNutritionTarget(view, created.value);
 }
 
+export function continueFromNutritionTarget(view: OnboardingView): OnboardingView {
+  if (!view.nutritionTarget) {
+    return withError(view, {
+      code: "invalid_input",
+      message: "Establish a nutrition target before collecting food preferences.",
+    });
+  }
+  return startMealPreferencesOnboarding(view);
+}
+
+export function startMealPreferencesOnboarding(
+  view: OnboardingView,
+  existing?: Partial<MealPreferencesDraft> | MealPreferences | null,
+): OnboardingView {
+  const prefs = createMealPreferencesDraft({
+    cuisines: view.draft.cuisines,
+    proteinPreferences: view.draft.proteinPreferences,
+    allergies: view.draft.allergies,
+    dietaryRestrictions: view.draft.dietaryRestrictions,
+    dislikes: view.draft.dislikes,
+    experiencePreferences: view.draft.experiencePreferences,
+    varietyLevel: view.draft.varietyLevel,
+    ...existing,
+  });
+  return {
+    ...view,
+    step: "cuisine",
+    error: null,
+    mealPreferences: null,
+    draft: {
+      ...view.draft,
+      cuisines: prefs.cuisines,
+      proteinPreferences: prefs.proteinPreferences,
+      allergies: prefs.allergies,
+      dietaryRestrictions: prefs.dietaryRestrictions,
+      dislikes: prefs.dislikes,
+      experiencePreferences: prefs.experiencePreferences,
+      varietyLevel: prefs.varietyLevel,
+      allergyDraft: "",
+      restrictionDraft: "",
+      dislikeDraft: "",
+    },
+  };
+}
+
+export function toggleOnboardingCuisine(view: OnboardingView, value: CuisineValue): OnboardingView {
+  return {
+    ...view,
+    error: null,
+    draft: { ...view.draft, cuisines: toggleCuisine(view.draft.cuisines, value) },
+  };
+}
+
+export function continueFromCuisine(view: OnboardingView): OnboardingView {
+  const validated = validateMealPreferences(mealPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return { ...view, step: "proteins", error: null };
+}
+
+export function toggleOnboardingProtein(view: OnboardingView, value: ProteinValue): OnboardingView {
+  return {
+    ...view,
+    error: null,
+    draft: {
+      ...view.draft,
+      proteinPreferences: toggleSelection(view.draft.proteinPreferences, value),
+    },
+  };
+}
+
+export function continueFromProteins(view: OnboardingView): OnboardingView {
+  const validated = validateMealPreferences(mealPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return { ...view, step: "exclusions", error: null };
+}
+
+export function addOnboardingAllergy(view: OnboardingView): OnboardingView {
+  const added = addPreferenceTag(view.draft.allergies, view.draft.allergyDraft);
+  if (!added.ok) {
+    return withError(view, { ...added.error, field: "allergies" });
+  }
+  return {
+    ...view,
+    error: null,
+    draft: { ...view.draft, allergies: added.value, allergyDraft: "" },
+  };
+}
+
+export function addOnboardingRestriction(view: OnboardingView): OnboardingView {
+  const added = addPreferenceTag(view.draft.dietaryRestrictions, view.draft.restrictionDraft);
+  if (!added.ok) {
+    return withError(view, { ...added.error, field: "dietaryRestrictions" });
+  }
+  return {
+    ...view,
+    error: null,
+    draft: { ...view.draft, dietaryRestrictions: added.value, restrictionDraft: "" },
+  };
+}
+
+export function addOnboardingDislike(view: OnboardingView): OnboardingView {
+  const added = addPreferenceTag(view.draft.dislikes, view.draft.dislikeDraft);
+  if (!added.ok) {
+    return withError(view, { ...added.error, field: "dislikes" });
+  }
+  return {
+    ...view,
+    error: null,
+    draft: { ...view.draft, dislikes: added.value, dislikeDraft: "" },
+  };
+}
+
+export function removeOnboardingAllergy(view: OnboardingView, value: string): OnboardingView {
+  return {
+    ...view,
+    error: null,
+    draft: { ...view.draft, allergies: removePreferenceTag(view.draft.allergies, value) },
+  };
+}
+
+export function removeOnboardingRestriction(view: OnboardingView, value: string): OnboardingView {
+  return {
+    ...view,
+    error: null,
+    draft: {
+      ...view.draft,
+      dietaryRestrictions: removePreferenceTag(view.draft.dietaryRestrictions, value),
+    },
+  };
+}
+
+export function removeOnboardingDislike(view: OnboardingView, value: string): OnboardingView {
+  return {
+    ...view,
+    error: null,
+    draft: { ...view.draft, dislikes: removePreferenceTag(view.draft.dislikes, value) },
+  };
+}
+
+export function continueFromExclusions(view: OnboardingView): OnboardingView {
+  const validated = validateMealPreferences(mealPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return { ...view, step: "experience", error: null };
+}
+
+export function toggleOnboardingExperience(
+  view: OnboardingView,
+  value: ExperienceValue,
+): OnboardingView {
+  return {
+    ...view,
+    error: null,
+    draft: {
+      ...view.draft,
+      experiencePreferences: toggleSelection(view.draft.experiencePreferences, value),
+    },
+  };
+}
+
+export function continueFromExperience(view: OnboardingView): OnboardingView {
+  const validated = validateMealPreferences(mealPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return { ...view, step: "variety", error: null };
+}
+
+export function chooseOnboardingVariety(
+  view: OnboardingView,
+  varietyLevel: VarietyLevel,
+): OnboardingView {
+  const validated = validateMealPreferences({
+    ...mealPreferencesFromDraft(view.draft),
+    varietyLevel,
+  });
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return {
+    ...view,
+    error: null,
+    draft: { ...view.draft, varietyLevel: validated.value.varietyLevel },
+  };
+}
+
+export function continueFromVariety(view: OnboardingView): OnboardingView {
+  const validated = validateMealPreferences(mealPreferencesFromDraft(view.draft));
+  if (!validated.ok) {
+    return withError(view, validated.error);
+  }
+  return {
+    ...view,
+    error: null,
+    mealPreferences: validated.value,
+  };
+}
+
 export function completeOnboarding(input: {
   dateOfBirth: string;
   biologicalSex: RmrBiologicalSex;
@@ -526,6 +790,7 @@ export function completeOnboarding(input: {
   wearable: Wearable;
   wearableCaloriesKcal: number;
   pace?: WeightChangePace;
+  mealPreferences?: MealPreferencesInput;
   asOf?: Date;
 }): Result<
   {
@@ -540,6 +805,7 @@ export function completeOnboarding(input: {
     goalType: OnboardingGoalType;
     calorieTarget: CalorieTargetDraft;
     nutritionTarget: MacroTargetDraft;
+    mealPreferences: MealPreferencesDraft;
   },
   OnboardingError
 > {
@@ -600,6 +866,12 @@ export function completeOnboarding(input: {
   if (!nutritionTarget.ok) {
     return nutritionTarget;
   }
+  const mealPreferences = validateMealPreferences(
+    createMealPreferencesDraft(input.mealPreferences),
+  );
+  if (!mealPreferences.ok) {
+    return mealPreferences;
+  }
   return ok({
     profile: rmrCompleted.value.profile,
     rmr: rmrCompleted.value.rmr,
@@ -607,5 +879,6 @@ export function completeOnboarding(input: {
     goalType: goal.value,
     calorieTarget: calorieTarget.value,
     nutritionTarget: nutritionTarget.value,
+    mealPreferences: mealPreferences.value,
   });
 }

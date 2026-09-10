@@ -37,6 +37,7 @@ jobs:
           test -f supabase/migrations/20260907000200_tdee_estimates.sql
           test -f supabase/migrations/20260908000100_calorie_targets.sql
           test -f supabase/migrations/20260908000200_nutrition_target_macros.sql
+          test -f supabase/migrations/20260908000300_meal_preferences.sql
           test -f supabase/seed.sql
           grep -n "enable row level security" supabase/migrations/20260307000100_init_schema.sql
           grep -n "auth.uid() = user_id" supabase/migrations/20260307000100_init_schema.sql
@@ -46,6 +47,9 @@ jobs:
           grep -n "auth.uid() = user_id" supabase/migrations/20260907000200_tdee_estimates.sql
           grep -n "enable row level security" supabase/migrations/20260908000100_calorie_targets.sql
           grep -n "auth.uid() = user_id" supabase/migrations/20260908000100_calorie_targets.sql
+          grep -n "protein_preferences" supabase/migrations/20260908000300_meal_preferences.sql
+          grep -n "dietary_restrictions" supabase/migrations/20260908000300_meal_preferences.sql
+          grep -n "variety_level" supabase/migrations/20260908000300_meal_preferences.sql
 
       - name: RLS test file present
         run: |
@@ -55,3 +59,5 @@ jobs:
           grep -n "calorie_targets" supabase/tests/rls/cross_user_isolation.sql
           grep -n "nutrition_targets" supabase/tests/rls/cross_user_isolation.sql
           grep -n "user A can modify user B nutrition target" supabase/tests/rls/cross_user_isolation.sql
+          grep -n "user A can read user B meal preferences" supabase/tests/rls/cross_user_isolation.sql
+          grep -n "user A can modify user B meal preferences" supabase/tests/rls/cross_user_isolation.sql

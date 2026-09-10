@@ -3,7 +3,17 @@ import { ActivityIndicator, View } from "react-native";
 import { useSession } from "../src/state/session";
 
 export default function Index() {
-  const { user, profile, currentRmr, currentTdee, currentCalorieTarget, nutritionTarget, goal, loading } = useSession();
+  const {
+    user,
+    profile,
+    currentRmr,
+    currentTdee,
+    currentCalorieTarget,
+    nutritionTarget,
+    mealPreferences,
+    goal,
+    loading,
+  } = useSession();
 
   if (loading) {
     return (
@@ -18,6 +28,9 @@ export default function Index() {
   }
   if (!profile || !currentRmr || !currentTdee || !currentCalorieTarget || !nutritionTarget || !goal) {
     return <Redirect href="/onboarding" />;
+  }
+  if (!mealPreferences) {
+    return <Redirect href="/preferences" />;
   }
   return <Redirect href="/today" />;
 }

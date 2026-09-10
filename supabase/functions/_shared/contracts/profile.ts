@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { VarietyLevelSchema } from "./meal-preferences";
 
 export const BiologicalSexSchema = z.enum(["female", "male", "other"]);
 export const FitnessExperienceSchema = z.enum([
@@ -43,9 +44,13 @@ export const UserProfileSchema = z.object({
   fitnessExperience: FitnessExperienceSchema,
   dietaryPreference: DietaryPreferenceSchema,
   cuisinePreferences: z.array(z.string()).default([]),
+  proteinPreferences: z.array(z.string()).default([]),
   allergies: z.array(z.string()).default([]),
+  dietaryRestrictions: z.array(z.string()).default([]),
   dislikedFoods: z.array(z.string()).default([]),
   preferredFoods: z.array(z.string()).default([]),
+  experiencePreferences: z.array(z.string()).default([]),
+  varietyLevel: VarietyLevelSchema.optional(),
   typicalEatingHabits: z.string().max(2000).optional(),
   mealPrepAvailability: MealPrepAvailabilitySchema,
   cookingSkill: CookingSkillSchema,

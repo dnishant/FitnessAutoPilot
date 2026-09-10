@@ -10,6 +10,7 @@ import { lbToKg } from "@fitness-autopilot/domain";
 import {
   ensureLocalUser,
   localSaveCalorieTarget,
+  localSaveMealPreferences,
   localSaveNutritionTarget,
   localSaveOnboardingGoal,
   localSaveProfile,
@@ -238,5 +239,41 @@ describe("local RMR persistence", () => {
       fatGramsPerKg: 0.7,
       policyVersion: "macro-policy-v1",
     });
+  });
+
+  it("upserts one current meal-preference profile and restores it for editing", () => {
+    const store = ensureLocalUser("meal-prefs@example.com", "test-password");
+    const first = localSaveMealPreferences(
+      store.userId,
+      {
+        cuisines: ["indian", "surprise_me"],
+        proteinPreferences: ["chicken", "paneer"],
+        allergies: ["Peanuts"],
+        dietaryRestrictions: ["Pork"],
+        dislikes: ["Olives"],
+        experiencePreferences: ["saucy_flavorful"],
+        varietyLevel: "simple",
+      },
+      asOf,
+    );
+    expect(store.mealPreferences).toEqual(first);
+    expect(first.allergies).toEqual(["Peanuts"]);
+    expect(first.dietaryRestrictions).toEqual(["Pork"]);
+    expect(first.dislikes).toEqual(["Olives"]);
+
+    const second = localSaveMealPreferences(
+      store.userId,
+      {
+        ...first,
+        cuisines: ["indian", "mexican", "surprise_me"],
+        varietyLevel: "high",
+      },
+      new Date("2026-09-08T02:00:00.000Z"),
+    );
+    expect(store.mealPreferences).toEqual(second);
+    expect(second.createdAt).toBe(first.createdAt);
+    expect(second.updatedAt).not.toBe(first.updatedAt);
+    expect(second.cuisines).toEqual(["indian", "mexican", "surprise_me"]);
+    expect(second.varietyLevel).toBe("high");
   });
 });

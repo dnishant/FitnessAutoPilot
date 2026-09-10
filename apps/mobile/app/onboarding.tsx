@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -23,6 +22,7 @@ import {
   chooseOnboardingWearable,
   continueFromCalorieTarget,
   continueFromEnergyResult,
+  continueFromNutritionTarget,
   createOnboardingView,
   paceOptionsForGoal,
   pacePromptForGoal,
@@ -31,8 +31,10 @@ import {
   submitOnboardingGoal,
   submitOnboardingWearableCalories,
   wearableCaloriesFieldLabel,
+  type OnboardingView,
 } from "@fitness-autopilot/domain";
 import { useSession } from "../src/state/session";
+import { MealPreferenceSteps } from "../src/components/meal-preference-steps";
 
 export default function OnboardingScreen() {
   const { completeOnboarding, user } = useSession();
@@ -50,32 +52,34 @@ export default function OnboardingScreen() {
     setPersistError(null);
   }
 
-  async function persistResult() {
+  async function persistResult(nextView: OnboardingView = view) {
     if (!user) {
       setPersistError("Not signed in");
       return;
     }
-    const result = view.result;
-    const calorieTarget = view.calorieTarget;
-    const nutritionTarget = view.nutritionTarget;
-    if (!result || !calorieTarget || !nutritionTarget) {
+    const result = nextView.result;
+    const calorieTarget = nextView.calorieTarget;
+    const nutritionTarget = nextView.nutritionTarget;
+    const mealPreferences = nextView.mealPreferences;
+    if (!result || !calorieTarget || !nutritionTarget || !mealPreferences) {
       return;
     }
     setBusy(true);
     setPersistError(null);
     const saved = await completeOnboarding({
-      dateOfBirth: view.draft.dateOfBirth,
-      biologicalSex: view.draft.biologicalSex as RmrBiologicalSex,
-      heightCm: Number(view.draft.heightCm),
-      weightKg: Number(view.draft.weightKg),
+      dateOfBirth: nextView.draft.dateOfBirth,
+      biologicalSex: nextView.draft.biologicalSex as RmrBiologicalSex,
+      heightCm: Number(nextView.draft.heightCm),
+      weightKg: Number(nextView.draft.weightKg),
       source: result.source,
       reportedRmrKcal:
-        result.source === "user_reported_dexa" ? Number(view.draft.reportedRmrKcal) : undefined,
-      reportDate: result.source === "user_reported_dexa" ? view.draft.reportDate : undefined,
+        result.source === "user_reported_dexa" ? Number(nextView.draft.reportedRmrKcal) : undefined,
+      reportDate: result.source === "user_reported_dexa" ? nextView.draft.reportDate : undefined,
       goalType: result.goalType,
-      wearable: view.draft.wearable as Wearable,
-      wearableCaloriesKcal: Number(view.draft.wearableCaloriesKcal),
+      wearable: nextView.draft.wearable as Wearable,
+      wearableCaloriesKcal: Number(nextView.draft.wearableCaloriesKcal),
       pace: calorieTarget.draft.pace,
+      mealPreferences,
     });
     setBusy(false);
     if (!saved.ok) {
@@ -341,17 +345,25 @@ export default function OnboardingScreen() {
                 </View>
               ))
             : null}
-          {persistError ? <Text style={styles.error}>{persistError}</Text> : null}
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable style={styles.primary} disabled={busy} onPress={persistResult}>
-            {busy ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.primaryText}>Continue</Text>
-            )}
+          <Pressable
+            style={styles.primary}
+            onPress={() => setView((current) => continueFromNutritionTarget(current))}
+          >
+            <Text style={styles.primaryText}>Continue</Text>
           </Pressable>
         </>
       ) : null}
+
+      <MealPreferenceSteps
+        view={view}
+        onChange={setView}
+        onComplete={(next) => {
+          void persistResult(next);
+        }}
+        busy={busy}
+        persistError={persistError}
+      />
     </ScrollView>
   );
 }

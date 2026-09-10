@@ -7,11 +7,24 @@ import {
   completeOnboarding,
   continueFromCalorieTarget,
   continueFromEnergyResult,
+  continueFromCuisine,
+  continueFromExclusions,
+  continueFromExperience,
+  continueFromNutritionTarget,
+  continueFromProteins,
+  continueFromVariety,
   createOnboardingView,
+  startMealPreferencesOnboarding,
+  addOnboardingAllergy,
+  addOnboardingDislike,
+  addOnboardingRestriction,
   submitOnboardingBasics,
   submitOnboardingDexa,
   submitOnboardingGoal,
   submitOnboardingWearableCalories,
+  toggleOnboardingCuisine,
+  toggleOnboardingExperience,
+  toggleOnboardingProtein,
 } from "./onboarding-flow";
 
 const asOf = new Date("2026-09-07T00:00:00.000Z");
@@ -206,6 +219,8 @@ describe("completeOnboarding", () => {
     expect(result.value.nutritionTarget.proteinGrams).toBeCloseTo(180, 10);
     expect(result.value.nutritionTarget.macroPolicyVersion).toBe("macro-policy-v1");
     expect(result.value.nutritionTarget.inputSnapshot.targetCalories).toBe(2025);
+    expect(result.value.mealPreferences.varietyLevel).toBe("balanced");
+    expect(result.value.mealPreferences.cuisines).toEqual([]);
   });
 });
 
@@ -317,5 +332,99 @@ describe("nutrition target result", () => {
     expect(JSON.stringify(view.nutritionTarget)).not.toMatch(/%|percent|percentage/i);
     expect(view.nutritionTarget?.draft.inputSnapshot.proteinGramsPerLb).toBe(1);
     expect(view.nutritionTarget?.draft.macroPolicyVersion).toBe("macro-policy-v1");
+  });
+});
+
+describe("meal preference onboarding", () => {
+  function reachNutritionTarget() {
+    let view = createOnboardingView({
+      dateOfBirth: "1990-03-01",
+      biologicalSex: "male",
+      heightCm: "180",
+      weightKg: String(lbToKg(180)),
+      wearableCaloriesKcal: "2700",
+    });
+    view = submitOnboardingGoal(view, "fat_loss");
+    view = chooseOnboardingWearable(view, "whoop");
+    view = submitOnboardingWearableCalories(view);
+    view = submitOnboardingBasics(view, asOf);
+    view = chooseOnboardingRmrSource(view, false, asOf);
+    view = continueFromEnergyResult(view, asOf);
+    view = chooseOnboardingPace(view, "recommended", asOf);
+    view = continueFromCalorieTarget(view, asOf);
+    return view;
+  }
+
+  it("collects meal preferences after the nutrition target without requiring selections", () => {
+    let view = reachNutritionTarget();
+    view = continueFromNutritionTarget(view);
+    expect(view.step).toBe("cuisine");
+    expect(view.draft.varietyLevel).toBe("balanced");
+
+    view = continueFromCuisine(view);
+    expect(view.step).toBe("proteins");
+    view = continueFromProteins(view);
+    expect(view.step).toBe("exclusions");
+    view = continueFromExclusions(view);
+    expect(view.step).toBe("experience");
+    view = continueFromExperience(view);
+    expect(view.step).toBe("variety");
+    view = continueFromVariety(view);
+    expect(view.mealPreferences?.cuisines).toEqual([]);
+    expect(view.mealPreferences?.varietyLevel).toBe("balanced");
+  });
+
+  it("keeps multiple cuisine, protein, and experience selections including Surprise me", () => {
+    let view = reachNutritionTarget();
+    view = continueFromNutritionTarget(view);
+    view = toggleOnboardingCuisine(view, "indian");
+    view = toggleOnboardingCuisine(view, "mexican");
+    view = toggleOnboardingCuisine(view, "surprise_me");
+    expect(view.draft.cuisines).toEqual(["indian", "mexican", "surprise_me"]);
+    view = continueFromCuisine(view);
+    view = toggleOnboardingProtein(view, "chicken");
+    view = toggleOnboardingProtein(view, "paneer");
+    expect(view.draft.proteinPreferences).toEqual(["chicken", "paneer"]);
+    view = continueFromProteins(view);
+    view = continueFromExclusions(view);
+    view = toggleOnboardingExperience(view, "saucy_flavorful");
+    view = toggleOnboardingExperience(view, "spicy");
+    expect(view.draft.experiencePreferences).toEqual(["saucy_flavorful", "spicy"]);
+  });
+
+  it("stores allergies separately from restrictions and dislikes", () => {
+    let view = reachNutritionTarget();
+    view = continueFromNutritionTarget(view);
+    view = continueFromCuisine(view);
+    view = continueFromProteins(view);
+    view = { ...view, draft: { ...view.draft, allergyDraft: "Peanuts" } };
+    view = addOnboardingAllergy(view);
+    view = { ...view, draft: { ...view.draft, restrictionDraft: "Pork" } };
+    view = addOnboardingRestriction(view);
+    view = { ...view, draft: { ...view.draft, dislikeDraft: "Olives" } };
+    view = addOnboardingDislike(view);
+    expect(view.draft.allergies).toEqual(["Peanuts"]);
+    expect(view.draft.dietaryRestrictions).toEqual(["Pork"]);
+    expect(view.draft.dislikes).toEqual(["Olives"]);
+  });
+
+  it("restores existing selections when editing later", () => {
+    const view = startMealPreferencesOnboarding(createOnboardingView(), {
+      cuisines: ["italian", "surprise_me"],
+      proteinPreferences: ["eggs", "tofu"],
+      allergies: ["Peanuts"],
+      dietaryRestrictions: ["Pork"],
+      dislikes: ["Olives"],
+      experiencePreferences: ["comforting", "fresh"],
+      varietyLevel: "simple",
+    });
+    expect(view.step).toBe("cuisine");
+    expect(view.draft.cuisines).toEqual(["italian", "surprise_me"]);
+    expect(view.draft.proteinPreferences).toEqual(["eggs", "tofu"]);
+    expect(view.draft.allergies).toEqual(["Peanuts"]);
+    expect(view.draft.dietaryRestrictions).toEqual(["Pork"]);
+    expect(view.draft.dislikes).toEqual(["Olives"]);
+    expect(view.draft.experiencePreferences).toEqual(["comforting", "fresh"]);
+    expect(view.draft.varietyLevel).toBe("simple");
   });
 });

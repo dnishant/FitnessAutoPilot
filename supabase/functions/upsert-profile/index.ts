@@ -20,9 +20,15 @@ Deno.serve(async (req) => {
   if (body.fitnessExperience !== undefined) row.fitness_experience = body.fitnessExperience;
   if (body.dietaryPreference !== undefined) row.dietary_preference = body.dietaryPreference;
   if (body.cuisinePreferences !== undefined) row.cuisine_preferences = body.cuisinePreferences;
+  if (body.proteinPreferences !== undefined) row.protein_preferences = body.proteinPreferences;
   if (body.allergies !== undefined) row.allergies = body.allergies;
+  if (body.dietaryRestrictions !== undefined) row.dietary_restrictions = body.dietaryRestrictions;
   if (body.dislikedFoods !== undefined) row.disliked_foods = body.dislikedFoods;
   if (body.preferredFoods !== undefined) row.preferred_foods = body.preferredFoods;
+  if (body.experiencePreferences !== undefined) {
+    row.experience_preferences = body.experiencePreferences;
+  }
+  if (body.varietyLevel !== undefined) row.variety_level = body.varietyLevel;
   if (body.typicalEatingHabits !== undefined) {
     row.typical_eating_habits = body.typicalEatingHabits ?? null;
   }
