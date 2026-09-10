@@ -35,6 +35,16 @@ pnpm --filter @fitness-autopilot/domain test
 pnpm --filter @fitness-autopilot/domain typecheck
 ```
 
+### Dev-only live recipe generation (PLAN-003)
+
+Requires a server-side Gemini key (never put this in Expo):
+
+```bash
+cp supabase/.env.example supabase/.env   # set GEMINI_API_KEY
+set -a && source supabase/.env && set +a
+pnpm generate:recipe:dev
+```
+
 ### Local Supabase
 
 ```bash
@@ -66,6 +76,7 @@ pnpm mobile:web
 apps/mobile/          Expo + Expo Router UI
 packages/domain/      Pure deterministic engines (nutrition, recipes, planning, safety)
 packages/contracts/   Zod schemas + shared API/DB shapes
+packages/llm/         Server-only LLM adapters (Gemini recipe generation)
 packages/validation/  Result helpers + boundary validators
 packages/test-fixtures/
 supabase/             migrations, functions, seed, RLS tests

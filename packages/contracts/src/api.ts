@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { UserProfileSchema } from "./profile";
 import { GoalTypeSchema } from "./goal";
+import { GenerateRecipeRequestSchema } from "./recipe-generation";
 
 export const UpsertProfileRequestSchema = UserProfileSchema.omit({ userId: true }).partial({
   cuisinePreferences: true,
@@ -28,6 +29,9 @@ export const CreateGoalRequestSchema = z.object({
 export const GenerateDailyPlanRequestSchema = z.object({
   planDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
 });
+
+/** Edge Function body for POST /generate-recipe (PLAN-003). */
+export { GenerateRecipeRequestSchema };
 
 export type UpsertProfileRequest = z.infer<typeof UpsertProfileRequestSchema>;
 export type CreateGoalRequest = z.infer<typeof CreateGoalRequestSchema>;

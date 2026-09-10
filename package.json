@@ -8,11 +8,12 @@
     "lint": "pnpm -r --if-present lint",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "pnpm -r --if-present test",
-    "test:unit": "pnpm --filter @fitness-autopilot/domain test && pnpm --filter @fitness-autopilot/contracts test && pnpm --filter @fitness-autopilot/mobile test",
+    "test:unit": "pnpm --filter @fitness-autopilot/domain test && pnpm --filter @fitness-autopilot/contracts test && pnpm --filter @fitness-autopilot/llm test && pnpm --filter @fitness-autopilot/mobile test",
     "build": "pnpm -r --if-present build",
     "mobile": "pnpm --filter @fitness-autopilot/mobile start",
     "mobile:web": "pnpm --filter @fitness-autopilot/mobile web",
-    "sync:edge": "bash scripts/sync-edge-shared.sh"
+    "sync:edge": "bash scripts/sync-edge-shared.sh",
+    "generate:recipe:dev": "pnpm --filter @fitness-autopilot/llm generate:dev"
   },
   "engines": {
     "node": ">=20"
