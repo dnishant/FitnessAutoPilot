@@ -13,7 +13,7 @@ export type LlmServerConfig = {
   };
 };
 
-export const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
 
 export type LlmConfigError = {
   code: "LLM_CONFIGURATION_ERROR";

@@ -29,7 +29,7 @@ Zod RecipeCandidate validation
 | --- | --- |
 | `LLM_PROVIDER` | Currently `gemini` |
 | `GEMINI_API_KEY` | Server-only API key |
-| `GEMINI_MODEL` | Defaults to `gemini-2.5-flash` |
+| `GEMINI_MODEL` | Defaults to `gemini-3.6-flash` |
 
 Never expose these to Expo / `EXPO_PUBLIC_*`.
 

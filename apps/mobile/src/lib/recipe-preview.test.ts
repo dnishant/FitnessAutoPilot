@@ -94,7 +94,7 @@ const sampleRecipe = {
   source: {
     type: "ai_original",
     provider: "gemini",
-    model: "gemini-2.5-flash",
+    model: "gemini-3.6-flash",
   },
 } satisfies RecipeCandidate;
 
@@ -140,7 +140,7 @@ describe("recipe preview API invoke", () => {
           requestId: "req_1",
           promptVersion: "recipe-generation-v1",
           provider: "gemini",
-          model: "gemini-2.5-flash",
+          model: "gemini-3.6-flash",
           durationMs: 1234,
         },
       },
@@ -259,11 +259,11 @@ describe("recipe preview formatting", () => {
       requestId: "req_1",
       promptVersion: "recipe-generation-v1",
       provider: "gemini",
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       durationMs: 900,
     });
     expect(ai.find((row) => row.label === "Provider")?.value).toBe("gemini");
-    expect(ai.find((row) => row.label === "Model")?.value).toBe("gemini-2.5-flash");
+    expect(ai.find((row) => row.label === "Model")?.value).toBe("gemini-3.6-flash");
     expect(ai.find((row) => row.label === "Prompt")?.value).toBe("recipe-generation-v1");
   });
 });
@@ -295,7 +295,7 @@ describe("recipe preview UI state machine", () => {
         requestId: "req_1",
         promptVersion: "recipe-generation-v1",
         provider: "gemini",
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
       },
     });
     expect(state.current?.recipe.name).toContain("Chicken Tikka");
