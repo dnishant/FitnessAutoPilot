@@ -307,28 +307,95 @@ export function parseGenerateRecipeFailure(input: {
     }
     if (err && typeof err === "object") {
       const record = err as { code?: unknown; message?: unknown; details?: unknown };
-      const message =
+      const code = typeof record.code === "string" ? record.code : undefined;
+      const baseMessage =
         typeof record.message === "string" && record.message.trim()
           ? record.message
           : input.errorMessage?.trim() || "Recipe generation failed.";
-      const code = typeof record.code === "string" ? record.code : undefined;
       return {
-        message,
+        message: humanizeRecipeGenerationError(baseMessage, code),
         code,
         diagnostics: sanitizeDiagnosticText(record.details ?? data),
       };
     }
   }
   return {
-    message: input.errorMessage?.trim() || "Recipe generation failed.",
+    message: humanizeRecipeGenerationError(
+      input.errorMessage?.trim() || "Recipe generation failed.",
+      undefined,
+    ),
     diagnostics: sanitizeDiagnosticText(data),
   };
 }
 
+/**
+ * Supabase functions.invoke puts non-2xx bodies on `error.context` (a Response),
+ * not in `data`. Without reading that body, the UI only shows the generic
+ * "Edge Function returned a non-2xx status code" message.
+ */
+export async function readFunctionsInvokeErrorBody(
+  error: { message: string; context?: unknown } | null | undefined,
+): Promise<unknown> {
+  const context = error?.context;
+  if (!context || typeof context !== "object") {
+    return undefined;
+  }
+  const maybeResponse = context as {
+    json?: () => Promise<unknown>;
+    text?: () => Promise<string>;
+    clone?: () => { json?: () => Promise<unknown>; text?: () => Promise<string> };
+  };
+  const readable =
+    typeof maybeResponse.clone === "function" ? maybeResponse.clone() : maybeResponse;
+  if (readable && typeof readable.json === "function") {
+    try {
+      return await readable.json();
+    } catch {
+      // fall through to text
+    }
+  }
+  if (readable && typeof readable.text === "function") {
+    try {
+      const text = (await readable.text()).trim();
+      if (!text) {
+        return undefined;
+      }
+      try {
+        return JSON.parse(text) as unknown;
+      } catch {
+        return { error: text };
+      }
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
+export function humanizeRecipeGenerationError(
+  message: string,
+  code?: string,
+): string {
+  if (code === "LLM_CONFIGURATION_ERROR") {
+    return `${message} Set GEMINI_API_KEY as a Supabase Edge Function secret, then redeploy generate-recipe.`;
+  }
+  // Exact FunctionsHttpError message from @supabase/functions-js
+  if (message === "Edge Function returned a non-2xx status code") {
+    return "Recipe generation failed in the Edge Function (non-2xx). Check that generate-recipe is deployed and GEMINI_API_KEY is set.";
+  }
+  return message;
+}
+
+export type InvokeGenerateRecipeError = {
+  message: string;
+  /** FunctionsHttpError.context — usually a Fetch Response with the JSON body. */
+  context?: unknown;
+};
+
 export type InvokeGenerateRecipeFn = (
   functionName: string,
   options: { body: RecipeGenerationRequest },
-) => Promise<{ data: unknown; error: { message: string } | null }>;
+) => Promise<{ data: unknown; error: InvokeGenerateRecipeError | null }>;
 
 export async function invokeGenerateRecipe(
   invoke: InvokeGenerateRecipeFn,
@@ -339,11 +406,12 @@ export async function invokeGenerateRecipe(
 > {
   const { data, error } = await invoke("generate-recipe", { body: request });
   if (error) {
+    const errorBody = (await readFunctionsInvokeErrorBody(error)) ?? data;
     return {
       ok: false,
       error: parseGenerateRecipeFailure({
         errorMessage: error.message,
-        data,
+        data: errorBody,
       }),
     };
   }

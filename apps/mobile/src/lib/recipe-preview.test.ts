@@ -177,6 +177,47 @@ describe("recipe preview API invoke", () => {
     expect(parsed.diagnostics).toContain("quota");
   });
 
+  it("reads non-2xx JSON from FunctionsHttpError.context", async () => {
+    const responseBody = {
+      error: {
+        code: "LLM_CONFIGURATION_ERROR",
+        message: "GEMINI_API_KEY is required for recipe generation.",
+      },
+    };
+    const invoke = vi.fn(async () => ({
+      data: null,
+      error: {
+        message: "Edge Function returned a non-2xx status code",
+        context: new Response(JSON.stringify(responseBody), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        }),
+      },
+    }));
+    const request = buildRecipeGenerationRequest("dinner", {
+      nutritionTarget,
+      mealPreferences,
+      cookingPreferences,
+    });
+    const result = await invokeGenerateRecipe(invoke, request);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("LLM_CONFIGURATION_ERROR");
+    expect(result.error.message).toContain("GEMINI_API_KEY");
+    expect(result.error.message).toContain("Edge Function secret");
+  });
+
+  it("humanizes bare non-2xx messages when no body is available", () => {
+    const parsed = parseGenerateRecipeFailure({
+      errorMessage: "Edge Function returned a non-2xx status code",
+      data: null,
+    });
+    expect(parsed.message).toContain("GEMINI_API_KEY");
+    expect(parsed.message).not.toBe("Edge Function returned a non-2xx status code");
+  });
+
   it("never surfaces API key-looking diagnostics", () => {
     const sanitized = sanitizeDiagnosticText({
       GEMINI_API_KEY: "secret-key-value",

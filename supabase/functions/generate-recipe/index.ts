@@ -89,6 +89,7 @@ serveWithCors(async (req) => {
             durationMs: event.durationMs,
             success: event.success,
             errorCode: event.errorCode,
+            errorMessage: event.errorMessage,
             usageMetadata: event.usageMetadata,
             mealType: event.mealType,
             varietyLevel: event.varietyLevel,
@@ -121,6 +122,7 @@ serveWithCors(async (req) => {
         durationMs: Date.now() - started,
         success: false,
         errorCode: mapped.code,
+        errorMessage: mapped.message,
       }),
     );
     return json({ error: mapped }, statusFor(mapped));

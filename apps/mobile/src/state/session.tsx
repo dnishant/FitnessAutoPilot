@@ -628,11 +628,22 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           }
           const client = supabase;
           const result = await invokeGenerateRecipe(
-            (functionName, options) =>
-              client.functions.invoke(functionName, options) as Promise<{
-                data: unknown;
-                error: { message: string } | null;
-              }>,
+            async (functionName, options) => {
+              const invoked = await client.functions.invoke(functionName, options);
+              return {
+                data: invoked.data,
+                error: invoked.error
+                  ? {
+                      message: invoked.error.message,
+                      // FunctionsHttpError.context holds the Response body for non-2xx.
+                      context:
+                        "context" in invoked.error
+                          ? (invoked.error as { context?: unknown }).context
+                          : undefined,
+                    }
+                  : null,
+              };
+            },
             request,
           );
           if (!result.ok) {

@@ -45,6 +45,15 @@ set -a && source supabase/.env && set +a
 pnpm generate:recipe:dev
 ```
 
+Hosted Recipe Preview (`/recipe-preview`) calls the `generate-recipe` Edge Function. For production:
+
+```bash
+npx supabase secrets set GEMINI_API_KEY=your_key --project-ref <project-ref>
+npx supabase functions deploy generate-recipe --project-ref <project-ref>
+```
+
+If Preview shows only `Edge Function returned a non-2xx status code`, the function body was swallowed by supabase-js — check the function logs, and confirm `GEMINI_API_KEY` is set.
+
 ### Local Supabase
 
 ```bash
