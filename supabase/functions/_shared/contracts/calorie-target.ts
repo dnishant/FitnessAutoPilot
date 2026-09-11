@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OnboardingGoalTypeSchema } from "./goal";
+import { OnboardingGoalTypeSchema } from "./goal.ts";
 
 export const WeightChangeDirectionSchema = z.enum([
   "weight_loss",

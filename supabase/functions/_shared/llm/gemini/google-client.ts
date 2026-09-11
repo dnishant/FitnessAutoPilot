@@ -3,7 +3,7 @@ import type {
   GeminiContentClient,
   GeminiGenerateContentParams,
   GeminiGenerateContentResult,
-} from "./client";
+} from "./client.ts";
 
 export function createGoogleGenAiContentClient(apiKey: string): GeminiContentClient {
   const ai = new GoogleGenAI({ apiKey });

@@ -30,7 +30,7 @@ import {
   rmrResultSourceLabel,
   type RmrError,
   type RmrEstimateDraft,
-} from "./rmr";
+} from "./rmr.ts";
 import {
   createTdeeFromWearable,
   formatTdeeKcalPerDay,
@@ -42,7 +42,7 @@ import {
   validateWearableCalories,
   type TdeeError,
   type TdeeEstimateDraft,
-} from "./tdee";
+} from "./tdee.ts";
 import {
   calorieTargetGoalLabel,
   calorieTargetPaceLabel,
@@ -56,7 +56,7 @@ import {
   pacePromptForGoal,
   type CalorieTargetDraft,
   type CalorieTargetError,
-} from "./calorie-target";
+} from "./calorie-target.ts";
 import {
   calculateMacroTargets,
   formatMacroGrams,
@@ -64,7 +64,7 @@ import {
   nutritionTargetExplanationRows,
   type MacroTargetDraft,
   type MacroTargetError,
-} from "./macros";
+} from "./macros.ts";
 import {
   addPreferenceTag,
   createMealPreferencesDraft,
@@ -75,7 +75,7 @@ import {
   validateMealPreferences,
   type MealPreferenceError,
   type MealPreferencesDraft,
-} from "./meal-preferences";
+} from "./meal-preferences.ts";
 import {
   applyCookingStyleChange,
   createCookingPreferencesDraft,
@@ -89,7 +89,7 @@ import {
   validateCookingPreferences,
   type CookingPreferenceError,
   type CookingPreferencesDraft,
-} from "./cooking-preferences";
+} from "./cooking-preferences.ts";
 
 export type OnboardingStep =
   | "goal"

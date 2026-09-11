@@ -5,24 +5,24 @@ export {
   type LlmConfigError,
   type LlmProvider,
   type LlmServerConfig,
-} from "./config";
+} from "./config.ts";
 export {
   createRecipeGenerator,
   type CreateRecipeGeneratorOptions,
-} from "./create-recipe-generator";
+} from "./create-recipe-generator.ts";
 export type {
   GeminiContentClient,
   GeminiGenerateContentParams,
   GeminiGenerateContentResult,
   GeminiUsageMetadata,
-} from "./gemini/client";
-export { createGoogleGenAiContentClient } from "./gemini/google-client";
+} from "./gemini/client.ts";
+export { createGoogleGenAiContentClient } from "./gemini/google-client.ts";
 export {
   GeminiRecipeGenerator,
   type GeminiRecipeGeneratorOptions,
   type RecipeGenerationLogEvent,
-} from "./gemini/recipe-generator";
+} from "./gemini/recipe-generator.ts";
 export {
   GeminiRecipeCandidatePayloadSchema,
   geminiRecipeResponseJsonSchema,
-} from "./gemini/schema";
+} from "./gemini/schema.ts";

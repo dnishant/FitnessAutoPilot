@@ -13,7 +13,27 @@ cp -R "$ROOT/packages/llm/src/." "$SHARED/llm/"
 find "$SHARED" -name '*.test.ts' -delete
 python3 - <<'PY'
 from pathlib import Path
+import re
+
 root = Path("/workspace/supabase/functions/_shared")
+
+# Deno Edge bundler requires explicit .ts extensions on relative imports.
+RELATIVE_SPEC = re.compile(
+    r"""(?P<prefix>(?:from|import)\s*\(?\s*)(?P<quote>['"])(?P<path>\.\.?/[^'"]+)(?P=quote)"""
+)
+
+def ensure_ts_extension(path: str) -> str:
+    if path.endswith((".ts", ".tsx", ".js", ".mjs", ".cjs", ".json")):
+        return path
+    return f"{path}.ts"
+
+def rewrite_relative_imports(text: str) -> str:
+    def repl(match: re.Match[str]) -> str:
+        path = ensure_ts_extension(match.group("path"))
+        return f"{match.group('prefix')}{match.group('quote')}{path}{match.group('quote')}"
+
+    return RELATIVE_SPEC.sub(repl, text)
+
 for path in root.rglob("*.ts"):
     text = path.read_text()
     depth = len(path.relative_to(root).parts) - 1
@@ -25,9 +45,10 @@ for path in root.rglob("*.ts"):
     # Node process.env is unavailable in Deno edge; map to Deno.env for config.
     if path.as_posix().endswith("/llm/config.ts"):
         text2 = text2.replace(
-            'reader: EnvReader = (key) => process.env[key]',
-            'reader: EnvReader = (key) => Deno.env.get(key)',
+            "reader: EnvReader = (key) => process.env[key]",
+            "reader: EnvReader = (key) => Deno.env.get(key)",
         )
+    text2 = rewrite_relative_imports(text2)
     if text2 != text:
         path.write_text(text2)
 print("synced edge _shared domain/contracts/validation/llm copies")

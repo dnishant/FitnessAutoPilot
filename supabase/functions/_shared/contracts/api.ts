@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { UserProfileSchema } from "./profile";
-import { GoalTypeSchema } from "./goal";
-import { GenerateRecipeRequestSchema } from "./recipe-generation";
+import { UserProfileSchema } from "./profile.ts";
+import { GoalTypeSchema } from "./goal.ts";
+import { GenerateRecipeRequestSchema } from "./recipe-generation.ts";
 
 export const UpsertProfileRequestSchema = UserProfileSchema.omit({ userId: true }).partial({
   cuisinePreferences: true,

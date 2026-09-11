@@ -1,12 +1,12 @@
 import type { RecipeGenerator } from "../domain/index.ts";
 import { recipeGenerationError } from "../domain/index.ts";
-import { loadLlmServerConfig, type EnvReader, type LlmServerConfig } from "./config";
-import type { GeminiContentClient } from "./gemini/client";
-import { createGoogleGenAiContentClient } from "./gemini/google-client";
+import { loadLlmServerConfig, type EnvReader, type LlmServerConfig } from "./config.ts";
+import type { GeminiContentClient } from "./gemini/client.ts";
+import { createGoogleGenAiContentClient } from "./gemini/google-client.ts";
 import {
   GeminiRecipeGenerator,
   type RecipeGenerationLogEvent,
-} from "./gemini/recipe-generator";
+} from "./gemini/recipe-generator.ts";
 
 export type CreateRecipeGeneratorOptions = {
   env?: EnvReader;

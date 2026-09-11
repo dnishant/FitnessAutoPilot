@@ -1,6 +1,6 @@
 import type { Food, NutritionMacros } from "../../contracts/index.ts";
 import { ok, err, type Result } from "../../validation/index.ts";
-import { roundKcal, roundMacroG } from "../common/rounding";
+import { roundKcal, roundMacroG } from "../common/rounding.ts";
 
 export type FoodNutritionError = {
   code: "invalid_quantity" | "invalid_food";

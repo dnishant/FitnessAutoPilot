@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { WeightChangePaceSchema } from "./calorie-target";
-import { OnboardingGoalTypeSchema } from "./goal";
-import { CookingPreferencesInputSchema } from "./cooking-preferences";
-import { MealPreferencesInputSchema } from "./meal-preferences";
-import { IsoDateSchema, RmrSourceSchema } from "./rmr";
+import { WeightChangePaceSchema } from "./calorie-target.ts";
+import { OnboardingGoalTypeSchema } from "./goal.ts";
+import { CookingPreferencesInputSchema } from "./cooking-preferences.ts";
+import { MealPreferencesInputSchema } from "./meal-preferences.ts";
+import { IsoDateSchema, RmrSourceSchema } from "./rmr.ts";
 
 /**
  * Product input bounds for V1 wearable TDEE collection.
