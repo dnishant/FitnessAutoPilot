@@ -158,6 +158,10 @@ export default function TodayScreen() {
         </View>
       )}
 
+      <Pressable style={styles.devButton} onPress={() => router.push("/recipe-preview")}>
+        <Text style={styles.devButtonText}>Dev: Recipe Preview</Text>
+      </Pressable>
+
       <Pressable
         style={styles.secondary}
         onPress={async () => {
@@ -222,4 +226,14 @@ const styles = StyleSheet.create({
   rmrMeta: { color: "#A8C4B4", marginTop: 6, fontSize: 13 },
   secondary: { paddingVertical: 10, alignItems: "center" },
   secondaryText: { color: "#1F6F4A", fontWeight: "600" },
+  devButton: {
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#C9D9CF",
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  devButtonText: { color: "#0B1F17", fontWeight: "700" },
 });
