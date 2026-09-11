@@ -27,13 +27,41 @@ enable_signup = true
 
 [auth.email]
 enable_signup = true
-<<<<<<< HEAD
 enable_confirmations = false
 
-[functions]
-import_map = "./functions/import_map.json"
 # Gateway JWT rejects CORS OPTIONS (no Authorization). Auth stays in requireUser().
+[functions.calculate-nutrition-target]
+import_map = "./functions/import_map.json"
 verify_jwt = false
-=======
-enable_confirmations = false
->>>>>>> eb3a220 (chore: update local Supabase config for SMTP and auth redirects)
+
+[functions.complete-rmr-onboarding]
+import_map = "./functions/import_map.json"
+verify_jwt = false
+
+[functions.create-goal]
+import_map = "./functions/import_map.json"
+verify_jwt = false
+
+[functions.generate-daily-plan]
+import_map = "./functions/import_map.json"
+verify_jwt = false
+
+[functions.generate-recipe]
+import_map = "./functions/import_map.json"
+verify_jwt = false
+
+[functions.get-today-plan]
+import_map = "./functions/import_map.json"
+verify_jwt = false
+
+[functions.upsert-cooking-preferences]
+import_map = "./functions/import_map.json"
+verify_jwt = false
+
+[functions.upsert-meal-preferences]
+import_map = "./functions/import_map.json"
+verify_jwt = false
+
+[functions.upsert-profile]
+import_map = "./functions/import_map.json"
+verify_jwt = false
