@@ -38,7 +38,7 @@ describe("recipe generation contracts", () => {
       instructions: ["Sear salmon and serve over rice with garlic-lime sauce."],
       prepMinutes: 10,
       cookMinutes: 12,
-      source: { type: "ai_original", provider: "gemini", model: "gemini-2.5-flash" },
+      source: { type: "ai_original", provider: "gemini", model: "gemini-3.6-flash" },
     });
     expect(parsed.success).toBe(true);
 
