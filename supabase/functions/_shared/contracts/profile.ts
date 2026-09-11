@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { VarietyLevelSchema } from "./meal-preferences";
+import { VarietyLevelSchema } from "./meal-preferences.ts";
 
 export const BiologicalSexSchema = z.enum(["female", "male", "other"]);
 export const FitnessExperienceSchema = z.enum([

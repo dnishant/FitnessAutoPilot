@@ -6,8 +6,8 @@ import type {
 } from "../../contracts/index.ts";
 import { CalorieTargetValidationPolicy } from "../../contracts/index.ts";
 import { err, ok, type Result } from "../../validation/index.ts";
-import { roundHalfUp, roundKcal } from "../common/rounding";
-import { kgToLb } from "../common/units";
+import { roundHalfUp, roundKcal } from "../common/rounding.ts";
+import { kgToLb } from "../common/units.ts";
 
 export const WEIGHT_CHANGE_POLICY_NAME = "weight-change-policy" as const;
 export const WEIGHT_CHANGE_POLICY_VERSION = "weight-change-policy-v1" as const;

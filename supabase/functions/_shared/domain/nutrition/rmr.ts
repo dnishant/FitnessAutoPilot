@@ -5,7 +5,7 @@ import type {
 } from "../../contracts/index.ts";
 import { RmrValidationPolicy } from "../../contracts/index.ts";
 import { err, ok, type Result } from "../../validation/index.ts";
-import { roundKcal } from "../common/rounding";
+import { roundKcal } from "../common/rounding.ts";
 
 export const RMR_ALGORITHM_NAME = "mifflin_st_jeor" as const;
 export const RMR_ALGORITHM_VERSION = "rmr-v1" as const;

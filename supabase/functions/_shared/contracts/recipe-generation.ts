@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { MealTypeSchema } from "./recipe";
-import { VarietyLevelSchema } from "./meal-preferences";
-import { WeeklyCookingStyleSchema } from "./cooking-preferences";
+import { MealTypeSchema } from "./recipe.ts";
+import { VarietyLevelSchema } from "./meal-preferences.ts";
+import { WeeklyCookingStyleSchema } from "./cooking-preferences.ts";
 
 /**
  * PLAN-003: AI recipe candidate contracts.

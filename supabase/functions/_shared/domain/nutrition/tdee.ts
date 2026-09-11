@@ -6,7 +6,7 @@ import type {
 } from "../../contracts/index.ts";
 import { TdeeValidationPolicy } from "../../contracts/index.ts";
 import { err, ok, type Result } from "../../validation/index.ts";
-import { roundKcal } from "../common/rounding";
+import { roundKcal } from "../common/rounding.ts";
 import type { RmrSource } from "../../contracts/index.ts";
 
 export const TDEE_ALGORITHM_NAME = "apple_watch_active_plus_rmr" as const;

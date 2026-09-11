@@ -1,12 +1,12 @@
 import type { MacroTargetInputSnapshot } from "../../contracts/index.ts";
 import { err, ok, type Result } from "../../validation/index.ts";
-import { roundGrams, roundKcal } from "../common/rounding";
-import { kgToLb, lbToKg } from "../common/units";
+import { roundGrams, roundKcal } from "../common/rounding.ts";
+import { kgToLb, lbToKg } from "../common/units.ts";
 import {
   CARB_KCAL_PER_GRAM,
   FAT_KCAL_PER_GRAM,
   PROTEIN_KCAL_PER_GRAM,
-} from "./energy";
+} from "./energy.ts";
 
 export const MACRO_POLICY_NAME = "macro-policy" as const;
 export const MACRO_POLICY_VERSION = "macro-policy-v1" as const;
@@ -21,7 +21,7 @@ export {
   CARB_KCAL_PER_GRAM,
   FAT_KCAL_PER_GRAM,
   PROTEIN_KCAL_PER_GRAM,
-} from "./energy";
+} from "./energy.ts";
 
 export type MacroTargetFailureReason =
   | "missing_weight"

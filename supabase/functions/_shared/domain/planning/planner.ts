@@ -7,8 +7,8 @@ import type {
   UserProfile,
 } from "../../contracts/index.ts";
 import { ok, err, type Result } from "../../validation/index.ts";
-import type { NutritionTargetCalculation } from "../nutrition/target";
-import { portionRecipe, type PortionedRecipe } from "./portioning";
+import type { NutritionTargetCalculation } from "../nutrition/target.ts";
+import { portionRecipe, type PortionedRecipe } from "./portioning.ts";
 
 export const PlannerPolicy = {
   mealCalorieShares: {

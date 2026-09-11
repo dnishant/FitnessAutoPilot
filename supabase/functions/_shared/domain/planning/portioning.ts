@@ -5,8 +5,8 @@ import type {
   RecipeIngredient,
 } from "../../contracts/index.ts";
 import { ok, err, type Result } from "../../validation/index.ts";
-import { roundGrams } from "../common/rounding";
-import { calculateRecipeNutrition } from "../recipes/nutrition";
+import { roundGrams } from "../common/rounding.ts";
+import { calculateRecipeNutrition } from "../recipes/nutrition.ts";
 
 export const PortioningPolicy = {
   calorieToleranceFraction: 0.08,

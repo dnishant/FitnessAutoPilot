@@ -9,8 +9,8 @@ import {
   type RecipeGenerationError,
   type RecipeGenerator,
 } from "../../domain/index.ts";
-import type { GeminiContentClient } from "./client";
-import { geminiRecipeResponseJsonSchema } from "./schema";
+import type { GeminiContentClient } from "./client.ts";
+import { geminiRecipeResponseJsonSchema } from "./schema.ts";
 
 export type RecipeGenerationLogEvent = {
   provider: "gemini";

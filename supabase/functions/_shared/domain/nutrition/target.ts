@@ -6,14 +6,14 @@ import type {
   UserProfile,
 } from "../../contracts/index.ts";
 import { ok, err, type Result } from "../../validation/index.ts";
-import { requireAllowedEligibility, type SafetyFailure } from "../safety/eligibility";
-import { roundKcal, roundMacroG } from "../common/rounding";
+import { requireAllowedEligibility, type SafetyFailure } from "../safety/eligibility.ts";
+import { roundKcal, roundMacroG } from "../common/rounding.ts";
 import {
   CARB_KCAL_PER_GRAM,
   FAT_KCAL_PER_GRAM,
   PROTEIN_KCAL_PER_GRAM,
-} from "./energy";
-import { calculateAgeFromDateOfBirth, mifflinStJeorRaw } from "./rmr";
+} from "./energy.ts";
+import { calculateAgeFromDateOfBirth, mifflinStJeorRaw } from "./rmr.ts";
 
 export const NUTRITION_TARGET_ALGORITHM_NAME = "nutrition-target" as const;
 export const NUTRITION_TARGET_ALGORITHM_VERSION = "nutrition-target-v1" as const;
