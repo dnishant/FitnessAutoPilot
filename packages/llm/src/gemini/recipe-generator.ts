@@ -20,6 +20,8 @@ export type RecipeGenerationLogEvent = {
   durationMs: number;
   success: boolean;
   errorCode?: string;
+  /** Sanitized provider/domain error text for Edge Function logs. */
+  errorMessage?: string;
   usageMetadata?: {
     promptTokenCount?: number;
     candidatesTokenCount?: number;
@@ -28,6 +30,13 @@ export type RecipeGenerationLogEvent = {
   mealType?: string;
   varietyLevel?: string;
 };
+
+function sanitizeLogMessage(message: string): string {
+  return message
+    .replace(/AIza[0-9A-Za-z_-]{10,}/g, "[redacted-api-key]")
+    .replace(/Bearer\s+[A-Za-z0-9._\-]+/gi, "Bearer [redacted]")
+    .slice(0, 500);
+}
 
 export type GeminiRecipeGeneratorOptions = {
   model: string;
@@ -70,6 +79,7 @@ export class GeminiRecipeGenerator implements RecipeGenerator {
         durationMs: this.now() - started,
         success: false,
         errorCode: parsed.error.code,
+        errorMessage: sanitizeLogMessage(parsed.error.message),
         mealType: typeof request.mealType === "string" ? request.mealType : undefined,
         varietyLevel:
           typeof request.varietyLevel === "string" ? request.varietyLevel : undefined,
@@ -101,6 +111,7 @@ export class GeminiRecipeGenerator implements RecipeGenerator {
         durationMs: this.now() - started,
         success: false,
         errorCode: mapped.code,
+        errorMessage: sanitizeLogMessage(mapped.message),
         mealType: parsed.value.mealType,
         varietyLevel: parsed.value.varietyLevel,
       });
@@ -124,6 +135,7 @@ export class GeminiRecipeGenerator implements RecipeGenerator {
         durationMs: this.now() - started,
         success: false,
         errorCode: mapped.code,
+        errorMessage: sanitizeLogMessage(mapped.message),
         usageMetadata,
         mealType: parsed.value.mealType,
         varietyLevel: parsed.value.varietyLevel,
@@ -160,6 +172,7 @@ export class GeminiRecipeGenerator implements RecipeGenerator {
         durationMs: this.now() - started,
         success: false,
         errorCode: validated.error.code,
+        errorMessage: sanitizeLogMessage(validated.error.message),
         usageMetadata,
         mealType: parsed.value.mealType,
         varietyLevel: parsed.value.varietyLevel,
