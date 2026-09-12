@@ -8,6 +8,7 @@ export * from "./meal-preferences";
 export * from "./cooking-preferences";
 export * from "./recipe";
 export * from "./recipe-generation";
+export * from "./recipe-discovery";
 export * from "./weekly-strategy";
 export * from "./plan";
 export * from "./api";

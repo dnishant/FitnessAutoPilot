@@ -2,6 +2,7 @@ import { z } from "zod";
 import { UserProfileSchema } from "./profile.ts";
 import { GoalTypeSchema } from "./goal.ts";
 import { GenerateRecipeRequestSchema } from "./recipe-generation.ts";
+import { RecipeDiscoverySearchRequestSchema } from "./recipe-discovery.ts";
 import { GenerateWeeklyStrategyRequestSchema } from "./weekly-strategy.ts";
 
 export const UpsertProfileRequestSchema = UserProfileSchema.omit({ userId: true }).partial({
@@ -33,6 +34,9 @@ export const GenerateDailyPlanRequestSchema = z.object({
 
 /** Edge Function body for POST /generate-recipe (PLAN-003). */
 export { GenerateRecipeRequestSchema };
+
+/** Edge Function body for POST /recipe-discovery-search (PLAN-005). */
+export { RecipeDiscoverySearchRequestSchema };
 
 /** Edge Function body for POST /generate-weekly-strategy (PLAN-004). */
 export { GenerateWeeklyStrategyRequestSchema };

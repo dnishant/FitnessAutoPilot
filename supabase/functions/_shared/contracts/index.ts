@@ -8,6 +8,7 @@ export * from "./meal-preferences.ts";
 export * from "./cooking-preferences.ts";
 export * from "./recipe.ts";
 export * from "./recipe-generation.ts";
+export * from "./recipe-discovery.ts";
 export * from "./weekly-strategy.ts";
 export * from "./plan.ts";
 export * from "./api.ts";
