@@ -49,6 +49,13 @@ Never expose these to Expo / `EXPO_PUBLIC_*`.
 
 `POST /functions/v1/generate-weekly-strategy`
 
+Uses the same CORS + in-function JWT pattern as `generate-recipe` (`serveWithCors`, `verify_jwt = false` in `supabase/config.toml`). Deploy before using the hosted preview:
+
+```bash
+npx supabase functions deploy generate-weekly-strategy --project-ref <project-ref>
+npx supabase secrets set GEMINI_API_KEY=your_key --project-ref <project-ref>
+```
+
 Response shape:
 
 ```json

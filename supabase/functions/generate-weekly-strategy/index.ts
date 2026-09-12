@@ -1,4 +1,4 @@
-import { json, requireUser } from "../_shared/http.ts";
+import { json, requireUser, serveWithCors } from "../_shared/http.ts";
 import {
   WEEKLY_STRATEGY_PROMPT_VERSION,
   calculateWeeklyStrategyStats,
@@ -40,7 +40,7 @@ function asWeeklyStrategyError(error: unknown): WeeklyStrategyError {
   };
 }
 
-Deno.serve(async (req) => {
+serveWithCors(async (req) => {
   if (req.method !== "POST") {
     return json({ error: "Method not allowed" }, 405);
   }

@@ -26,6 +26,7 @@ import {
   canStartWeeklyStrategyGeneration,
   createWeeklyStrategyPreviewUiState,
   failWeeklyStrategyGeneration,
+  humanizeWeeklyStrategyError,
   invokeGenerateWeeklyStrategy,
   parseGenerateWeeklyStrategyFailure,
   repeatStatusLabel,
@@ -353,6 +354,18 @@ describe("weekly strategy preview API invoke", () => {
     expect(parsed.diagnostics).toContain("quota");
   });
 
+  it("humanizes unreachable Edge Function / CORS failures", () => {
+    expect(
+      humanizeWeeklyStrategyError("Failed to send a request to the Edge Function"),
+    ).toContain("generate-weekly-strategy");
+    const parsed = parseGenerateWeeklyStrategyFailure({
+      errorMessage: "Failed to send a request to the Edge Function",
+      data: null,
+    });
+    expect(parsed.message).toContain("Deploy");
+    expect(parsed.message).not.toBe("Failed to send a request to the Edge Function");
+  });
+
   it("never surfaces API key-looking diagnostics", () => {
     const sanitized = sanitizeDiagnosticText({
       GEMINI_API_KEY: "secret-key-value",
@@ -542,5 +555,24 @@ describe("weekly strategy preview architecture boundaries", () => {
     expect(session).toContain("generateWeeklyStrategy");
     expect(session).toContain("invokeGenerateWeeklyStrategy");
     expect(session).not.toContain("@google/genai");
+  });
+
+  it("serves generate-weekly-strategy with CORS like generate-recipe", () => {
+    const weekly = readFileSync(
+      join(mobileRoot, "../../supabase/functions/generate-weekly-strategy/index.ts"),
+      "utf8",
+    );
+    const recipe = readFileSync(
+      join(mobileRoot, "../../supabase/functions/generate-recipe/index.ts"),
+      "utf8",
+    );
+    const config = readFileSync(join(mobileRoot, "../../supabase/config.toml"), "utf8");
+    expect(weekly).toContain("serveWithCors");
+    expect(weekly).not.toContain("Deno.serve");
+    expect(recipe).toContain("serveWithCors");
+    expect(config).toContain("[functions.generate-weekly-strategy]");
+    expect(config).toMatch(
+      /\[functions\.generate-weekly-strategy\][\s\S]*?verify_jwt\s*=\s*false/,
+    );
   });
 });

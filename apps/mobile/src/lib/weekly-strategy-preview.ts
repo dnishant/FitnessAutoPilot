@@ -418,6 +418,9 @@ export function humanizeWeeklyStrategyError(message: string, code?: string): str
   if (code === "LLM_CONFIGURATION_ERROR") {
     return `${message} Set GEMINI_API_KEY as a Supabase Edge Function secret, then redeploy generate-weekly-strategy.`;
   }
+  if (message === "Failed to send a request to the Edge Function") {
+    return "Could not reach generate-weekly-strategy. Deploy it with CORS enabled (`npx supabase functions deploy generate-weekly-strategy`) and confirm EXPO_PUBLIC_SUPABASE_URL points at that project.";
+  }
   if (message === "Edge Function returned a non-2xx status code") {
     return "Weekly strategy generation failed in the Edge Function (non-2xx). Check that generate-weekly-strategy is deployed and GEMINI_API_KEY is set.";
   }
