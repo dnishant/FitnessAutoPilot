@@ -34,6 +34,7 @@ export {
 } from "./gemini/weekly-strategy-generator.ts";
 export {
   assertNoJsonSchemaRefs,
+  sanitizeGeminiJsonSchema,
   zodToGeminiJsonSchema,
 } from "./gemini/json-schema.ts";
 export {

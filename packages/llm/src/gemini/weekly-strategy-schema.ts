@@ -22,7 +22,10 @@ export const GeminiWeeklyMealConceptPayloadSchema = z.object({
   experienceTags: z.array(z.string().min(1).max(80)).max(12).optional(),
   prepIntent: PrepIntentSchema,
   estimatedFinishMinutes: z.number().int().nonnegative().max(180).optional(),
-  repeatOfConceptId: z.string().min(1).max(80).nullable().optional(),
+  // Optional only (not nullable): Zod `.nullable()` emits anyOf+null which
+  // Gemini rejects with opaque 400 INVALID_ARGUMENT. Model may omit the field;
+  // domain validation still accepts null if present.
+  repeatOfConceptId: z.string().min(1).max(80).optional(),
   rationale: z.string().min(1).max(400).optional(),
 });
 

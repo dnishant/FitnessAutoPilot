@@ -27,4 +27,19 @@ describe("geminiWeeklyStrategyResponseJsonSchema", () => {
     expect(schema.$schema).toBeUndefined();
     expect(() => assertNoJsonSchemaRefs(schema)).not.toThrow();
   });
+
+  it("does not emit anyOf null unions Gemini rejects", () => {
+    const schema = geminiWeeklyStrategyResponseJsonSchema();
+    const serialized = JSON.stringify(schema);
+    expect(serialized).not.toContain('"anyOf"');
+    expect(serialized).not.toContain('"type":"null"');
+    expect(serialized).not.toContain("exclusiveMinimum");
+  });
+});
+
+describe("geminiRecipeResponseJsonSchema exclusive bounds", () => {
+  it("does not emit exclusiveMinimum Gemini rejects", () => {
+    const schema = geminiRecipeResponseJsonSchema();
+    expect(JSON.stringify(schema)).not.toContain("exclusiveMinimum");
+  });
 });
