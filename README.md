@@ -65,6 +65,24 @@ pnpm generate:weekly-strategy:dev
 
 Hosted Weekly Strategy Preview (`/weekly-strategy-preview`) calls the `generate-weekly-strategy` Edge Function.
 
+### Dev-only live culinary discovery (PLAN-005)
+
+Search-grounded discovery (Gemini + Google Search). Same server-side Gemini key:
+
+```bash
+set -a && source supabase/.env && set +a
+pnpm discover:culinary:dev
+```
+
+Hosted Culinary Discovery Preview (`/culinary-discovery-preview`) calls the `culinary-discovery` Edge Function:
+
+```bash
+pnpm sync:edge
+npx supabase functions deploy culinary-discovery --project-ref <project-ref>
+```
+
+Confirm `EXPO_PUBLIC_SUPABASE_URL` points at that same project. Gateway JWT stays off (`verify_jwt = false`); CORS + `requireUser()` match the other LLM functions.
+
 ### Local Supabase
 
 ```bash
