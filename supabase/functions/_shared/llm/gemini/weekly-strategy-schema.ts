@@ -53,8 +53,10 @@ export type GeminiWeeklyMealStrategyPayload = z.infer<
 >;
 
 export function geminiWeeklyStrategyResponseJsonSchema(): Record<string, unknown> {
+  // Do not pass `name` — that returns `{ $ref: "#/definitions/...", definitions: {...} }`.
+  // Deleting definitions then leaves a dangling top-level $ref that Gemini rejects as
+  // "reference to undefined schema at top-level".
   const schema = zodToJsonSchema(GeminiWeeklyMealStrategyPayloadSchema, {
-    name: "WeeklyMealStrategyPayload",
     $refStrategy: "none",
   }) as Record<string, unknown>;
 
@@ -62,6 +64,12 @@ export function geminiWeeklyStrategyResponseJsonSchema(): Record<string, unknown
   delete schema.$schema;
   delete schema.definitions;
   delete schema.$defs;
+
+  if (schema.$ref !== undefined) {
+    throw new Error(
+      "Gemini weekly strategy schema must be an inlined object, not a $ref wrapper.",
+    );
+  }
 
   return schema;
 }
