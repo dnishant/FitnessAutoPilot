@@ -13,7 +13,8 @@
     "mobile": "pnpm --filter @fitness-autopilot/mobile start",
     "mobile:web": "pnpm --filter @fitness-autopilot/mobile web",
     "sync:edge": "bash scripts/sync-edge-shared.sh",
-    "generate:recipe:dev": "pnpm --filter @fitness-autopilot/llm generate:dev"
+    "generate:recipe:dev": "pnpm --filter @fitness-autopilot/llm generate:dev",
+    "generate:weekly-strategy:dev": "pnpm --filter @fitness-autopilot/llm generate:weekly-strategy:dev"
   },
   "engines": {
     "node": ">=20"

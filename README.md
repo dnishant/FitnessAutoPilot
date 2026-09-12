@@ -54,6 +54,15 @@ npx supabase functions deploy generate-recipe --project-ref <project-ref>
 
 If Preview shows only `Edge Function returned a non-2xx status code`, the function body was swallowed by supabase-js — check the function logs, and confirm `GEMINI_API_KEY` is set.
 
+### Dev-only live weekly strategy generation (PLAN-004)
+
+Same server-side Gemini key:
+
+```bash
+set -a && source supabase/.env && set +a
+pnpm generate:weekly-strategy:dev
+```
+
 ### Local Supabase
 
 ```bash

@@ -10,6 +10,10 @@ export {
   createRecipeGenerator,
   type CreateRecipeGeneratorOptions,
 } from "./create-recipe-generator.ts";
+export {
+  createWeeklyStrategyGenerator,
+  type CreateWeeklyStrategyGeneratorOptions,
+} from "./create-weekly-strategy-generator.ts";
 export type {
   GeminiContentClient,
   GeminiGenerateContentParams,
@@ -23,6 +27,16 @@ export {
   type RecipeGenerationLogEvent,
 } from "./gemini/recipe-generator.ts";
 export {
+  GeminiWeeklyStrategyGenerator,
+  stripWeeklyStrategyNutrition,
+  type GeminiWeeklyStrategyGeneratorOptions,
+  type WeeklyStrategyLogEvent,
+} from "./gemini/weekly-strategy-generator.ts";
+export {
   GeminiRecipeCandidatePayloadSchema,
   geminiRecipeResponseJsonSchema,
 } from "./gemini/schema.ts";
+export {
+  GeminiWeeklyMealStrategyPayloadSchema,
+  geminiWeeklyStrategyResponseJsonSchema,
+} from "./gemini/weekly-strategy-schema.ts";
