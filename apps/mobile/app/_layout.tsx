@@ -23,6 +23,10 @@ export default function RootLayout() {
         <Stack.Screen name="generate" options={{ title: "Generate plan" }} />
         <Stack.Screen name="today" options={{ title: "Today" }} />
         <Stack.Screen name="recipe-preview" options={{ title: "Recipe Preview" }} />
+        <Stack.Screen
+          name="weekly-strategy-preview"
+          options={{ title: "Weekly Strategy Preview" }}
+        />
       </Stack>
     </SessionProvider>
   );

@@ -49,6 +49,13 @@ Never expose these to Expo / `EXPO_PUBLIC_*`.
 
 `POST /functions/v1/generate-weekly-strategy`
 
+Uses the same CORS + in-function JWT pattern as `generate-recipe` (`serveWithCors`, `verify_jwt = false` in `supabase/config.toml`). Deploy before using the hosted preview:
+
+```bash
+npx supabase functions deploy generate-weekly-strategy --project-ref <project-ref>
+npx supabase secrets set GEMINI_API_KEY=your_key --project-ref <project-ref>
+```
+
 Response shape:
 
 ```json
@@ -73,6 +80,8 @@ set -a && source supabase/.env && set +a
 pnpm generate:weekly-strategy:dev
 ```
 
+Internal screen: `/weekly-strategy-preview` (entry from Today → **Dev: Weekly Strategy Preview**).
+
 ## Out of scope
 
-Detailed recipe generation, USDA resolution, portion solving, grocery aggregation, exact prep timelines, flavor-distance algorithms, polished weekly UI (PLAN-004.5).
+Detailed recipe generation, USDA resolution, portion solving, grocery aggregation, exact prep timelines, flavor-distance algorithms, polished weekly-plan UI.

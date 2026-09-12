@@ -63,6 +63,8 @@ set -a && source supabase/.env && set +a
 pnpm generate:weekly-strategy:dev
 ```
 
+Hosted Weekly Strategy Preview (`/weekly-strategy-preview`) calls the `generate-weekly-strategy` Edge Function.
+
 ### Local Supabase
 
 ```bash
