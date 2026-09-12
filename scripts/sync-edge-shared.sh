@@ -11,11 +11,12 @@ cp -R "$ROOT/packages/contracts/src/." "$SHARED/contracts/"
 cp -R "$ROOT/packages/validation/src/." "$SHARED/validation/"
 cp -R "$ROOT/packages/llm/src/." "$SHARED/llm/"
 find "$SHARED" -name '*.test.ts' -delete
-python3 - <<'PY'
+python3 - "$SHARED" <<'PY'
+import sys
 from pathlib import Path
 import re
 
-root = Path("/workspace/supabase/functions/_shared")
+root = Path(sys.argv[1])
 
 # Deno Edge bundler requires explicit .ts extensions on relative imports.
 RELATIVE_SPEC = re.compile(

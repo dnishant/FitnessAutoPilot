@@ -24,4 +24,5 @@ The mobile client must never call an LLM or hold provider credentials. Nutrition
 
 - Domain/contracts stay free of Gemini SDK types.
 - Future `OpenAIRecipeGenerator` / `AnthropicRecipeGenerator` can be added without changing recipe-domain logic.
-- USDA resolution, portion solving, and weekly planning remain later stories.
+- USDA resolution, portion solving, and weekly UI remain later stories.
+- Weekly meal *strategy* (concepts only) is PLAN-004 / ADR-015.

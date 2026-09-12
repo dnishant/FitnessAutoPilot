@@ -2,6 +2,7 @@ import { z } from "zod";
 import { UserProfileSchema } from "./profile";
 import { GoalTypeSchema } from "./goal";
 import { GenerateRecipeRequestSchema } from "./recipe-generation";
+import { GenerateWeeklyStrategyRequestSchema } from "./weekly-strategy";
 
 export const UpsertProfileRequestSchema = UserProfileSchema.omit({ userId: true }).partial({
   cuisinePreferences: true,
@@ -32,6 +33,9 @@ export const GenerateDailyPlanRequestSchema = z.object({
 
 /** Edge Function body for POST /generate-recipe (PLAN-003). */
 export { GenerateRecipeRequestSchema };
+
+/** Edge Function body for POST /generate-weekly-strategy (PLAN-004). */
+export { GenerateWeeklyStrategyRequestSchema };
 
 export type UpsertProfileRequest = z.infer<typeof UpsertProfileRequestSchema>;
 export type CreateGoalRequest = z.infer<typeof CreateGoalRequestSchema>;
