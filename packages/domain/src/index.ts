@@ -13,7 +13,6 @@ export * from "./nutrition/onboarding-flow";
 export * from "./nutrition/target";
 export * from "./recipes/nutrition";
 export * from "./recipes/generation";
-export * from "./recipes/discovery";
 export * from "./planning/portioning";
 export * from "./planning/planner";
 export * from "./planning/weekly-strategy";

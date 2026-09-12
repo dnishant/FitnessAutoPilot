@@ -47,9 +47,7 @@ for path in root.rglob("*.ts"):
     text2 = text2.replace("@fitness-autopilot/domain", f"{ups}/domain/index.ts")
     text2 = text2.replace("@fitness-autopilot/llm", f"{ups}/llm/index.ts")
     # Node process.env is unavailable in Deno edge; map to Deno.env for config.
-    if path.as_posix().endswith("/llm/config.ts") or path.as_posix().endswith(
-        "/llm/edamam/config.ts"
-    ):
+    if path.as_posix().endswith("/llm/config.ts"):
         text2 = text2.replace(
             "reader: EnvReader = (key) => process.env[key]",
             "reader: EnvReader = (key) => Deno.env.get(key)",
