@@ -170,6 +170,13 @@ export default function TodayScreen() {
       </Pressable>
 
       <Pressable
+        style={styles.devButton}
+        onPress={() => router.push("/culinary-discovery-preview")}
+      >
+        <Text style={styles.devButtonText}>Dev: Culinary Discovery</Text>
+      </Pressable>
+
+      <Pressable
         style={styles.secondary}
         onPress={async () => {
           await signOut();

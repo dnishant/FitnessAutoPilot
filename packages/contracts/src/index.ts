@@ -9,5 +9,6 @@ export * from "./cooking-preferences";
 export * from "./recipe";
 export * from "./recipe-generation";
 export * from "./weekly-strategy";
+export * from "./culinary-discovery";
 export * from "./plan";
 export * from "./api";
