@@ -14,8 +14,7 @@
     "test:watch": "vitest",
     "lint": "tsc -p tsconfig.json --noEmit",
     "generate:dev": "tsx scripts/generate-recipe-dev.ts",
-    "generate:weekly-strategy:dev": "tsx scripts/generate-weekly-strategy-dev.ts",
-    "discover:dev": "tsx scripts/discover-recipes-dev.ts"
+    "generate:weekly-strategy:dev": "tsx scripts/generate-weekly-strategy-dev.ts"
   },
   "dependencies": {
     "@fitness-autopilot/contracts": "workspace:*",

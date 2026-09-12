@@ -65,26 +65,6 @@ pnpm generate:weekly-strategy:dev
 
 Hosted Weekly Strategy Preview (`/weekly-strategy-preview`) calls the `generate-weekly-strategy` Edge Function.
 
-### Dev-only live recipe discovery (PLAN-005)
-
-Requires server-side Edamam Recipe Search credentials (never put these in Expo):
-
-```bash
-cp supabase/.env.example supabase/.env   # set EDAMAM_APP_ID + EDAMAM_APP_KEY
-set -a && source supabase/.env && set +a
-pnpm discover:recipes:dev
-# optional: DISCOVERY_SCENARIO=indian-chicken pnpm discover:recipes:dev
-```
-
-Hosted callers should use the `recipe-discovery-search` Edge Function. For production:
-
-```bash
-npx supabase secrets set EDAMAM_APP_ID=your_id EDAMAM_APP_KEY=your_key --project-ref <project-ref>
-npx supabase functions deploy recipe-discovery-search --project-ref <project-ref>
-```
-
-Discovery is **not** wired into weekly strategy generation yet.
-
 ### Local Supabase
 
 ```bash

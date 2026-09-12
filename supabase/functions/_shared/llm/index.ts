@@ -14,34 +14,6 @@ export {
   createWeeklyStrategyGenerator,
   type CreateWeeklyStrategyGeneratorOptions,
 } from "./create-weekly-strategy-generator.ts";
-export {
-  createRecipeDiscoveryProvider,
-  type CreateRecipeDiscoveryProviderOptions,
-} from "./create-recipe-discovery-provider.ts";
-export {
-  DEFAULT_EDAMAM_BASE_URL,
-  DEFAULT_EDAMAM_TIMEOUT_MS,
-  loadEdamamServerConfig,
-  type EdamamConfigError,
-  type EdamamServerConfig,
-} from "./edamam/config.ts";
-export {
-  createFetchEdamamHttpClient,
-  sanitizeEdamamLogText,
-  type EdamamHttpClient,
-  type EdamamHttpRequest,
-  type EdamamHttpResponse,
-} from "./edamam/http.ts";
-export {
-  normalizeEdamamHit,
-  parseEdamamSearchResponse,
-  type EdamamRecipeHit,
-} from "./edamam/normalize.ts";
-export {
-  EdamamRecipeDiscoveryProvider,
-  type EdamamRecipeDiscoveryProviderOptions,
-  type RecipeDiscoveryLogEvent,
-} from "./edamam/recipe-discovery-provider.ts";
 export type {
   GeminiContentClient,
   GeminiGenerateContentParams,

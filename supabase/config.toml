@@ -50,10 +50,6 @@ verify_jwt = false
 import_map = "./functions/import_map.json"
 verify_jwt = false
 
-[functions.recipe-discovery-search]
-import_map = "./functions/import_map.json"
-verify_jwt = false
-
 [functions.generate-weekly-strategy]
 import_map = "./functions/import_map.json"
 verify_jwt = false
