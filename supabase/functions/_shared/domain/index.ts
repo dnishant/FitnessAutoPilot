@@ -13,6 +13,7 @@ export * from "./nutrition/onboarding-flow.ts";
 export * from "./nutrition/target.ts";
 export * from "./recipes/nutrition.ts";
 export * from "./recipes/generation.ts";
+export * from "./recipes/discovery.ts";
 export * from "./planning/portioning.ts";
 export * from "./planning/planner.ts";
 export * from "./planning/weekly-strategy.ts";

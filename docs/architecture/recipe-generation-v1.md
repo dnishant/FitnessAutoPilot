@@ -47,4 +47,4 @@ Internal screen: `/recipe-preview` (entry from Today → **Dev: Recipe Preview**
 
 ## Out of scope
 
-Detailed weekly recipe resolution, USDA resolution, portion solving, web recipe discovery, leftovers/prep timelines. Weekly *strategy* concepts are PLAN-004.
+Detailed weekly recipe resolution, USDA resolution, portion solving, leftovers/prep timelines. Weekly *strategy* concepts are PLAN-004. External recipe discovery is PLAN-005 (`docs/architecture/recipe-discovery-v1.md`).
