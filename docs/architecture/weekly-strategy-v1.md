@@ -73,6 +73,8 @@ set -a && source supabase/.env && set +a
 pnpm generate:weekly-strategy:dev
 ```
 
+Internal screen: `/weekly-strategy-preview` (entry from Today → **Dev: Weekly Strategy Preview**).
+
 ## Out of scope
 
-Detailed recipe generation, USDA resolution, portion solving, grocery aggregation, exact prep timelines, flavor-distance algorithms, polished weekly UI (PLAN-004.5).
+Detailed recipe generation, USDA resolution, portion solving, grocery aggregation, exact prep timelines, flavor-distance algorithms, polished weekly-plan UI.
