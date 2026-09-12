@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   MealTypeSchema,
   RecipeIngredientCandidateSchema,
 } from "@fitness-autopilot/contracts";
+import { zodToGeminiJsonSchema } from "./json-schema";
 
 /**
  * Schema sent to Gemini structured output.
@@ -28,28 +28,7 @@ export type GeminiRecipeCandidatePayload = z.infer<
   typeof GeminiRecipeCandidatePayloadSchema
 >;
 
-/**
- * Build a root object JSON Schema for Gemini.
- *
- * Important: do not pass `name` to zod-to-json-schema. That option returns
- * `{ $ref: "#/definitions/...", definitions: {...} }`. Deleting `definitions`
- * (to strip meta) left a dangling `$ref`, which Gemini rejects immediately
- * (~100–200ms LLM_PROVIDER_ERROR).
- */
+/** Build a root object JSON Schema for Gemini recipe structured output. */
 export function geminiRecipeResponseJsonSchema(): Record<string, unknown> {
-  const schema = zodToJsonSchema(GeminiRecipeCandidatePayloadSchema, {
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-
-  delete schema.$schema;
-  delete schema.definitions;
-  delete schema.$defs;
-
-  if (schema.$ref !== undefined) {
-    throw new Error(
-      "Gemini response schema must be an inlined object, not a $ref wrapper.",
-    );
-  }
-
-  return schema;
+  return zodToGeminiJsonSchema(GeminiRecipeCandidatePayloadSchema);
 }

@@ -1,11 +1,11 @@
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   DayOfWeekSchema,
   PrepIntentSchema,
   VarietyLevelSchema,
   MealTypeSchema,
 } from "../../contracts/index.ts";
+import { zodToGeminiJsonSchema } from "./json-schema.ts";
 
 /**
  * Schema sent to Gemini structured output for weekly strategy.
@@ -52,16 +52,10 @@ export type GeminiWeeklyMealStrategyPayload = z.infer<
   typeof GeminiWeeklyMealStrategyPayloadSchema
 >;
 
-export function geminiWeeklyStrategyResponseJsonSchema(): Record<string, unknown> {
-  const schema = zodToJsonSchema(GeminiWeeklyMealStrategyPayloadSchema, {
-    name: "WeeklyMealStrategyPayload",
-    $refStrategy: "none",
-  }) as Record<string, unknown>;
-
-  // Gemini rejects some JSON Schema meta keys.
-  delete schema.$schema;
-  delete schema.definitions;
-  delete schema.$defs;
-
-  return schema;
+/** Build a root object JSON Schema for Gemini weekly strategy structured output. */
+export function geminiWeeklyStrategyResponseJsonSchema(): Record<
+  string,
+  unknown
+> {
+  return zodToGeminiJsonSchema(GeminiWeeklyMealStrategyPayloadSchema);
 }

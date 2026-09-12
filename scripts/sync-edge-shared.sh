@@ -10,7 +10,10 @@ cp -R "$ROOT/packages/domain/src/." "$SHARED/domain/"
 cp -R "$ROOT/packages/contracts/src/." "$SHARED/contracts/"
 cp -R "$ROOT/packages/validation/src/." "$SHARED/validation/"
 cp -R "$ROOT/packages/llm/src/." "$SHARED/llm/"
-find "$SHARED" -name '*.test.ts' -delete
+# Only strip tests from synced package copies — keep hand-written _shared tests
+# (e.g. cors.test.ts) intact.
+find "$SHARED/domain" "$SHARED/contracts" "$SHARED/validation" "$SHARED/llm" \
+  -name '*.test.ts' -delete
 python3 - "$SHARED" <<'PY'
 import sys
 from pathlib import Path

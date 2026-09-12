@@ -33,6 +33,10 @@ export {
   type WeeklyStrategyLogEvent,
 } from "./gemini/weekly-strategy-generator.ts";
 export {
+  assertNoJsonSchemaRefs,
+  zodToGeminiJsonSchema,
+} from "./gemini/json-schema.ts";
+export {
   GeminiRecipeCandidatePayloadSchema,
   geminiRecipeResponseJsonSchema,
 } from "./gemini/schema.ts";
