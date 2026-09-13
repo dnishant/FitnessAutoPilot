@@ -172,7 +172,10 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
       code: "DISCOVERY_NOT_GROUNDED",
     });
     expect(generateContent).toHaveBeenCalledTimes(3);
-    expect(generateContent.mock.calls[1]?.[0]?.contents).toContain("CRITICAL RETRY");
+    const secondCall = generateContent.mock.calls.at(1)?.at(0) as
+      | { contents?: string }
+      | undefined;
+    expect(secondCall?.contents).toContain("CRITICAL RETRY");
   });
 
   it("retries when the first Gemini reply is not grounded", async () => {
