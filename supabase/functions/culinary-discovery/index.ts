@@ -81,6 +81,7 @@ serveWithCors(async (req) => {
   try {
     const provider = createCulinaryDiscoveryProvider({
       config: config.value,
+      maxGroundingAttempts: 1,
       onLog: (event) => {
         requestId = event.requestId;
         console.log(

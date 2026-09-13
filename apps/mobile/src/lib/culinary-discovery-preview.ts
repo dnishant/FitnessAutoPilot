@@ -247,12 +247,12 @@ export function fitnessAdaptabilityLabel(
   value: CulinaryDiscoveryCandidate["fitnessAdaptability"],
 ): string {
   switch (value) {
-    case "excellent":
-      return "Excellent";
-    case "good":
-      return "Good";
-    case "difficult":
-      return "Difficult";
+    case "easy":
+      return "Easy";
+    case "moderate":
+      return "Moderate";
+    case "hard":
+      return "Hard";
   }
 }
 
@@ -322,19 +322,46 @@ export function buildDiscoveryDetailsRows(
   meta?: CulinaryDiscoveryGenerationMeta | null,
 ): Array<{ label: string; value: string }> {
   const md = result.discoveryMetadata;
+  const stats = md.qualityStats;
+  const usage = md.usageMetadata;
+  const searchQueryCount = md.searchQueryCount ?? md.searchQueries?.length ?? 0;
+  const usageLabel = usage
+    ? [
+        usage.promptTokenCount !== undefined ? `prompt ${usage.promptTokenCount}` : null,
+        usage.candidatesTokenCount !== undefined
+          ? `candidates ${usage.candidatesTokenCount}`
+          : null,
+        usage.totalTokenCount !== undefined ? `total ${usage.totalTokenCount}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "—";
+
   return [
     { label: "Provider", value: md.provider },
     { label: "Model", value: md.model },
     { label: "Prompt version", value: md.promptVersion },
     {
-      label: "Requested / returned",
-      value: `${md.requestedCandidateCount} / ${md.returnedCandidateCount}`,
+      label: "Requested candidate count",
+      value: String(md.requestedCandidateCount),
+    },
+    {
+      label: "Returned candidate count",
+      value: String(md.returnedCandidateCount),
+    },
+    {
+      label: "Search query count",
+      value: String(searchQueryCount),
     },
     {
       label: "Search queries",
       value: md.searchQueries?.length
         ? md.searchQueries.join(" · ")
         : "(none reported)",
+    },
+    {
+      label: "Broad vs specific-dish searches",
+      value: `${md.broadSearchQueryCount ?? stats?.broadSearchQueryCount ?? "—"} broad / ${md.specificDishSearchQueryCount ?? stats?.specificDishSearchQueryCount ?? "—"} specific-dish`,
     },
     {
       label: "Unique source URLs",
@@ -356,14 +383,37 @@ export function buildDiscoveryDetailsRows(
           : "—",
     },
     {
+      label: "Grounding coverage note",
+      value:
+        "Coverage is candidate–chunk correlation, not a source-quality score. 100% grounded does not mean every source is high quality.",
+    },
+    {
+      label: "Rejected for weak provenance",
+      value: String(
+        md.rejectedForWeakProvenanceCount ?? stats?.rejectedForWeakProvenanceCount ?? "—",
+      ),
+    },
+    {
+      label: "Generic homepage sources",
+      value: String(md.genericHomepageSourceCount ?? stats?.genericHomepageSourceCount ?? "—"),
+    },
+    {
+      label: "Community/social canonical sources",
+      value: String(md.communitySourceCount ?? stats?.communitySourceCount ?? "—"),
+    },
+    {
       label: "Duration",
       value: `${md.durationMs ?? meta?.durationMs ?? "—"} ms`,
     },
     { label: "Request ID", value: md.requestId ?? meta?.requestId ?? "—" },
+    { label: "Token usage", value: usageLabel || "—" },
   ];
 }
 
 export function humanizeCulinaryDiscoveryError(message: string, code?: string): string {
+  if (code === "WORKER_RESOURCE_LIMIT" || /not having enough compute resources/i.test(message)) {
+    return "Culinary discovery ran out of Edge Function CPU or memory (Supabase limit is about 2s CPU / 256MB). Search-grounded Gemini responses are large. Retry, use a lower target count, or run `pnpm discover:culinary:dev` locally. This is not a missing GEMINI_API_KEY.";
+  }
   if (code === "LLM_CONFIGURATION_ERROR") {
     return `${message} Set GEMINI_API_KEY as a Supabase Edge Function secret, then redeploy culinary-discovery.`;
   }
@@ -384,6 +434,20 @@ export function parseCulinaryDiscoveryFailure(input: {
   data?: unknown;
 }): CulinaryDiscoveryPreviewError {
   const data = input.data;
+  if (data && typeof data === "object") {
+    const record = data as { code?: unknown; message?: unknown; error?: unknown };
+    if (typeof record.code === "string" && record.error === undefined) {
+      const baseMessage =
+        typeof record.message === "string" && record.message.trim()
+          ? record.message
+          : input.errorMessage?.trim() || "Culinary discovery failed.";
+      return {
+        message: humanizeCulinaryDiscoveryError(baseMessage, record.code),
+        code: record.code,
+        diagnostics: sanitizeDiagnosticText(data),
+      };
+    }
+  }
   if (data && typeof data === "object" && "error" in data) {
     const err = (data as { error: unknown }).error;
     if (typeof err === "string") {

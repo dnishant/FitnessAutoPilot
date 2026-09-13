@@ -83,6 +83,8 @@ npx supabase functions deploy culinary-discovery --project-ref <project-ref>
 
 Confirm `EXPO_PUBLIC_SUPABASE_URL` points at that same project. Gateway JWT stays off (`verify_jwt = false`); CORS + `requireUser()` match the other LLM functions.
 
+Hosted Edge Functions allow only ~2s CPU / 256MB. Search-grounded Gemini payloads can exceed that (`WORKER_RESOURCE_LIMIT`). If the preview hits that error, use `pnpm discover:culinary:dev` locally after setting `GEMINI_API_KEY`.
+
 ### Local Supabase
 
 ```bash

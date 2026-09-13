@@ -30,7 +30,9 @@ export type {
 } from "./gemini/client.ts";
 export {
   createGoogleGenAiContentClient,
+  geminiResultFromGenerateContentJson,
   mapGeminiGroundingMetadataForTests,
+  stripGeminiSearchEntryPointJson,
 } from "./gemini/google-client.ts";
 export {
   GeminiRecipeGenerator,
