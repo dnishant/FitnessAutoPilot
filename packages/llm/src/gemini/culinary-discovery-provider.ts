@@ -6,6 +6,7 @@ import type {
 } from "@fitness-autopilot/contracts";
 import {
   CULINARY_DISCOVERY_PROMPT_VERSION,
+  LEGACY_FITNESS_ADAPTABILITY_MAP,
   assertDiscoveryWasGrounded,
   buildCulinaryDiscoveryPrompt,
   buildDiscoveryMetadata,
@@ -52,6 +53,12 @@ export type GeminiGroundedCulinaryDiscoveryProviderOptions = {
   requestIdFactory?: () => string;
   now?: () => number;
   onLog?: (event: CulinaryDiscoveryLogEvent) => void;
+  /**
+   * Gemini intermittently skips googleSearch (~1/3). CLI retries a few times.
+   * Hosted Edge Functions must stay at 1: extra attempts re-parse huge grounded
+   * payloads and trip WORKER_RESOURCE_LIMIT (~2s CPU / 256MB).
+   */
+  maxGroundingAttempts?: number;
 };
 
 function createRequestId(): string {
@@ -150,6 +157,15 @@ export function coerceDiscoveryCandidatePayload(raw: unknown): unknown {
     record.discoveryConfidence =
       score >= 0.8 ? "high" : score >= 0.5 ? "medium" : "low";
   }
+  if (typeof record.fitnessAdaptability === "string") {
+    const mapped =
+      LEGACY_FITNESS_ADAPTABILITY_MAP[
+        record.fitnessAdaptability as keyof typeof LEGACY_FITNESS_ADAPTABILITY_MAP
+      ];
+    if (mapped) {
+      record.fitnessAdaptability = mapped;
+    }
+  }
   return record;
 }
 
@@ -160,6 +176,7 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
   private readonly requestIdFactory: () => string;
   private readonly now: () => number;
   private readonly onLog?: (event: CulinaryDiscoveryLogEvent) => void;
+  private readonly maxGroundingAttempts: number;
 
   constructor(options: GeminiGroundedCulinaryDiscoveryProviderOptions) {
     this.model = options.model;
@@ -167,6 +184,7 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
     this.requestIdFactory = options.requestIdFactory ?? createRequestId;
     this.now = options.now ?? (() => Date.now());
     this.onLog = options.onLog;
+    this.maxGroundingAttempts = Math.max(1, options.maxGroundingAttempts ?? 3);
   }
 
   async discover(request: CulinaryDiscoveryRequest): Promise<CulinaryDiscoveryResult> {
@@ -192,8 +210,9 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
     const prompt = buildCulinaryDiscoveryPrompt(parsed.value);
 
     // Gemini intermittently skips googleSearch even with tools enabled (~1/3).
-    // Retry with a stronger search nudge before failing DISCOVERY_NOT_GROUNDED.
-    const maxGroundingAttempts = 3;
+    // Retry with a stronger search nudge before failing DISCOVERY_NOT_GROUNDED,
+    // unless the caller capped attempts (Edge stays at 1 to avoid CPU limits).
+    const maxGroundingAttempts = this.maxGroundingAttempts;
     let rawText = "";
     let usageMetadata: CulinaryDiscoveryLogEvent["usageMetadata"];
     let groundingMetadata: CulinaryDiscoveryGroundingMetadata | undefined;
@@ -207,7 +226,8 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
               "",
               "CRITICAL RETRY: Your previous reply skipped Google Search grounding.",
               "You MUST invoke Google Search before writing candidates.",
-              "Issue multiple culinary web searches, then grounded notes, then the final ```json block.",
+              "Issue about 4–8 broad exploratory culinary searches first (not one remembered dish name per query),",
+              "then grounded notes, then the final ```json block.",
             ].join("\n");
 
       try {
@@ -360,6 +380,7 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
     const normalized = normalizeDiscoveryCandidates(validatedCandidates, {
       request: parsed.value,
       groundingMetadata,
+      maxCandidateCount: parsed.value.targetCandidateCount,
     });
     if (!normalized.ok) {
       this.log({
@@ -384,15 +405,17 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
     const discoveryMetadata = buildDiscoveryMetadata({
       model: this.model,
       request: parsed.value,
-      candidates: normalized.value,
+      candidates: normalized.value.candidates,
       groundingMetadata,
       requestId,
       durationMs,
       usageMetadata,
+      rejectedForWeakProvenanceCount: normalized.value.stats.rejectedForWeakProvenanceCount,
+      genericHomepageSourceCount: normalized.value.stats.genericHomepageSourceCount,
     });
 
     const result: CulinaryDiscoveryResult = {
-      candidates: normalized.value,
+      candidates: normalized.value.candidates,
       discoveryMetadata,
       groundingMetadata,
     };
@@ -407,7 +430,7 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
       usageMetadata,
       mealType: parsed.value.mealType,
       requestedCandidateCount: parsed.value.targetCandidateCount,
-      returnedCandidateCount: normalized.value.length,
+      returnedCandidateCount: normalized.value.candidates.length,
       searchQueryCount: groundingMetadata?.webSearchQueries?.length ?? 0,
       googleSearchEnabled: true,
     });

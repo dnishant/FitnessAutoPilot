@@ -10,6 +10,7 @@ import {
 import {
   DEFAULT_GEMINI_MODEL,
   GeminiGroundedCulinaryDiscoveryProvider,
+  coerceDiscoveryCandidatePayload,
   createCulinaryDiscoveryProvider,
   extractJsonObjectFromModelText,
   mapGeminiGroundingMetadataForTests,
@@ -52,8 +53,9 @@ const modelCandidate = {
   flavorFamilies: ["peppery", "aromatic"],
   cookingTechniques: ["roasted spices"],
   whyItIsInteresting: "Pepper-forward South Indian chicken.",
-  fitnessAdaptability: "excellent",
-  fitnessAdaptabilityReason: "Portions adjust cleanly.",
+  fitnessAdaptability: "easy",
+  fitnessAdaptabilityReason:
+    "Protein and starch portions can be scaled independently while preserving the sauce.",
   mealPrepAdaptability: "component_prepped",
   noveltyReason: "Regional discovery.",
   discoveryConfidence: "high",
@@ -93,13 +95,18 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
       // Gemini 3.x drops grounding when responseJsonSchema / mime JSON are set.
       expect(params.responseMimeType).toBeUndefined();
       expect(params.responseJsonSchema).toBeUndefined();
-      expect(params.systemInstruction).toContain("Culinary Discovery Engine");
-      expect(params.systemInstruction).toContain("OUTPUT FORMAT");
+      expect(params.systemInstruction).toContain("EXPLORATION-FIRST SEARCH");
+      expect(params.systemInstruction).toContain(
+        "Do not begin by deciding which dishes you want to return",
+      );
+      expect(params.systemInstruction).toContain("Do not preselect a famous publication");
+      expect(params.systemInstruction).toContain("Aim for approximately 4–8 Google Search queries");
+      expect(params.systemInstruction).toContain("Do not add filler candidates");
       expect(params.contents).toContain("Indian");
       expect(params.contents).toContain("Chicken");
       expect(params.contents).toContain("Chicken Tikka");
       expect(params.contents).toContain("Butter Chicken");
-      expect(params.contents).toContain("Target candidate count: 5");
+      expect(params.contents).toContain("Target candidate count (maximum/target, not an exact quota): 5");
       expect(params.contents).toContain(CULINARY_DISCOVERY_PROMPT_VERSION);
       return {
         text: [
@@ -250,6 +257,12 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     expect(preview).not.toMatch(/GEMINI_API_KEY\s*=/);
     expect(preview).not.toContain("@google/genai");
     expect(preview).not.toMatch(/AIza[0-9A-Za-z_-]{10,}/);
+
+    const edgeFn = readFileSync(
+      join(repoRoot, "supabase/functions/culinary-discovery/index.ts"),
+      "utf8",
+    );
+    expect(edgeFn).toContain("maxGroundingAttempts: 1");
   });
 
   it("maps grounding metadata safely without HTML entry point", () => {
@@ -261,5 +274,89 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     expect(mapped?.hasSearchEntryPoint).toBe(true);
     expect(JSON.stringify(mapped)).not.toContain("<script>");
     expect(mapped?.webSearchQueries).toEqual(["q1"]);
+  });
+
+  it("succeeds with fewer than the requested candidate count", async () => {
+    const client = mockClient(async () => ({
+      text: JSON.stringify({ candidates: [modelCandidate] }),
+      groundingMetadata: grounding,
+    }));
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client,
+    });
+    const result = await provider.discover({
+      ...sampleRequest,
+      targetCandidateCount: 20,
+    });
+    expect(result.candidates).toHaveLength(1);
+    expect(result.discoveryMetadata.requestedCandidateCount).toBe(20);
+    expect(result.discoveryMetadata.returnedCandidateCount).toBe(1);
+    expect(result.discoveryMetadata.searchQueryCount).toBe(2);
+    expect(result.discoveryMetadata.qualityStats?.groundingCoverage).toBe(1);
+  });
+
+  it("drops homepage source URLs rather than returning them", async () => {
+    const client = mockClient(async () => ({
+      text: JSON.stringify({
+        candidates: [
+          {
+            ...modelCandidate,
+            source: { name: "Food52", url: "https://food52.com/" },
+          },
+        ],
+      }),
+      groundingMetadata: {
+        webSearchQueries: ["regional goan seafood"],
+        groundingChunks: [{ web: { uri: "https://food52.com/", title: "food52.com" } }],
+      },
+    }));
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client,
+    });
+    await expect(provider.discover(sampleRequest)).rejects.toMatchObject({
+      code: "DISCOVERY_NOT_GROUNDED",
+    });
+  });
+
+  it("coerces legacy fitness adaptability values without recommending substitutions", () => {
+    const coerced = coerceDiscoveryCandidatePayload({
+      ...modelCandidate,
+      fitnessAdaptability: "excellent",
+      fitnessAdaptabilityReason:
+        "Protein and starch portions can be scaled independently while preserving the sauce.",
+    }) as { fitnessAdaptability: string; fitnessAdaptabilityReason: string };
+    expect(coerced.fitnessAdaptability).toBe("easy");
+    expect(coerced.fitnessAdaptabilityReason).not.toMatch(/replace|substitute/i);
+  });
+
+  it("can cap grounding attempts for Edge CPU limits", async () => {
+    const generateContent = vi.fn(async () => ({
+      text: JSON.stringify({ candidates: [modelCandidate] }),
+    }));
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client: mockClient(generateContent),
+      maxGroundingAttempts: 1,
+    });
+    await expect(provider.discover(sampleRequest)).rejects.toMatchObject({
+      code: "DISCOVERY_NOT_GROUNDED",
+    });
+    expect(generateContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not make live Gemini calls in automated tests", async () => {
+    const generateContent = vi.fn(async () => ({
+      text: JSON.stringify({ candidates: [modelCandidate] }),
+      groundingMetadata: grounding,
+    }));
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client: mockClient(generateContent),
+    });
+    await provider.discover(sampleRequest);
+    expect(generateContent).toHaveBeenCalledTimes(1);
+    expect(vi.isMockFunction(generateContent)).toBe(true);
   });
 });
