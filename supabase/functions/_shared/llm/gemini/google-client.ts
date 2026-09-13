@@ -159,7 +159,10 @@ function textFromGeminiResponse(parsed: unknown): string {
     .join("");
 }
 
-function mapGroundingMetadata(raw: unknown): GeminiSafeGroundingMetadata | undefined {
+function mapGroundingMetadata(
+  raw: unknown,
+  options: { hadSearchEntryPoint?: boolean } = {},
+): GeminiSafeGroundingMetadata | undefined {
   if (raw === null || typeof raw !== "object" || Array.isArray(raw)) {
     return undefined;
   }
@@ -221,7 +224,11 @@ function mapGroundingMetadata(raw: unknown): GeminiSafeGroundingMetadata | undef
         .filter((support): support is NonNullable<typeof support> => support !== null)
     : undefined;
 
-  const hasSearchEntryPoint = meta.searchEntryPoint !== undefined && meta.searchEntryPoint !== null;
+  // searchEntryPoint may already be stripped from the raw JSON before parse;
+  // preserve the signal via options.hadSearchEntryPoint.
+  const hasSearchEntryPoint =
+    options.hadSearchEntryPoint === true ||
+    (meta.searchEntryPoint !== undefined && meta.searchEntryPoint !== null);
 
   if (
     !webSearchQueries?.length &&
@@ -245,6 +252,7 @@ function mapGroundingMetadata(raw: unknown): GeminiSafeGroundingMetadata | undef
 export function geminiResultFromGenerateContentJson(
   rawText: string,
 ): GeminiGenerateContentResult {
+  const hadSearchEntryPoint = rawText.includes('"searchEntryPoint"');
   const stripped = stripGeminiSearchEntryPointJson(rawText);
   let parsed: unknown;
   try {
@@ -289,8 +297,33 @@ export function geminiResultFromGenerateContentJson(
             typeof usage.totalTokenCount === "number" ? usage.totalTokenCount : undefined,
         }
       : undefined,
-    groundingMetadata: mapGroundingMetadata(rawGrounding),
+    groundingMetadata: mapGroundingMetadata(rawGrounding, { hadSearchEntryPoint }),
   };
+}
+
+function generationConfigFromParams(
+  params: GeminiGenerateContentParams,
+): Record<string, unknown> | undefined {
+  const generationConfig: Record<string, unknown> = {};
+  if (params.responseMimeType) {
+    generationConfig.responseMimeType = params.responseMimeType;
+  }
+  if (params.responseJsonSchema) {
+    generationConfig.responseJsonSchema = params.responseJsonSchema;
+  }
+  if (params.thinkingConfig) {
+    const thinkingConfig: Record<string, unknown> = {};
+    if (params.thinkingConfig.thinkingLevel) {
+      thinkingConfig.thinkingLevel = params.thinkingConfig.thinkingLevel;
+    }
+    if (typeof params.thinkingConfig.thinkingBudget === "number") {
+      thinkingConfig.thinkingBudget = params.thinkingConfig.thinkingBudget;
+    }
+    if (Object.keys(thinkingConfig).length > 0) {
+      generationConfig.thinkingConfig = thinkingConfig;
+    }
+  }
+  return Object.keys(generationConfig).length > 0 ? generationConfig : undefined;
 }
 
 async function generateContentViaRest(
@@ -307,14 +340,8 @@ async function generateContentViaRest(
   if (params.tools?.length) {
     body.tools = params.tools;
   }
-  const generationConfig: Record<string, unknown> = {};
-  if (params.responseMimeType) {
-    generationConfig.responseMimeType = params.responseMimeType;
-  }
-  if (params.responseJsonSchema) {
-    generationConfig.responseJsonSchema = params.responseJsonSchema;
-  }
-  if (Object.keys(generationConfig).length > 0) {
+  const generationConfig = generationConfigFromParams(params);
+  if (generationConfig) {
     body.generationConfig = generationConfig;
   }
 
@@ -358,6 +385,19 @@ export function createGoogleGenAiContentClient(apiKey: string): GeminiContentCli
             ? { responseJsonSchema: params.responseJsonSchema }
             : {}),
           ...(params.tools ? { tools: params.tools } : {}),
+          ...(params.thinkingConfig
+            ? {
+                thinkingConfig: {
+                  thinkingLevel: params.thinkingConfig.thinkingLevel,
+                  thinkingBudget: params.thinkingConfig.thinkingBudget,
+                  // SDK ThinkingLevel is a string enum; our narrow client uses the same literals.
+                } as NonNullable<
+                  Parameters<typeof ai.models.generateContent>[0]["config"]
+                > extends { thinkingConfig?: infer T }
+                  ? T
+                  : never,
+              }
+            : {}),
         },
       });
       const text = response.text;

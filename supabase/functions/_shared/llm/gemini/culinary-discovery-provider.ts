@@ -209,9 +209,9 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
 
     const prompt = buildCulinaryDiscoveryPrompt(parsed.value);
 
-    // Gemini intermittently skips googleSearch even with tools enabled (~1/3).
-    // Retry with a stronger search nudge before failing DISCOVERY_NOT_GROUNDED,
-    // unless the caller capped attempts (Edge stays at 1 to avoid CPU limits).
+    // Gemini intermittently skips googleSearch for JSON-heavy discovery prompts
+    // (~1/3 with default thinking). Use minimal thinking + retries; ungrounded
+    // replies are small, and grounded replies strip searchEntryPoint before parse.
     const maxGroundingAttempts = this.maxGroundingAttempts;
     let rawText = "";
     let usageMetadata: CulinaryDiscoveryLogEvent["usageMetadata"];
@@ -225,7 +225,8 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
           : [
               "",
               "CRITICAL RETRY: Your previous reply skipped Google Search grounding.",
-              "You MUST invoke Google Search before writing candidates.",
+              "You MUST invoke the googleSearch tool before writing any candidates.",
+              "Do not answer from memory. Do not emit the JSON block until after Search runs.",
               "Issue about 4–8 broad exploratory culinary searches first (not one remembered dish name per query),",
               "then grounded notes, then the final ```json block.",
             ].join("\n");
@@ -233,11 +234,13 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
       try {
         // Intentionally omit responseMimeType / responseJsonSchema: on Gemini 3.x
         // those suppress googleSearch grounding metadata (DISCOVERY_NOT_GROUNDED).
+        // thinkingLevel minimal reduces "search during thinking, omit metadata" misses.
         const result = await this.client.generateContent({
           model: this.model,
           contents: `${prompt.userPrompt}${retryNudge}`,
           systemInstruction: prompt.systemInstruction,
           tools: [{ googleSearch: {} }],
+          thinkingConfig: { thinkingLevel: "minimal" },
         });
         rawText = result.text;
         usageMetadata = result.usageMetadata;

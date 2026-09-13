@@ -418,7 +418,7 @@ export function humanizeCulinaryDiscoveryError(message: string, code?: string): 
     return `${message} Set GEMINI_API_KEY as a Supabase Edge Function secret, then redeploy culinary-discovery.`;
   }
   if (code === "DISCOVERY_NOT_GROUNDED") {
-    return `${message} Gemini did not return usable Google Search grounding — check model support for tools + structured output.`;
+    return `${message} Gemini skipped usable Google Search grounding — retry the request (the Edge Function retries automatically).`;
   }
   if (message === "Failed to send a request to the Edge Function") {
     return "Could not reach culinary-discovery. Deploy it with CORS enabled (`npx supabase functions deploy culinary-discovery`) and confirm EXPO_PUBLIC_SUPABASE_URL points at that project.";

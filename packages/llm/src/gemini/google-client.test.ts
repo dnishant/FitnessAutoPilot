@@ -54,6 +54,22 @@ describe("Gemini generateContent JSON helpers", () => {
     expect(result.groundingMetadata?.groundingChunks?.[0]?.web?.uri).toBe(
       "https://example.com/recheado",
     );
+    expect(result.groundingMetadata?.hasSearchEntryPoint).toBe(true);
     expect(JSON.stringify(result)).not.toContain("widget");
+  });
+
+  it("preserves hasSearchEntryPoint after stripping the HTML widget", () => {
+    const raw = JSON.stringify({
+      candidates: [
+        {
+          content: { parts: [{ text: "grounded" }] },
+          groundingMetadata: {
+            searchEntryPoint: { renderedContent: "<div>big</div>" },
+          },
+        },
+      ],
+    });
+    const result = geminiResultFromGenerateContentJson(raw);
+    expect(result.groundingMetadata?.hasSearchEntryPoint).toBe(true);
   });
 });

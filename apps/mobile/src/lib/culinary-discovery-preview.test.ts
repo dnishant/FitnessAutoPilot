@@ -52,7 +52,7 @@ const sampleResult: CulinaryDiscoveryResult = {
   discoveryMetadata: {
     provider: "gemini",
     model: "gemini-3.6-flash",
-    promptVersion: "culinary-discovery-v1.1",
+    promptVersion: "culinary-discovery-v1.2",
     requestedCandidateCount: 20,
     returnedCandidateCount: 1,
     searchQueries: ["regional South Indian chicken recipes pepper curry leaves"],
@@ -103,7 +103,7 @@ describe("culinary discovery preview", () => {
       calledName = functionName;
       expect(options.body.mealType).toBe("dinner");
       return {
-        data: { result: sampleResult, meta: { requestId: "cd_test", promptVersion: "culinary-discovery-v1.1", provider: "gemini", model: "gemini-3.6-flash" } },
+        data: { result: sampleResult, meta: { requestId: "cd_test", promptVersion: "culinary-discovery-v1.2", provider: "gemini", model: "gemini-3.6-flash" } },
         error: null,
       };
     }, built.request);
@@ -129,7 +129,7 @@ describe("culinary discovery preview", () => {
     expect(state.lastRequest).toEqual(request);
     state = succeedCulinaryDiscovery(state, sampleResult, {
       requestId: "cd_1",
-      promptVersion: "culinary-discovery-v1.1",
+      promptVersion: "culinary-discovery-v1.2",
       provider: "gemini",
       model: "gemini-3.6-flash",
     });
@@ -173,7 +173,7 @@ describe("culinary discovery preview", () => {
   it("surfaces PLAN-005.1 diagnostics in discovery details", () => {
     const rows = buildDiscoveryDetailsRows(sampleResult, {
       requestId: "cd_test",
-      promptVersion: "culinary-discovery-v1.1",
+      promptVersion: "culinary-discovery-v1.2",
       provider: "gemini",
       model: "gemini-3.6-flash",
       durationMs: 1200,
@@ -190,7 +190,7 @@ describe("culinary discovery preview", () => {
     expect(byLabel["Generic homepage sources"]).toBe("1");
     expect(byLabel.Provider).toBe("gemini");
     expect(byLabel.Model).toBe("gemini-3.6-flash");
-    expect(byLabel["Prompt version"]).toBe("culinary-discovery-v1.1");
+    expect(byLabel["Prompt version"]).toBe("culinary-discovery-v1.2");
     expect(byLabel.Duration).toBe("1200 ms");
     expect(byLabel["Request ID"]).toBe("cd_test");
     expect(byLabel["Token usage"]).toContain("total 1400");
