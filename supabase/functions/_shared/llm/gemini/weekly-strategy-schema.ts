@@ -47,7 +47,7 @@ export const GeminiWeeklyMealStrategyPayloadSchema = z.object({
     prepApproach: z.string().min(1).max(600),
   }),
   days: z.array(GeminiWeeklyDayStrategyPayloadSchema).length(7),
-  sharedIngredientIntents: z.array(z.string().min(1).max(80)).max(40),
+  sharedIngredientIntents: z.array(z.string().min(1).max(160)).max(40),
   planningNotes: z.array(z.string().min(1).max(400)).max(20).optional(),
 });
 

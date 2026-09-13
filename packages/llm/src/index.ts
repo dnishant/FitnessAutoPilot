@@ -39,6 +39,8 @@ export {
 } from "./gemini/recipe-generator";
 export {
   GeminiWeeklyStrategyGenerator,
+  SHARED_INGREDIENT_INTENT_MAX_LENGTH,
+  coerceWeeklyStrategyPayload,
   stripWeeklyStrategyNutrition,
   type GeminiWeeklyStrategyGeneratorOptions,
   type WeeklyStrategyLogEvent,

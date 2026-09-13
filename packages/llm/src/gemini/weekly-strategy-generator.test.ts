@@ -11,6 +11,8 @@ import {
 import {
   DEFAULT_GEMINI_MODEL,
   GeminiWeeklyStrategyGenerator,
+  SHARED_INGREDIENT_INTENT_MAX_LENGTH,
+  coerceWeeklyStrategyPayload,
   createWeeklyStrategyGenerator,
   type GeminiContentClient,
 } from "../index";
@@ -258,6 +260,35 @@ describe("GeminiWeeklyStrategyGenerator", () => {
     await expect(generator.generateWeeklyStrategy(sampleRequest)).rejects.toMatchObject({
       code: "WEEKLY_STRATEGY_VALIDATION_FAILED",
     });
+  });
+
+  it("coerces oversized sharedIngredientIntents instead of failing validation", async () => {
+    const longIntent =
+      "leftover roasted chicken thighs reserved for grain bowls and next-day wraps with herbs and citrus " +
+      "plus extra descriptive filler that exceeds the one hundred sixty character shared-ingredient limit";
+    expect(longIntent.length).toBeGreaterThan(80);
+    expect(longIntent.length).toBeGreaterThan(SHARED_INGREDIENT_INTENT_MAX_LENGTH); // ensure truncate path
+
+    const payload = buildModelPayload();
+    payload.sharedIngredientIntents = [longIntent, "  rice  ", ""];
+    const coerced = coerceWeeklyStrategyPayload(payload) as {
+      sharedIngredientIntents: string[];
+    };
+    expect(coerced.sharedIngredientIntents).toEqual([
+      longIntent.slice(0, SHARED_INGREDIENT_INTENT_MAX_LENGTH).trimEnd(),
+      "rice",
+    ]);
+
+    const client = mockClient(async () => ({ text: JSON.stringify(payload) }));
+    const generator = new GeminiWeeklyStrategyGenerator({
+      model: DEFAULT_GEMINI_MODEL,
+      client,
+    });
+    const strategy = await generator.generateWeeklyStrategy(sampleRequest);
+    expect(strategy.sharedIngredientIntents[0]?.length).toBeLessThanOrEqual(
+      SHARED_INGREDIENT_INTENT_MAX_LENGTH,
+    );
+    expect(strategy.sharedIngredientIntents).toContain("rice");
   });
 
   it("calculates strategy stats after generation", async () => {
