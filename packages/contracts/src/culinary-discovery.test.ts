@@ -23,8 +23,9 @@ const validCandidate = {
   textureTags: ["saucy"],
   experienceTags: ["bold"],
   whyItIsInteresting: "Pepper-forward South Indian chicken with curry leaves.",
-  fitnessAdaptability: "excellent",
-  fitnessAdaptabilityReason: "Protein and rice portions adjust cleanly.",
+  fitnessAdaptability: "easy",
+  fitnessAdaptabilityReason:
+    "Protein and rice portions can be scaled independently while preserving the sauce.",
   mealPrepAdaptability: "component_prepped",
   estimatedFinishMinutesAfterPrep: 12,
   noveltyReason: "Regional South Indian preparation uncommon in defaults.",
@@ -69,13 +70,25 @@ describe("culinary discovery contracts", () => {
     ).toBe(false);
   });
 
-  it("rejects invalid adaptability enums", () => {
+  it("rejects invalid adaptability enums and prefers easy|moderate|hard", () => {
     expect(
       CulinaryDiscoveryCandidateSchema.safeParse({
         ...validCandidate,
         fitnessAdaptability: "amazing",
       }).success,
     ).toBe(false);
+    expect(
+      CulinaryDiscoveryCandidateSchema.safeParse({
+        ...validCandidate,
+        fitnessAdaptability: "excellent",
+      }).success,
+    ).toBe(false);
+    expect(
+      CulinaryDiscoveryCandidateSchema.safeParse({
+        ...validCandidate,
+        fitnessAdaptability: "hard",
+      }).success,
+    ).toBe(true);
     expect(
       CulinaryDiscoveryCandidateSchema.safeParse({
         ...validCandidate,
@@ -90,7 +103,7 @@ describe("culinary discovery contracts", () => {
       discoveryMetadata: {
         provider: "gemini",
         model: "gemini-3.6-flash",
-        promptVersion: "culinary-discovery-v1",
+        promptVersion: "culinary-discovery-v1.1",
         requestedCandidateCount: 20,
         returnedCandidateCount: 1,
       },

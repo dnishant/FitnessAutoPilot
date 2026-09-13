@@ -247,12 +247,12 @@ export function fitnessAdaptabilityLabel(
   value: CulinaryDiscoveryCandidate["fitnessAdaptability"],
 ): string {
   switch (value) {
-    case "excellent":
-      return "Excellent";
-    case "good":
-      return "Good";
-    case "difficult":
-      return "Difficult";
+    case "easy":
+      return "Easy";
+    case "moderate":
+      return "Moderate";
+    case "hard":
+      return "Hard";
   }
 }
 
@@ -322,19 +322,46 @@ export function buildDiscoveryDetailsRows(
   meta?: CulinaryDiscoveryGenerationMeta | null,
 ): Array<{ label: string; value: string }> {
   const md = result.discoveryMetadata;
+  const stats = md.qualityStats;
+  const usage = md.usageMetadata;
+  const searchQueryCount = md.searchQueryCount ?? md.searchQueries?.length ?? 0;
+  const usageLabel = usage
+    ? [
+        usage.promptTokenCount !== undefined ? `prompt ${usage.promptTokenCount}` : null,
+        usage.candidatesTokenCount !== undefined
+          ? `candidates ${usage.candidatesTokenCount}`
+          : null,
+        usage.totalTokenCount !== undefined ? `total ${usage.totalTokenCount}` : null,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "—";
+
   return [
     { label: "Provider", value: md.provider },
     { label: "Model", value: md.model },
     { label: "Prompt version", value: md.promptVersion },
     {
-      label: "Requested / returned",
-      value: `${md.requestedCandidateCount} / ${md.returnedCandidateCount}`,
+      label: "Requested candidate count",
+      value: String(md.requestedCandidateCount),
+    },
+    {
+      label: "Returned candidate count",
+      value: String(md.returnedCandidateCount),
+    },
+    {
+      label: "Search query count",
+      value: String(searchQueryCount),
     },
     {
       label: "Search queries",
       value: md.searchQueries?.length
         ? md.searchQueries.join(" · ")
         : "(none reported)",
+    },
+    {
+      label: "Broad vs specific-dish searches",
+      value: `${md.broadSearchQueryCount ?? stats?.broadSearchQueryCount ?? "—"} broad / ${md.specificDishSearchQueryCount ?? stats?.specificDishSearchQueryCount ?? "—"} specific-dish`,
     },
     {
       label: "Unique source URLs",
@@ -356,10 +383,30 @@ export function buildDiscoveryDetailsRows(
           : "—",
     },
     {
+      label: "Grounding coverage note",
+      value:
+        "Coverage is candidate–chunk correlation, not a source-quality score. 100% grounded does not mean every source is high quality.",
+    },
+    {
+      label: "Rejected for weak provenance",
+      value: String(
+        md.rejectedForWeakProvenanceCount ?? stats?.rejectedForWeakProvenanceCount ?? "—",
+      ),
+    },
+    {
+      label: "Generic homepage sources",
+      value: String(md.genericHomepageSourceCount ?? stats?.genericHomepageSourceCount ?? "—"),
+    },
+    {
+      label: "Community/social canonical sources",
+      value: String(md.communitySourceCount ?? stats?.communitySourceCount ?? "—"),
+    },
+    {
       label: "Duration",
       value: `${md.durationMs ?? meta?.durationMs ?? "—"} ms`,
     },
     { label: "Request ID", value: md.requestId ?? meta?.requestId ?? "—" },
+    { label: "Token usage", value: usageLabel || "—" },
   ];
 }
 

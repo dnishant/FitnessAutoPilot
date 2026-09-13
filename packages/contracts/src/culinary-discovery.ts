@@ -7,7 +7,15 @@ import { WeeklyCookingStyleSchema } from "./cooking-preferences";
  * Candidates are provenance-backed meal ideas — not detailed recipes or nutrition.
  */
 
-export const FitnessAdaptabilitySchema = z.enum(["excellent", "good", "difficult"]);
+/**
+ * How easy it would be later to fit the dish into a calorie/protein plan
+ * while preserving its culinary identity. Discovery classifies — it must not
+ * rewrite the recipe.
+ *
+ * PLAN-005 used excellent|good|difficult; v1.1 maps those onto this enum
+ * at the provider boundary.
+ */
+export const FitnessAdaptabilitySchema = z.enum(["easy", "moderate", "hard"]);
 
 export const MealPrepAdaptabilitySchema = z.enum([
   "fully_prepped",
@@ -117,6 +125,24 @@ export const CulinaryDiscoveryGroundingMetadataSchema = z.object({
   imageSearchQueries: z.array(z.string().trim().min(1).max(300)).max(20).optional(),
 });
 
+/**
+ * Locally derived quality/provenance diagnostics.
+ * `groundingCoverage === 1` means every returned candidate correlated with
+ * grounding metadata — not that every source is high quality.
+ */
+export const CulinaryDiscoveryQualityStatsSchema = z.object({
+  groundedCandidateCount: z.number().int().nonnegative(),
+  groundingCoverage: z.number().min(0).max(1),
+  uniqueSourceCount: z.number().int().nonnegative(),
+  uniqueDomainCount: z.number().int().nonnegative(),
+  searchQueryCount: z.number().int().nonnegative(),
+  broadSearchQueryCount: z.number().int().nonnegative(),
+  specificDishSearchQueryCount: z.number().int().nonnegative().optional(),
+  rejectedForWeakProvenanceCount: z.number().int().nonnegative(),
+  genericHomepageSourceCount: z.number().int().nonnegative(),
+  communitySourceCount: z.number().int().nonnegative().optional(),
+});
+
 export const CulinaryDiscoveryMetadataSchema = z.object({
   provider: z.literal("gemini"),
   model: z.string().trim().min(1).max(120),
@@ -124,12 +150,19 @@ export const CulinaryDiscoveryMetadataSchema = z.object({
   requestedCandidateCount: z.number().int().nonnegative(),
   returnedCandidateCount: z.number().int().nonnegative(),
   searchQueries: z.array(z.string().trim().min(1).max(300)).max(40).optional(),
+  searchQueryCount: z.number().int().nonnegative().optional(),
   sourceCount: z.number().int().nonnegative().optional(),
   uniqueSourceCount: z.number().int().nonnegative().optional(),
   uniqueCuisineCount: z.number().int().nonnegative().optional(),
   uniqueDomainCount: z.number().int().nonnegative().optional(),
   groundedCandidateCount: z.number().int().nonnegative().optional(),
   groundingCoverage: z.number().min(0).max(1).optional(),
+  broadSearchQueryCount: z.number().int().nonnegative().optional(),
+  specificDishSearchQueryCount: z.number().int().nonnegative().optional(),
+  rejectedForWeakProvenanceCount: z.number().int().nonnegative().optional(),
+  genericHomepageSourceCount: z.number().int().nonnegative().optional(),
+  communitySourceCount: z.number().int().nonnegative().optional(),
+  qualityStats: CulinaryDiscoveryQualityStatsSchema.optional(),
   requestId: z.string().trim().min(1).max(120).optional(),
   durationMs: z.number().nonnegative().optional(),
   usageMetadata: z
@@ -172,6 +205,7 @@ export type CulinaryDiscoveryCandidate = z.infer<typeof CulinaryDiscoveryCandida
 export type CulinaryDiscoveryGroundingMetadata = z.infer<
   typeof CulinaryDiscoveryGroundingMetadataSchema
 >;
+export type CulinaryDiscoveryQualityStats = z.infer<typeof CulinaryDiscoveryQualityStatsSchema>;
 export type CulinaryDiscoveryMetadata = z.infer<typeof CulinaryDiscoveryMetadataSchema>;
 export type CulinaryDiscoveryResult = z.infer<typeof CulinaryDiscoveryResultSchema>;
 export type GenerateCulinaryDiscoveryRequest = z.infer<

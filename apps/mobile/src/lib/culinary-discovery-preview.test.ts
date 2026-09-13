@@ -10,6 +10,7 @@ import {
   CULINARY_DISCOVERY_PREVIEW_TITLE,
   beginCulinaryDiscovery,
   buildCulinaryDiscoveryRequest,
+  buildDiscoveryDetailsRows,
   canStartCulinaryDiscovery,
   createCulinaryDiscoveryPreviewUiState,
   failCulinaryDiscovery,
@@ -39,8 +40,8 @@ const sampleResult: CulinaryDiscoveryResult = {
       textureTags: [],
       experienceTags: [],
       whyItIsInteresting: "Pepper-forward South Indian chicken.",
-      fitnessAdaptability: "excellent",
-      fitnessAdaptabilityReason: "Portions adjust.",
+      fitnessAdaptability: "easy",
+      fitnessAdaptabilityReason: "Portions can be scaled while preserving the sauce.",
       mealPrepAdaptability: "component_prepped",
       estimatedFinishMinutesAfterPrep: 10,
       noveltyReason: "Regional.",
@@ -50,13 +51,23 @@ const sampleResult: CulinaryDiscoveryResult = {
   discoveryMetadata: {
     provider: "gemini",
     model: "gemini-3.6-flash",
-    promptVersion: "culinary-discovery-v1",
+    promptVersion: "culinary-discovery-v1.1",
     requestedCandidateCount: 20,
     returnedCandidateCount: 1,
-    searchQueries: ["South Indian chicken Chettinad"],
+    searchQueries: ["regional South Indian chicken recipes pepper curry leaves"],
+    searchQueryCount: 1,
     uniqueDomainCount: 1,
+    uniqueSourceCount: 1,
+    groundingCoverage: 1,
+    rejectedForWeakProvenanceCount: 2,
+    genericHomepageSourceCount: 1,
     durationMs: 1200,
     requestId: "cd_test",
+    usageMetadata: {
+      promptTokenCount: 1000,
+      candidatesTokenCount: 400,
+      totalTokenCount: 1400,
+    },
   },
 };
 
@@ -91,7 +102,7 @@ describe("culinary discovery preview", () => {
       calledName = functionName;
       expect(options.body.mealType).toBe("dinner");
       return {
-        data: { result: sampleResult, meta: { requestId: "cd_test", promptVersion: "culinary-discovery-v1", provider: "gemini", model: "gemini-3.6-flash" } },
+        data: { result: sampleResult, meta: { requestId: "cd_test", promptVersion: "culinary-discovery-v1.1", provider: "gemini", model: "gemini-3.6-flash" } },
         error: null,
       };
     }, built.request);
@@ -117,7 +128,7 @@ describe("culinary discovery preview", () => {
     expect(state.lastRequest).toEqual(request);
     state = succeedCulinaryDiscovery(state, sampleResult, {
       requestId: "cd_1",
-      promptVersion: "culinary-discovery-v1",
+      promptVersion: "culinary-discovery-v1.1",
       provider: "gemini",
       model: "gemini-3.6-flash",
     });
@@ -142,5 +153,31 @@ describe("culinary discovery preview", () => {
     expect(session).not.toMatch(/GEMINI_API_KEY\s*=/);
     expect(lib).not.toContain("@google/genai");
     expect(lib).not.toContain("AIza");
+  });
+
+  it("surfaces PLAN-005.1 diagnostics in discovery details", () => {
+    const rows = buildDiscoveryDetailsRows(sampleResult, {
+      requestId: "cd_test",
+      promptVersion: "culinary-discovery-v1.1",
+      provider: "gemini",
+      model: "gemini-3.6-flash",
+      durationMs: 1200,
+    });
+    const byLabel = Object.fromEntries(rows.map((row) => [row.label, row.value]));
+    expect(byLabel["Requested candidate count"]).toBe("20");
+    expect(byLabel["Returned candidate count"]).toBe("1");
+    expect(byLabel["Search query count"]).toBe("1");
+    expect(byLabel["Unique source URLs"]).toBe("1");
+    expect(byLabel["Unique domains"]).toBe("1");
+    expect(byLabel["Grounding coverage"]).toBe("100%");
+    expect(byLabel["Grounding coverage note"]).toContain("not a source-quality score");
+    expect(byLabel["Rejected for weak provenance"]).toBe("2");
+    expect(byLabel["Generic homepage sources"]).toBe("1");
+    expect(byLabel.Provider).toBe("gemini");
+    expect(byLabel.Model).toBe("gemini-3.6-flash");
+    expect(byLabel["Prompt version"]).toBe("culinary-discovery-v1.1");
+    expect(byLabel.Duration).toBe("1200 ms");
+    expect(byLabel["Request ID"]).toBe("cd_test");
+    expect(byLabel["Token usage"]).toContain("total 1400");
   });
 });
