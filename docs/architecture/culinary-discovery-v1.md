@@ -31,9 +31,10 @@ Discovery therefore:
 1. Enables `googleSearch` **without** structured-output mime/schema.
 2. Prompts for brief grounded notes, then a trailing fenced JSON block.
 3. Extracts and Zod/domain-validates the JSON server-side.
-4. Retries up to 3 times with a stronger search nudge when grounding metadata is absent.
-5. Fails with `DISCOVERY_NOT_GROUNDED` when search metadata is still absent after retries.
-6. Guides the model toward approximately 4–8 exploratory searches (prompt guidance, not a hard API limit).
+4. CLI retries up to 3 times with a stronger search nudge when grounding metadata is absent. The hosted Edge Function uses **one** attempt: extra retries re-parse huge Search-grounded payloads and trip Supabase `WORKER_RESOURCE_LIMIT` (~2s CPU / 256MB).
+5. Search-grounded Edge calls use a REST client that drops `searchEntryPoint` HTML before JSON.parse. The CLI (`pnpm discover:culinary:dev`) is the fallback when Edge still runs out of compute.
+6. Fails with `DISCOVERY_NOT_GROUNDED` when search metadata is still absent after retries.
+7. Guides the model toward approximately 4–8 exploratory searches (prompt guidance, not a hard API limit).
 
 ## Prompt version
 

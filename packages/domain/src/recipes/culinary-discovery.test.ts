@@ -349,7 +349,7 @@ describe("culinary discovery domain", () => {
     const combined = `${prompt.systemInstruction}\n${prompt.userPrompt}`;
     expect(prompt.version).toBe("culinary-discovery-v1.1");
     expect(CULINARY_DISCOVERY_PROMPT_VERSION).toBe("culinary-discovery-v1.1");
-    expect(prompt.systemInstruction).toContain("Culinary Discovery Engine");
+    expect(prompt.systemInstruction).toContain("at most 8 one-line bullets");
     expect(prompt.systemInstruction).toContain("EXPLORATION-FIRST SEARCH");
     expect(prompt.systemInstruction).toContain(
       "Do not begin by deciding which dishes you want to return and then searching for those dish names",

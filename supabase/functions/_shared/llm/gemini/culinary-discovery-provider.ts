@@ -53,6 +53,12 @@ export type GeminiGroundedCulinaryDiscoveryProviderOptions = {
   requestIdFactory?: () => string;
   now?: () => number;
   onLog?: (event: CulinaryDiscoveryLogEvent) => void;
+  /**
+   * Gemini intermittently skips googleSearch (~1/3). CLI retries a few times.
+   * Hosted Edge Functions must stay at 1: extra attempts re-parse huge grounded
+   * payloads and trip WORKER_RESOURCE_LIMIT (~2s CPU / 256MB).
+   */
+  maxGroundingAttempts?: number;
 };
 
 function createRequestId(): string {
@@ -170,6 +176,7 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
   private readonly requestIdFactory: () => string;
   private readonly now: () => number;
   private readonly onLog?: (event: CulinaryDiscoveryLogEvent) => void;
+  private readonly maxGroundingAttempts: number;
 
   constructor(options: GeminiGroundedCulinaryDiscoveryProviderOptions) {
     this.model = options.model;
@@ -177,6 +184,7 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
     this.requestIdFactory = options.requestIdFactory ?? createRequestId;
     this.now = options.now ?? (() => Date.now());
     this.onLog = options.onLog;
+    this.maxGroundingAttempts = Math.max(1, options.maxGroundingAttempts ?? 3);
   }
 
   async discover(request: CulinaryDiscoveryRequest): Promise<CulinaryDiscoveryResult> {
@@ -202,8 +210,9 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
     const prompt = buildCulinaryDiscoveryPrompt(parsed.value);
 
     // Gemini intermittently skips googleSearch even with tools enabled (~1/3).
-    // Retry with a stronger search nudge before failing DISCOVERY_NOT_GROUNDED.
-    const maxGroundingAttempts = 3;
+    // Retry with a stronger search nudge before failing DISCOVERY_NOT_GROUNDED,
+    // unless the caller capped attempts (Edge stays at 1 to avoid CPU limits).
+    const maxGroundingAttempts = this.maxGroundingAttempts;
     let rawText = "";
     let usageMetadata: CulinaryDiscoveryLogEvent["usageMetadata"];
     let groundingMetadata: CulinaryDiscoveryGroundingMetadata | undefined;

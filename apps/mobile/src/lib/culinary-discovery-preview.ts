@@ -411,6 +411,9 @@ export function buildDiscoveryDetailsRows(
 }
 
 export function humanizeCulinaryDiscoveryError(message: string, code?: string): string {
+  if (code === "WORKER_RESOURCE_LIMIT" || /not having enough compute resources/i.test(message)) {
+    return "Culinary discovery ran out of Edge Function CPU or memory (Supabase limit is about 2s CPU / 256MB). Search-grounded Gemini responses are large. Retry, use a lower target count, or run `pnpm discover:culinary:dev` locally. This is not a missing GEMINI_API_KEY.";
+  }
   if (code === "LLM_CONFIGURATION_ERROR") {
     return `${message} Set GEMINI_API_KEY as a Supabase Edge Function secret, then redeploy culinary-discovery.`;
   }
@@ -431,6 +434,20 @@ export function parseCulinaryDiscoveryFailure(input: {
   data?: unknown;
 }): CulinaryDiscoveryPreviewError {
   const data = input.data;
+  if (data && typeof data === "object") {
+    const record = data as { code?: unknown; message?: unknown; error?: unknown };
+    if (typeof record.code === "string" && record.error === undefined) {
+      const baseMessage =
+        typeof record.message === "string" && record.message.trim()
+          ? record.message
+          : input.errorMessage?.trim() || "Culinary discovery failed.";
+      return {
+        message: humanizeCulinaryDiscoveryError(baseMessage, record.code),
+        code: record.code,
+        diagnostics: sanitizeDiagnosticText(data),
+      };
+    }
+  }
   if (data && typeof data === "object" && "error" in data) {
     const err = (data as { error: unknown }).error;
     if (typeof err === "string") {

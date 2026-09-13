@@ -15,6 +15,7 @@ import {
   createCulinaryDiscoveryPreviewUiState,
   failCulinaryDiscovery,
   invokeCulinaryDiscovery,
+  parseCulinaryDiscoveryFailure,
   succeedCulinaryDiscovery,
 } from "./culinary-discovery-preview";
 
@@ -153,6 +154,20 @@ describe("culinary discovery preview", () => {
     expect(session).not.toMatch(/GEMINI_API_KEY\s*=/);
     expect(lib).not.toContain("@google/genai");
     expect(lib).not.toContain("AIza");
+  });
+
+  it("explains WORKER_RESOURCE_LIMIT instead of blaming a missing API key", () => {
+    const parsed = parseCulinaryDiscoveryFailure({
+      errorMessage: "Edge Function returned a non-2xx status code",
+      data: {
+        code: "WORKER_RESOURCE_LIMIT",
+        message: "Function failed due to not having enough compute resources (please check logs)",
+      },
+    });
+    expect(parsed.code).toBe("WORKER_RESOURCE_LIMIT");
+    expect(parsed.message).toContain("CPU or memory");
+    expect(parsed.message).toContain("discover:culinary:dev");
+    expect(parsed.message).not.toContain("GEMINI_API_KEY is set");
   });
 
   it("surfaces PLAN-005.1 diagnostics in discovery details", () => {

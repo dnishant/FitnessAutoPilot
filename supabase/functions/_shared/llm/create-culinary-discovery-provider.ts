@@ -13,6 +13,7 @@ export type CreateCulinaryDiscoveryProviderOptions = {
   config?: LlmServerConfig;
   geminiClient?: GeminiContentClient;
   onLog?: (event: CulinaryDiscoveryLogEvent) => void;
+  maxGroundingAttempts?: number;
 };
 
 export function createCulinaryDiscoveryProvider(
@@ -32,5 +33,6 @@ export function createCulinaryDiscoveryProvider(
     model: gemini.model,
     client,
     onLog: options.onLog,
+    maxGroundingAttempts: options.maxGroundingAttempts,
   });
 }

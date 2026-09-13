@@ -257,6 +257,12 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     expect(preview).not.toMatch(/GEMINI_API_KEY\s*=/);
     expect(preview).not.toContain("@google/genai");
     expect(preview).not.toMatch(/AIza[0-9A-Za-z_-]{10,}/);
+
+    const edgeFn = readFileSync(
+      join(repoRoot, "supabase/functions/culinary-discovery/index.ts"),
+      "utf8",
+    );
+    expect(edgeFn).toContain("maxGroundingAttempts: 1");
   });
 
   it("maps grounding metadata safely without HTML entry point", () => {
@@ -323,6 +329,21 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     }) as { fitnessAdaptability: string; fitnessAdaptabilityReason: string };
     expect(coerced.fitnessAdaptability).toBe("easy");
     expect(coerced.fitnessAdaptabilityReason).not.toMatch(/replace|substitute/i);
+  });
+
+  it("can cap grounding attempts for Edge CPU limits", async () => {
+    const generateContent = vi.fn(async () => ({
+      text: JSON.stringify({ candidates: [modelCandidate] }),
+    }));
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client: mockClient(generateContent),
+      maxGroundingAttempts: 1,
+    });
+    await expect(provider.discover(sampleRequest)).rejects.toMatchObject({
+      code: "DISCOVERY_NOT_GROUNDED",
+    });
+    expect(generateContent).toHaveBeenCalledTimes(1);
   });
 
   it("does not make live Gemini calls in automated tests", async () => {
