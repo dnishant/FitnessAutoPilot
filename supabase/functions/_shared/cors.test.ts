@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyCors, corsHeaders, preflightResponse } from "./cors";
+import { applyCors, corsHeaders, preflightResponse } from "./cors.ts";
 
 describe("corsHeaders", () => {
   it("reflects the browser Origin so Vercel preflight can succeed", () => {

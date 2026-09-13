@@ -17,10 +17,11 @@ Fitness Autopilot is a modular monolith.
    - cooking preference intent (prep frequency, session time, weekly style, finish time, dinner-prep-for-lunch)
    - food / recipe nutrition
    - AI recipe candidate generation (provider-independent; Gemini adapter in `packages/llm`)
+   - search-grounded culinary discovery (provider-independent; Gemini + Google Search grounding in `packages/llm`)
    - weekly meal strategy generation (provider-independent concepts; Gemini adapter in `packages/llm`)
    - portioning
    - one-day planner
-4. **Infrastructure** (`supabase`) — Postgres + RLS + Edge Functions that call domain logic and persist immutable prescriptions. LLM credentials stay server-side (`generate-recipe`, `generate-weekly-strategy`).
+4. **Infrastructure** (`supabase`) — Postgres + RLS + Edge Functions that call domain logic and persist immutable prescriptions. LLM credentials stay server-side (`generate-recipe`, `culinary-discovery`, `generate-weekly-strategy`).
 
 ## Trust boundary
 

@@ -43,6 +43,9 @@ function createRequestId(): string {
   return `ws_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** Matches contracts / Gemini schema max for sharedIngredientIntents items. */
+export const SHARED_INGREDIENT_INTENT_MAX_LENGTH = 160;
+
 /**
  * Strip any model-invented nutrition fields from weekly strategy payloads.
  */
@@ -91,6 +94,31 @@ export function stripWeeklyStrategyNutrition(value: unknown): unknown {
       }
       return nextDay;
     });
+  }
+  return record;
+}
+
+/**
+ * Gemini structured output sometimes ignores maxLength on string arrays.
+ * Truncate sharedIngredientIntents (and drop empties) before domain validation.
+ */
+export function coerceWeeklyStrategyPayload(value: unknown): unknown {
+  const stripped = stripWeeklyStrategyNutrition(value);
+  if (stripped === null || typeof stripped !== "object" || Array.isArray(stripped)) {
+    return stripped;
+  }
+  const record = { ...(stripped as Record<string, unknown>) };
+  if (Array.isArray(record.sharedIngredientIntents)) {
+    record.sharedIngredientIntents = record.sharedIngredientIntents
+      .filter((item): item is string => typeof item === "string")
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0)
+      .map((item) =>
+        item.length > SHARED_INGREDIENT_INTENT_MAX_LENGTH
+          ? item.slice(0, SHARED_INGREDIENT_INTENT_MAX_LENGTH).trimEnd()
+          : item,
+      )
+      .slice(0, 40);
   }
   return record;
 }
@@ -190,7 +218,7 @@ export class GeminiWeeklyStrategyGenerator implements WeeklyStrategyGenerator {
       throw mapped;
     }
 
-    const sanitized = stripWeeklyStrategyNutrition(jsonValue);
+    const sanitized = coerceWeeklyStrategyPayload(jsonValue);
     const validated = validateWeeklyMealStrategy(sanitized, parsed.value);
     if (!validated.ok) {
       this.log({

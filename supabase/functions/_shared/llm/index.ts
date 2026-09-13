@@ -14,13 +14,24 @@ export {
   createWeeklyStrategyGenerator,
   type CreateWeeklyStrategyGeneratorOptions,
 } from "./create-weekly-strategy-generator.ts";
+export {
+  createCulinaryDiscoveryProvider,
+  type CreateCulinaryDiscoveryProviderOptions,
+} from "./create-culinary-discovery-provider.ts";
 export type {
   GeminiContentClient,
   GeminiGenerateContentParams,
   GeminiGenerateContentResult,
+  GeminiGoogleSearchTool,
+  GeminiSafeGroundingChunk,
+  GeminiSafeGroundingMetadata,
+  GeminiSafeGroundingSupport,
   GeminiUsageMetadata,
 } from "./gemini/client.ts";
-export { createGoogleGenAiContentClient } from "./gemini/google-client.ts";
+export {
+  createGoogleGenAiContentClient,
+  mapGeminiGroundingMetadataForTests,
+} from "./gemini/google-client.ts";
 export {
   GeminiRecipeGenerator,
   type GeminiRecipeGeneratorOptions,
@@ -28,10 +39,20 @@ export {
 } from "./gemini/recipe-generator.ts";
 export {
   GeminiWeeklyStrategyGenerator,
+  SHARED_INGREDIENT_INTENT_MAX_LENGTH,
+  coerceWeeklyStrategyPayload,
   stripWeeklyStrategyNutrition,
   type GeminiWeeklyStrategyGeneratorOptions,
   type WeeklyStrategyLogEvent,
 } from "./gemini/weekly-strategy-generator.ts";
+export {
+  GeminiGroundedCulinaryDiscoveryProvider,
+  coerceDiscoveryCandidatePayload,
+  extractJsonObjectFromModelText,
+  toCulinaryDiscoveryGroundingMetadata,
+  type CulinaryDiscoveryLogEvent,
+  type GeminiGroundedCulinaryDiscoveryProviderOptions,
+} from "./gemini/culinary-discovery-provider.ts";
 export {
   assertNoJsonSchemaRefs,
   sanitizeGeminiJsonSchema,
@@ -45,3 +66,7 @@ export {
   GeminiWeeklyMealStrategyPayloadSchema,
   geminiWeeklyStrategyResponseJsonSchema,
 } from "./gemini/weekly-strategy-schema.ts";
+export {
+  GeminiCulinaryDiscoveryPayloadSchema,
+  geminiCulinaryDiscoveryResponseJsonSchema,
+} from "./gemini/culinary-discovery-schema.ts";

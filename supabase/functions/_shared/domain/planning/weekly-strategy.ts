@@ -184,6 +184,7 @@ export function buildWeeklyStrategyPrompt(
     "- Minimize grocery/prep complexity while maximizing perceived culinary variety.",
     "- Intentionally reuse staple ingredients (chicken, rice, Greek yogurt, onion, garlic, peppers, citrus, herbs) while changing cuisine/sauce/seasoning.",
     "- Populate sharedIngredientIntents with likely reusable ingredients/components (planning suggestions only).",
+    "- Keep each sharedIngredientIntents entry short (ingredient/component label or brief phrase, ≤160 characters). Not sentences.",
     "",
     "Cooking style / prep intent:",
     `- cookingStyle=${cookingPreferences.cookingStyle}: ${cookingNote}`,

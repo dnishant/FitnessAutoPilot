@@ -27,6 +27,10 @@ export default function RootLayout() {
           name="weekly-strategy-preview"
           options={{ title: "Weekly Strategy Preview" }}
         />
+        <Stack.Screen
+          name="culinary-discovery-preview"
+          options={{ title: "Culinary Discovery" }}
+        />
       </Stack>
     </SessionProvider>
   );

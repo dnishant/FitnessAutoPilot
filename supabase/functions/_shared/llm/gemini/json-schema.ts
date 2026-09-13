@@ -12,11 +12,15 @@ import { zodToJsonSchema } from "zod-to-json-schema";
  *   `{ type: T, nullable: true }` (OpenAPI-style) instead.
  * - Zod `.positive()` → `exclusiveMinimum`, which Gemini often rejects; rewrite
  *   to inclusive `minimum`.
+ * - Zod `.max(n)` on arrays → `maxItems`, which Gemini 3.x currently rejects with
+ *   opaque `400 INVALID_ARGUMENT` when used as `responseJsonSchema` (including
+ *   with Google Search grounding). Strip `maxItems`; enforce caps after parse.
  *
  * Rules:
  * - Never pass `name`
  * - Always `$refStrategy: "none"`
  * - Strip meta keys (`$schema` / `definitions` / `$defs` / `$id`)
+ * - Strip `maxItems`
  * - Normalize nullables + exclusive bounds
  * - Fail loud if any `$ref` remains
  */
@@ -49,7 +53,9 @@ export function sanitizeGeminiJsonSchema(value: unknown): unknown {
       key === "$schema" ||
       key === "definitions" ||
       key === "$defs" ||
-      key === "$id"
+      key === "$id" ||
+      // Gemini 3.x responseJsonSchema rejects maxItems (culinary discovery 400s).
+      key === "maxItems"
     ) {
       continue;
     }
