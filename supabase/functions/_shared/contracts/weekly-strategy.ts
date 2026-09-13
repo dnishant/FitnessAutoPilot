@@ -69,7 +69,8 @@ export const WeeklyStrategySummarySchema = z.object({
 export const WeeklyMealStrategySchema = z.object({
   strategySummary: WeeklyStrategySummarySchema,
   days: z.array(WeeklyDayStrategySchema).length(7),
-  sharedIngredientIntents: z.array(z.string().trim().min(1).max(80)).max(40),
+  // Soft planning labels — Gemini sometimes emits short phrases, not single tokens.
+  sharedIngredientIntents: z.array(z.string().trim().min(1).max(160)).max(40),
   uniqueConceptCount: z.number().int().nonnegative().optional(),
   planningNotes: z.array(z.string().trim().min(1).max(400)).max(20).optional(),
 });
