@@ -11,7 +11,7 @@ import {
   DEFAULT_GEMINI_MODEL,
   GeminiGroundedCulinaryDiscoveryProvider,
   createCulinaryDiscoveryProvider,
-  geminiCulinaryDiscoveryResponseJsonSchema,
+  extractJsonObjectFromModelText,
   mapGeminiGroundingMetadataForTests,
   type GeminiContentClient,
 } from "../index";
@@ -90,9 +90,11 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
   it("implements CulinaryDiscoveryProvider and enables Google Search grounding", async () => {
     const generateContent = vi.fn(async (params) => {
       expect(params.tools).toEqual([{ googleSearch: {} }]);
-      expect(params.responseMimeType).toBe("application/json");
-      expect(params.responseJsonSchema).toEqual(geminiCulinaryDiscoveryResponseJsonSchema());
+      // Gemini 3.x drops grounding when responseJsonSchema / mime JSON are set.
+      expect(params.responseMimeType).toBeUndefined();
+      expect(params.responseJsonSchema).toBeUndefined();
       expect(params.systemInstruction).toContain("Culinary Discovery Engine");
+      expect(params.systemInstruction).toContain("OUTPUT FORMAT");
       expect(params.contents).toContain("Indian");
       expect(params.contents).toContain("Chicken");
       expect(params.contents).toContain("Chicken Tikka");
@@ -100,7 +102,13 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
       expect(params.contents).toContain("Target candidate count: 5");
       expect(params.contents).toContain(CULINARY_DISCOVERY_PROMPT_VERSION);
       return {
-        text: JSON.stringify({ candidates: [modelCandidate] }),
+        text: [
+          "Grounded notes:",
+          "- Chicken Chettinad from example.com",
+          "```json",
+          JSON.stringify({ candidates: [modelCandidate] }),
+          "```",
+        ].join("\n"),
         groundingMetadata: grounding,
       };
     });
@@ -115,6 +123,12 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     expect(result.discoveryMetadata.promptVersion).toBe(CULINARY_DISCOVERY_PROMPT_VERSION);
     expect(result.groundingMetadata?.webSearchQueries).toEqual(grounding.webSearchQueries);
     expect(generateContent).toHaveBeenCalledTimes(1);
+  });
+
+  it("extracts JSON from fenced model replies", () => {
+    const payload = { candidates: [modelCandidate] };
+    const text = `Notes from search\n\`\`\`json\n${JSON.stringify(payload)}\n\`\`\`\n`;
+    expect(JSON.parse(extractJsonObjectFromModelText(text))).toEqual(payload);
   });
 
   it("maps provider failures to typed errors", async () => {

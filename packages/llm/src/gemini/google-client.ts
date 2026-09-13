@@ -100,8 +100,12 @@ export function createGoogleGenAiContentClient(apiKey: string): GeminiContentCli
         contents: params.contents,
         config: {
           systemInstruction: params.systemInstruction,
-          responseMimeType: params.responseMimeType,
-          responseJsonSchema: params.responseJsonSchema,
+          ...(params.responseMimeType
+            ? { responseMimeType: params.responseMimeType }
+            : {}),
+          ...(params.responseJsonSchema
+            ? { responseJsonSchema: params.responseJsonSchema }
+            : {}),
           ...(params.tools ? { tools: params.tools } : {}),
         },
       });

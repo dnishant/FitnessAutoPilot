@@ -362,7 +362,8 @@ export function assertDiscoveryWasGrounded(
 ): Result<true, CulinaryDiscoveryError> {
   const queries = grounding?.webSearchQueries ?? [];
   const chunks = grounding?.groundingChunks ?? [];
-  if (queries.length === 0 && chunks.length === 0) {
+  const hasEntryPoint = grounding?.hasSearchEntryPoint === true;
+  if (queries.length === 0 && chunks.length === 0 && !hasEntryPoint) {
     return err(
       culinaryDiscoveryError(
         "DISCOVERY_NOT_GROUNDED",
@@ -455,9 +456,15 @@ export function buildCulinaryDiscoveryPrompt(
     "Your job is to SEARCH the live web for genuinely delicious, interesting recipes and dishes from reputable culinary publications, cuisine specialists, established recipe authors/bloggers, and creator-owned recipe sites.",
     "The output should make a hungry human think: “I actually want to eat that.”",
     "",
-    "SEARCH FIRST. Do not rely primarily on memorized recipes.",
-    "Use Google Search grounding. Issue multiple culinary-direction searches before selecting candidates.",
+    "SEARCH FIRST — mandatory. Do not rely primarily on memorized recipes.",
+    "Use Google Search grounding. Issue multiple culinary-direction searches BEFORE writing any final candidates.",
     "Explore regional styles, techniques, and sauce/flavor families — not a single generic query.",
+    "IMPORTANT: Asking for JSON-only without searching causes discovery to fail. You must actually search.",
+    "",
+    "OUTPUT FORMAT (two sections, in order):",
+    "1) Brief grounded notes: short bullets of dishes/sources you found via search (titles + domains/URLs).",
+    "2) A final fenced JSON block as the LAST thing in your reply, inside ```json fences.",
+    "Do not put prose after the JSON fence. No full recipe instructions. No nutrition numbers.",
     "",
     "SOURCE QUALITY (prefer roughly in this order):",
     "1) cuisine-specialist recipe sites/authors",
@@ -499,8 +506,6 @@ export function buildCulinaryDiscoveryPrompt(
     "PROVENANCE: Every candidate MUST correspond to an actual grounded web source you found via search.",
     "Do NOT invent URLs, bloggers, publications, or claim an AI-original dish came from a source.",
     "If adequate grounding cannot be established for a dish, omit it.",
-    "",
-    "Return ONLY structured JSON matching the schema. No prose wrapper. No recipe instructions. No full article text. No nutrition numbers.",
   ].join("\n");
 
   const userPrompt = [
@@ -528,7 +533,8 @@ export function buildCulinaryDiscoveryPrompt(
     "South Indian / Bengali / Goan / Kerala / Mangalorean / Andhra preparations, pepper chicken, herb chicken,",
     "street-food styles, grilled styles — NOT only “Indian chicken recipe” or “healthy Indian chicken”.",
     "",
-    `Return about ${targetCount} diverse, source-backed candidates.`,
+    `After searching, write brief grounded notes, then return about ${targetCount} diverse candidates`,
+    "in a final ```json fenced object: {\"candidates\":[...]} .",
     "Each candidate needs: candidateId, name, source{name,url,author?}, cuisineFamily, regionalStyle?,",
     "primaryProtein?, dishFormat, flavorFamilies[], cookingTechniques[], textureTags[], experienceTags[],",
     "whyItIsInteresting, fitnessAdaptability, fitnessAdaptabilityReason, mealPrepAdaptability,",

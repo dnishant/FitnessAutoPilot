@@ -148,6 +148,8 @@ describe("culinary discovery domain", () => {
     expect(
       assertDiscoveryWasGrounded({ webSearchQueries: ["regional indian chicken"] }).ok,
     ).toBe(true);
+    expect(assertDiscoveryWasGrounded({ hasSearchEntryPoint: true }).ok).toBe(true);
+    expect(assertDiscoveryWasGrounded({ groundingChunks: [] }).ok).toBe(false);
   });
 
   it("calculates unique source/domain counts locally", () => {

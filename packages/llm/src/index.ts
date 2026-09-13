@@ -46,6 +46,7 @@ export {
 export {
   GeminiGroundedCulinaryDiscoveryProvider,
   coerceDiscoveryCandidatePayload,
+  extractJsonObjectFromModelText,
   toCulinaryDiscoveryGroundingMetadata,
   type CulinaryDiscoveryLogEvent,
   type GeminiGroundedCulinaryDiscoveryProviderOptions,

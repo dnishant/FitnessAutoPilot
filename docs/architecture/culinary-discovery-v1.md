@@ -11,12 +11,26 @@ Discovery answers: “What interesting real-world dishes could we cook?” — n
 ```text
 CulinaryDiscoveryRequest
       ↓
-Gemini + googleSearch tool + structured JSON
+Gemini + googleSearch tool (search-first notes + fenced JSON)
       ↓
-deterministic schema / provenance validation
+extract JSON → deterministic schema / provenance validation
       ↓
 CulinaryDiscoveryResult (candidates + diagnostics)
 ```
+
+## Gemini grounding + JSON limitation
+
+On Gemini 3.x (`gemini-3.6-flash` and peers), enabling `responseMimeType` /
+`responseJsonSchema` together with the `googleSearch` tool commonly returns
+JSON **without** `groundingMetadata` (no `webSearchQueries` / chunks). Asking
+for “JSON only” also often skips search entirely.
+
+Discovery therefore:
+
+1. Enables `googleSearch` **without** structured-output mime/schema.
+2. Prompts for brief grounded notes, then a trailing fenced JSON block.
+3. Extracts and Zod/domain-validates the JSON server-side.
+4. Fails with `DISCOVERY_NOT_GROUNDED` when search metadata is absent.
 
 ## Prompt version
 

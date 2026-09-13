@@ -43,8 +43,14 @@ export type GeminiGenerateContentParams = {
   model: string;
   contents: string;
   systemInstruction: string;
-  responseMimeType: "application/json";
-  responseJsonSchema: Record<string, unknown>;
+  /**
+   * Optional structured-output controls.
+   * NOTE: On Gemini 3.x, combining `responseJsonSchema` with `googleSearch`
+   * currently suppresses grounding metadata. Culinary discovery omits these
+   * and validates JSON with Zod after a grounded search call.
+   */
+  responseMimeType?: "application/json";
+  responseJsonSchema?: Record<string, unknown>;
   /** Optional built-in tools (e.g. Google Search grounding). */
   tools?: GeminiGoogleSearchTool[];
 };

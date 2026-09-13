@@ -17,7 +17,6 @@ import {
   type CulinaryDiscoveryProvider,
 } from "@fitness-autopilot/domain";
 import type { GeminiContentClient, GeminiSafeGroundingMetadata } from "./client";
-import { geminiCulinaryDiscoveryResponseJsonSchema } from "./culinary-discovery-schema";
 
 export type CulinaryDiscoveryLogEvent = {
   provider: "gemini";
@@ -70,6 +69,49 @@ export function toCulinaryDiscoveryGroundingMetadata(
     hasSearchEntryPoint: grounding.hasSearchEntryPoint,
     imageSearchQueries: grounding.imageSearchQueries,
   };
+}
+
+/**
+ * Gemini 3.x currently drops Google Search grounding metadata when
+ * `responseMimeType` / `responseJsonSchema` are set, and often skips search
+ * entirely when asked for "JSON only". Discovery therefore requests
+ * search-first notes + a trailing fenced JSON block, then extracts JSON here.
+ */
+export function extractJsonObjectFromModelText(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) return trimmed;
+
+  const fences = [...trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)```/gi)];
+  for (let i = fences.length - 1; i >= 0; i -= 1) {
+    const body = fences[i]?.[1]?.trim();
+    if (!body) continue;
+    try {
+      JSON.parse(body);
+      return body;
+    } catch {
+      // try an earlier fence
+    }
+  }
+
+  const marker = '{"candidates"';
+  const markerIndex = trimmed.lastIndexOf(marker);
+  if (markerIndex >= 0) {
+    const slice = trimmed.slice(markerIndex);
+    try {
+      JSON.parse(slice);
+      return slice;
+    } catch {
+      // fall through to brace scan
+    }
+  }
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    return trimmed.slice(start, end + 1);
+  }
+
+  return trimmed;
 }
 
 /**
@@ -148,12 +190,12 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
     let usageMetadata: CulinaryDiscoveryLogEvent["usageMetadata"];
     let groundingMetadata: CulinaryDiscoveryGroundingMetadata | undefined;
     try {
+      // Intentionally omit responseMimeType / responseJsonSchema: on Gemini 3.x
+      // those suppress googleSearch grounding metadata (DISCOVERY_NOT_GROUNDED).
       const result = await this.client.generateContent({
         model: this.model,
         contents: prompt.userPrompt,
         systemInstruction: prompt.systemInstruction,
-        responseMimeType: "application/json",
-        responseJsonSchema: geminiCulinaryDiscoveryResponseJsonSchema(),
         tools: [{ googleSearch: {} }],
       });
       rawText = result.text;
@@ -199,7 +241,7 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
 
     let jsonValue: unknown;
     try {
-      jsonValue = JSON.parse(rawText);
+      jsonValue = JSON.parse(extractJsonObjectFromModelText(rawText));
     } catch (error) {
       const mapped = culinaryDiscoveryError(
         "LLM_INVALID_STRUCTURED_OUTPUT",
