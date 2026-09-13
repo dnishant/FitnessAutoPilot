@@ -145,6 +145,11 @@ export function coerceDiscoveryCandidatePayload(raw: unknown): unknown {
   if (record.estimatedFinishMinutesAfterPrep === undefined) {
     record.estimatedFinishMinutesAfterPrep = null;
   }
+  if (typeof record.discoveryConfidence === "number") {
+    const score = record.discoveryConfidence;
+    record.discoveryConfidence =
+      score >= 0.8 ? "high" : score >= 0.5 ? "medium" : "low";
+  }
   return record;
 }
 
@@ -186,40 +191,61 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
 
     const prompt = buildCulinaryDiscoveryPrompt(parsed.value);
 
-    let rawText: string;
+    // Gemini intermittently skips googleSearch even with tools enabled (~1/3).
+    // Retry with a stronger search nudge before failing DISCOVERY_NOT_GROUNDED.
+    const maxGroundingAttempts = 3;
+    let rawText = "";
     let usageMetadata: CulinaryDiscoveryLogEvent["usageMetadata"];
     let groundingMetadata: CulinaryDiscoveryGroundingMetadata | undefined;
-    try {
-      // Intentionally omit responseMimeType / responseJsonSchema: on Gemini 3.x
-      // those suppress googleSearch grounding metadata (DISCOVERY_NOT_GROUNDED).
-      const result = await this.client.generateContent({
-        model: this.model,
-        contents: prompt.userPrompt,
-        systemInstruction: prompt.systemInstruction,
-        tools: [{ googleSearch: {} }],
-      });
-      rawText = result.text;
-      usageMetadata = result.usageMetadata;
-      groundingMetadata = toCulinaryDiscoveryGroundingMetadata(result.groundingMetadata);
-    } catch (error) {
-      const mapped = mapProviderError(error);
-      this.log({
-        provider: "gemini",
-        model: this.model,
-        promptVersion: CULINARY_DISCOVERY_PROMPT_VERSION,
-        requestId,
-        durationMs: this.now() - started,
-        success: false,
-        errorCode: mapped.code,
-        errorMessage: sanitizeLogMessage(mapped.message),
-        mealType: parsed.value.mealType,
-        requestedCandidateCount: parsed.value.targetCandidateCount,
-        googleSearchEnabled: true,
-      });
-      throw mapped;
+    let grounded = assertDiscoveryWasGrounded(undefined);
+
+    for (let attempt = 1; attempt <= maxGroundingAttempts; attempt += 1) {
+      const retryNudge =
+        attempt === 1
+          ? ""
+          : [
+              "",
+              "CRITICAL RETRY: Your previous reply skipped Google Search grounding.",
+              "You MUST invoke Google Search before writing candidates.",
+              "Issue multiple culinary web searches, then grounded notes, then the final ```json block.",
+            ].join("\n");
+
+      try {
+        // Intentionally omit responseMimeType / responseJsonSchema: on Gemini 3.x
+        // those suppress googleSearch grounding metadata (DISCOVERY_NOT_GROUNDED).
+        const result = await this.client.generateContent({
+          model: this.model,
+          contents: `${prompt.userPrompt}${retryNudge}`,
+          systemInstruction: prompt.systemInstruction,
+          tools: [{ googleSearch: {} }],
+        });
+        rawText = result.text;
+        usageMetadata = result.usageMetadata;
+        groundingMetadata = toCulinaryDiscoveryGroundingMetadata(result.groundingMetadata);
+      } catch (error) {
+        const mapped = mapProviderError(error);
+        this.log({
+          provider: "gemini",
+          model: this.model,
+          promptVersion: CULINARY_DISCOVERY_PROMPT_VERSION,
+          requestId,
+          durationMs: this.now() - started,
+          success: false,
+          errorCode: mapped.code,
+          errorMessage: sanitizeLogMessage(mapped.message),
+          mealType: parsed.value.mealType,
+          requestedCandidateCount: parsed.value.targetCandidateCount,
+          googleSearchEnabled: true,
+        });
+        throw mapped;
+      }
+
+      grounded = assertDiscoveryWasGrounded(groundingMetadata);
+      if (grounded.ok) {
+        break;
+      }
     }
 
-    const grounded = assertDiscoveryWasGrounded(groundingMetadata);
     if (!grounded.ok) {
       this.log({
         provider: "gemini",

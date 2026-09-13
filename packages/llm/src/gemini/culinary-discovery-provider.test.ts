@@ -159,10 +159,11 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     });
   });
 
-  it("fails when grounding metadata is missing", async () => {
-    const client = mockClient(async () => ({
+  it("fails when grounding metadata is missing after retries", async () => {
+    const generateContent = vi.fn(async () => ({
       text: JSON.stringify({ candidates: [modelCandidate] }),
     }));
+    const client = mockClient(generateContent);
     const provider = new GeminiGroundedCulinaryDiscoveryProvider({
       model: "gemini-3.6-flash",
       client,
@@ -170,6 +171,34 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     await expect(provider.discover(sampleRequest)).rejects.toMatchObject({
       code: "DISCOVERY_NOT_GROUNDED",
     });
+    expect(generateContent).toHaveBeenCalledTimes(3);
+    expect(generateContent.mock.calls[1]?.[0]?.contents).toContain("CRITICAL RETRY");
+  });
+
+  it("retries when the first Gemini reply is not grounded", async () => {
+    const generateContent = vi
+      .fn()
+      .mockResolvedValueOnce({
+        text: JSON.stringify({ candidates: [modelCandidate] }),
+      })
+      .mockResolvedValueOnce({
+        text: [
+          "Grounded notes:",
+          "- Chicken Chettinad from example.com",
+          "```json",
+          JSON.stringify({ candidates: [modelCandidate] }),
+          "```",
+        ].join("\n"),
+        groundingMetadata: grounding,
+      });
+    const client = mockClient(generateContent);
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client,
+    });
+    const result = await provider.discover(sampleRequest);
+    expect(result.candidates).toHaveLength(1);
+    expect(generateContent).toHaveBeenCalledTimes(2);
   });
 
   it("rejects invalid URL candidates", async () => {

@@ -30,7 +30,8 @@ Discovery therefore:
 1. Enables `googleSearch` **without** structured-output mime/schema.
 2. Prompts for brief grounded notes, then a trailing fenced JSON block.
 3. Extracts and Zod/domain-validates the JSON server-side.
-4. Fails with `DISCOVERY_NOT_GROUNDED` when search metadata is absent.
+4. Retries up to 3 times with a stronger search nudge when grounding metadata is absent.
+5. Fails with `DISCOVERY_NOT_GROUNDED` when search metadata is still absent after retries.
 
 ## Prompt version
 
