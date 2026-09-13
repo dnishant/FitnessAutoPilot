@@ -1,0 +1,17 @@
+{
+  "name": "Fitness Autopilot",
+  "install": "pnpm install --frozen-lockfile && ([ -f apps/mobile/.env ] || cp apps/mobile/.env.example apps/mobile/.env)",
+  "terminals": [
+    {
+      "name": "expo-web",
+      "command": "pnpm mobile:web",
+      "description": "Expo (React Native Web) dev server for the mobile app in local-planner mode. Serves the UI at http://127.0.0.1:19006 with the deterministic domain engines running in-process (no Supabase required)."
+    }
+  ],
+  "ports": [
+    {
+      "name": "expo-web",
+      "port": 19006
+    }
+  ]
+}
