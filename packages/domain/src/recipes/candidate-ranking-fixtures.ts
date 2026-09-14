@@ -343,7 +343,175 @@ export const QUICK_FRESH_DINNER = makeRankingCandidate({
   discoveryConfidence: "high",
 });
 
-/** Scenario A — Tikka redundancy plus distinct Indian/Mexican dishes. */
+export const TANDOORI_CHICKEN = makeRankingCandidate({
+  candidateId: "tandoori-chicken",
+  name: "Tandoori Chicken",
+  source: {
+    name: "Serious Eats",
+    url: "https://www.seriouseats.com/tandoori-chicken",
+    author: "Kenji",
+  },
+  cuisineFamily: "Indian",
+  regionalStyle: "Punjab",
+  primaryProtein: "Chicken",
+  dishFormat: "tandoori roast",
+  flavorFamilies: ["tandoori", "garam masala", "smoky"],
+  cookingTechniques: ["marinate", "tandoor grill", "baste"],
+  textureTags: ["charred", "juicy"],
+  experienceTags: ["spicy", "smoky"],
+  whyItIsInteresting: "Whole-joint tandoori roast, closely related to tikka but a different cut and format.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "component_prepped",
+  estimatedFinishMinutesAfterPrep: 9,
+  noveltyReason: "Classic tandoori roast overlapping the tikka experience.",
+  discoveryConfidence: "high",
+});
+
+export const CHICKEN_SCALOPPINE_AL_LIMONE = makeRankingCandidate({
+  candidateId: "chicken-scaloppine-al-limone",
+  name: "Chicken Scaloppine al Limone",
+  source: {
+    name: "NYT Cooking",
+    url: "https://cooking.nytimes.com/recipes/chicken-scaloppine-al-limone",
+    author: "NYT Cooking",
+  },
+  cuisineFamily: "Italian",
+  regionalStyle: "Rome / Lazio",
+  primaryProtein: "Chicken",
+  dishFormat: "pan sauce cutlet",
+  flavorFamilies: ["lemon", "white wine", "parsley", "butter"],
+  cookingTechniques: ["pound cutlets", "quick pan sauce"],
+  textureTags: ["silky sauce", "browned"],
+  experienceTags: ["bright", "comforting"],
+  whyItIsInteresting: "Thin cutlets with a lemon-wine pan sauce rather than a grilled bowl.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "quick_fresh_finish",
+  estimatedFinishMinutesAfterPrep: 12,
+  noveltyReason: "Italian cutlet-and-pan-sauce format.",
+  discoveryConfidence: "high",
+});
+
+export const MAPO_TOFU = makeRankingCandidate({
+  candidateId: "mapo-tofu",
+  name: "Mapo Tofu",
+  source: {
+    name: "Serious Eats",
+    url: "https://www.seriouseats.com/mapo-tofu",
+    author: "Kenji",
+  },
+  cuisineFamily: "Chinese",
+  regionalStyle: "Sichuan",
+  primaryProtein: "Tofu",
+  dishFormat: "wok stew",
+  flavorFamilies: ["chili bean", "Sichuan peppercorn", "fermented", "numbing"],
+  cookingTechniques: ["bloom chili bean paste", "velvet pork", "simmer tofu"],
+  textureTags: ["silky", "tingling"],
+  experienceTags: ["spicy", "saucy_flavorful"],
+  whyItIsInteresting: "Mala chili-bean sauce with silken tofu, not a grilled protein plate.",
+  fitnessAdaptability: "moderate",
+  mealPrepAdaptability: "quick_fresh_finish",
+  estimatedFinishMinutesAfterPrep: 11,
+  noveltyReason: "Sichuan mala stew with a distinct numbing heat.",
+  discoveryConfidence: "high",
+});
+
+export const LAMB_KOFTA = makeRankingCandidate({
+  candidateId: "lamb-kofta",
+  name: "Lamb Kofta with Tahini",
+  source: {
+    name: "Ottolenghi",
+    url: "https://ottolenghi.co.uk/recipes/lamb-kofta",
+    author: "Yotam Ottolenghi",
+  },
+  cuisineFamily: "Middle Eastern",
+  regionalStyle: "Levant",
+  primaryProtein: "Lamb",
+  dishFormat: "grilled kebab",
+  flavorFamilies: ["cumin", "parsley", "tahini", "sumac"],
+  cookingTechniques: ["mix mince", "skewer grill"],
+  textureTags: ["charred", "juicy"],
+  experienceTags: ["smoky", "comforting"],
+  whyItIsInteresting: "Levantine lamb kofta with tahini, not a yogurt-chili tikka marinade.",
+  fitnessAdaptability: "moderate",
+  mealPrepAdaptability: "component_prepped",
+  estimatedFinishMinutesAfterPrep: 10,
+  noveltyReason: "Levantine kebab format with tahini rather than tandoori yogurt.",
+  discoveryConfidence: "high",
+});
+
+export const THAI_GREEN_CURRY = makeRankingCandidate({
+  candidateId: "thai-green-curry",
+  name: "Thai Green Curry with Shrimp",
+  source: {
+    name: "Hot Thai Kitchen",
+    url: "https://hotthaikitchen.example.com/green-curry-shrimp",
+    author: "Pailin",
+  },
+  cuisineFamily: "Thai",
+  regionalStyle: "Central Thai",
+  primaryProtein: "Shrimp",
+  dishFormat: "coconut curry",
+  flavorFamilies: ["green chili", "makrut lime", "coconut", "thai basil"],
+  cookingTechniques: ["fry curry paste", "simmer coconut milk"],
+  textureTags: ["silky", "aromatic"],
+  experienceTags: ["spicy", "saucy_flavorful"],
+  whyItIsInteresting: "Fresh green curry paste bloomed in coconut milk with shrimp.",
+  fitnessAdaptability: "moderate",
+  mealPrepAdaptability: "component_prepped",
+  estimatedFinishMinutesAfterPrep: 8,
+  noveltyReason: "Central Thai curry, not a dry fry or tandoori grill.",
+  discoveryConfidence: "high",
+});
+
+export const JAMAICAN_JERK_CHICKEN = makeRankingCandidate({
+  candidateId: "jamaican-jerk-chicken",
+  name: "Jamaican Jerk Chicken",
+  source: {
+    name: "Food52",
+    url: "https://food52.com/recipes/jamaican-jerk-chicken",
+    author: "Food52",
+  },
+  cuisineFamily: "Caribbean",
+  regionalStyle: "Jamaica",
+  primaryProtein: "Chicken",
+  dishFormat: "jerk grill",
+  flavorFamilies: ["allspice", "scotch bonnet", "thyme", "pimento wood"],
+  cookingTechniques: ["wet jerk marinade", "slow grill"],
+  textureTags: ["charred", "sticky"],
+  experienceTags: ["spicy", "smoky"],
+  whyItIsInteresting: "Pimento-wood jerk heat, not a yogurt-chili tandoori marinade.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "fully_prepped",
+  estimatedFinishMinutesAfterPrep: 6,
+  noveltyReason: "Jamaican jerk profile distinct from Indian tandoori.",
+  discoveryConfidence: "medium",
+});
+
+export const CA_KHO_TO = makeRankingCandidate({
+  candidateId: "ca-kho-to",
+  name: "Vietnamese Cá Kho Tộ",
+  source: {
+    name: "Specialist Viet Kitchen",
+    url: "https://vietcooking.example.com/ca-kho-to",
+    author: "Andrea",
+  },
+  cuisineFamily: "Vietnamese",
+  regionalStyle: "Mekong Delta",
+  primaryProtein: "Fish",
+  dishFormat: "clay-pot caramel fish",
+  flavorFamilies: ["caramel", "fish sauce", "black pepper", "chili"],
+  cookingTechniques: ["make caramel", "clay-pot braise"],
+  textureTags: ["glossy", "flaky"],
+  experienceTags: ["savory", "comforting"],
+  whyItIsInteresting: "Vietnamese caramel clay-pot fish, unrelated to tandoori or blackening.",
+  fitnessAdaptability: "moderate",
+  mealPrepAdaptability: "fully_prepped",
+  estimatedFinishMinutesAfterPrep: 5,
+  noveltyReason: "Mekong caramel-braise technique.",
+  discoveryConfidence: "high",
+});
+
+/** Scenario A — Tikka redundancy plus distinct Indian/Mexican/Cajun dishes. */
 export const SCENARIO_A_TIKKA_REDUNDANCY: CulinaryDiscoveryCandidate[] = [
   CHICKEN_TIKKA,
   PANEER_TIKKA,
@@ -351,6 +519,8 @@ export const SCENARIO_A_TIKKA_REDUNDANCY: CulinaryDiscoveryCandidate[] = [
   ANDHRA_GREEN_CHILLI_CHICKEN,
   KERALA_BEEF_FRY,
   PESCADO_ZARANDEADO,
+  PESCADO_VERACRUZANA,
+  CAJUN_BLACKENED_REDFISH,
 ];
 
 /** Scenario B — fish dishes that should remain culinarily independent. */
@@ -375,4 +545,16 @@ export const SCENARIO_PLAN006_MIX: CulinaryDiscoveryCandidate[] = [
   GRILLED_CHICKEN_BOWL,
   QUICK_FRESH_DINNER,
   FRESH_ONLY_LONG_DINNER,
+];
+
+/** PLAN-006.1 C — 18 candidates, intended for targetPoolSize = 8. */
+export const SCENARIO_C_LARGE_MIXED_POOL: CulinaryDiscoveryCandidate[] = [
+  ...SCENARIO_PLAN006_MIX,
+  TANDOORI_CHICKEN,
+  CHICKEN_SCALOPPINE_AL_LIMONE,
+  MAPO_TOFU,
+  LAMB_KOFTA,
+  THAI_GREEN_CURRY,
+  JAMAICAN_JERK_CHICKEN,
+  CA_KHO_TO,
 ];

@@ -22,6 +22,12 @@ No Gemini call. Ranking is a pure domain function over PLAN-005 metadata.
 
 `candidate-ranking-v1`
 
+PLAN-006.1 validated and hardened this policy without changing weights or thresholds. Heuristic corrections:
+
+- **Culinary interest** no longer saturates at ~0.98 for every well-tagged PLAN-005 candidate. It rewards regional identity, distinctive technique/format, and specific naming rather than tag count or novelty prose.
+- **Standalone novelty** is neutralized at `0.5`. `noveltyReason` is unstructured prose and `discoveryConfidence` measures grounding quality, not culinary newness. Diversity comes from culinary interest, recent-repetition penalties, and pairwise similarity.
+- Stats expose `uniqueFlavorFamilyCount` (unique `flavorFamilies` values among selected candidates), not a canonical “profile” count.
+
 Lunch and dinner only. Breakfast and snacks are out of scope.
 
 Default `targetPoolSize = 12`. This is a target, not a quota. Fewer strong candidates is success; the engine does not pad with weak dishes.
@@ -52,6 +58,18 @@ Absence of a cuisine/protein/experience preference is **neutral**. Unselected cu
 - `SIMILARITY_PENALTY_THRESHOLD` → both may survive; the later pick is penalized
 
 Selection is iterative (maximal marginal relevance style): pick the best remaining candidate, re-score the rest against the selected set, repeat. There are no rigid cuisine or protein quotas.
+
+Inspectable scores:
+
+```text
+baseScore          isolated score (similarityPenalty = 0)
+similarityPenalty  0–1 penalty vs the already-selected pool
+score              effective score after the penalty
+```
+
+Similarity diagnostics include pairs that meet the penalty or near-duplicate threshold, with `classification` `similar` | `near_duplicate` and shared culinary signals. Empty `similarities` means no pair exceeded `0.48` — typical when the input pool is small and already diverse.
+
+Tie-breaking is `higher effective score`, then `candidateId` ascending.
 
 ## Trust model
 

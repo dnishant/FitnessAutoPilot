@@ -71,6 +71,7 @@ describe("candidate ranking contracts", () => {
     const ranked = RankedCulinaryCandidateSchema.parse({
       candidate,
       score: 71.25,
+      baseScore: 71.25,
       scoreBreakdown: {
         userPreferenceFit: 0.8,
         culinaryInterest: 0.7,
@@ -97,7 +98,7 @@ describe("candidate ranking contracts", () => {
         deprioritizedCount: 0,
         uniqueCuisineCount: 1,
         uniqueProteinCount: 1,
-        uniqueFlavorProfileCount: 2,
+        uniqueFlavorFamilyCount: 2,
       },
       policy: {
         version: CANDIDATE_RANKING_POLICY_VERSION,
@@ -107,12 +108,53 @@ describe("candidate ranking contracts", () => {
       },
     });
     expect(result.policy.version).toBe("candidate-ranking-v1");
+    expect(result.stats.uniqueFlavorFamilyCount).toBe(2);
+  });
+
+  it("accepts similarity diagnostics with similar / near_duplicate classification", () => {
+    const result = CandidateRankingResultSchema.parse({
+      selected: [],
+      deprioritized: [],
+      stats: {
+        inputCandidateCount: 0,
+        selectedCandidateCount: 0,
+        duplicateCount: 0,
+        deprioritizedCount: 0,
+        uniqueCuisineCount: 0,
+        uniqueProteinCount: 0,
+        uniqueFlavorFamilyCount: 0,
+      },
+      policy: {
+        version: CANDIDATE_RANKING_POLICY_VERSION,
+        targetPoolSize: 12,
+        nearDuplicateThreshold: 0.78,
+        similarityPenaltyThreshold: 0.48,
+      },
+      similarities: [
+        {
+          candidateAId: "a",
+          candidateBId: "b",
+          score: 0.81,
+          classification: "near_duplicate",
+          signals: {
+            sharedFlavorFamilies: ["tandoori"],
+            sharedTechniques: ["char"],
+            sameDishFormat: true,
+            sameCuisineFamily: true,
+            sameRegionalStyle: true,
+            samePrimaryProtein: false,
+          },
+        },
+      ],
+    });
+    expect(result.similarities?.[0]?.classification).toBe("near_duplicate");
   });
 
   it("rejects invalid score breakdown ranges", () => {
     const parsed = RankedCulinaryCandidateSchema.safeParse({
       candidate,
       score: 10,
+      baseScore: 10,
       scoreBreakdown: {
         userPreferenceFit: 1.5,
         culinaryInterest: 0,

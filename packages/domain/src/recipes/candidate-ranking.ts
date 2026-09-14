@@ -112,8 +112,12 @@ const GENERIC_TECHNIQUE_TAGS = new Set([
   "pan",
 ]);
 const GENERIC_FORMAT_TAGS = new Set(["bowl", "plate", "wrap", "salad", "sandwich"]);
+const GENERIC_TEXTURE_TAGS = new Set(["tender", "soft", "cooked", "moist"]);
 const GENERIC_NAME_RE =
   /^(grilled|baked|roasted|steamed|sauteed|pan[- ]seared)?\s*(chicken|salmon|beef|tofu|shrimp|fish|turkey)?\s*(and\s+\w+)?\s*(bowl|plate|wrap|salad)?$/i;
+
+/** Neutral novelty: PLAN-005 has no structured novelty signal beyond prose. */
+export const NEUTRAL_NOVELTY_SCORE = 0.5;
 
 const ENGLISH_PROTEIN_WORDS = [
   "chicken",
@@ -555,20 +559,37 @@ function isGenericName(name: string): boolean {
   return GENERIC_NAME_RE.test(trimmed) || /^(chicken|salmon|beef|tofu)\s+bowl$/.test(trimmed);
 }
 
-export function scoreCulinaryInterest(candidate: CulinaryDiscoveryCandidate): number {
-  let score = 0.28;
+function dishNameWordCount(name: string): number {
+  return normalizeDishName(name).split(/\s+/).filter(Boolean).length;
+}
+
+function hasSpecificRegionalStyle(candidate: CulinaryDiscoveryCandidate): boolean {
   const regional = candidate.regionalStyle?.trim();
-  if (regional && normalizeRankingToken(regional) !== normalizeRankingToken(candidate.cuisineFamily)) {
-    score += 0.16;
+  if (!regional) {
+    return false;
+  }
+  return normalizeRankingToken(regional) !== normalizeRankingToken(candidate.cuisineFamily);
+}
+
+/**
+ * Deterministic culinary-interest heuristic. Rewards specific identity
+ * (region, distinctive technique/format, specific naming) rather than tag count.
+ * Typical PLAN-005 candidates should land in a useful range, not all at ~0.98.
+ */
+export function scoreCulinaryInterest(candidate: CulinaryDiscoveryCandidate): number {
+  let score = 0.2;
+
+  if (hasSpecificRegionalStyle(candidate)) {
+    score += 0.12;
   }
 
   const distinctiveFlavors = candidate.flavorFamilies.filter(
     (tag) => !GENERIC_FLAVOR_TAGS.has(normalizeRankingToken(tag)),
   );
   if (distinctiveFlavors.length >= 2) {
-    score += 0.12;
+    score += 0.1;
   } else if (distinctiveFlavors.length === 1) {
-    score += 0.05;
+    score += 0.04;
   }
 
   const distinctiveTechniques = candidate.cookingTechniques.filter(
@@ -576,37 +597,44 @@ export function scoreCulinaryInterest(candidate: CulinaryDiscoveryCandidate): nu
   );
   if (distinctiveTechniques.length >= 1) {
     score += 0.1;
+  } else if (candidate.cookingTechniques.length >= 1) {
+    score += 0.03;
   }
 
-  const distinctiveTextures = candidate.textureTags.filter(
-    (tag) => normalizeRankingToken(tag).length > 0,
-  );
+  const distinctiveTextures = candidate.textureTags.filter((tag) => {
+    const token = normalizeRankingToken(tag);
+    return token.length > 0 && !GENERIC_TEXTURE_TAGS.has(token);
+  });
   if (distinctiveTextures.length >= 1) {
-    score += 0.07;
+    score += 0.06;
+  } else if (candidate.textureTags.length >= 1) {
+    score += 0.02;
   }
 
   const formatToken = normalizeRankingToken(candidate.dishFormat);
   if (formatToken && !GENERIC_FORMAT_TAGS.has(formatToken)) {
     score += 0.08;
+  } else if (formatToken) {
+    score += 0.02;
   }
 
   if (isGenericName(candidate.name)) {
-    score -= 0.08;
-  } else if (candidate.name.trim().split(/\s+/).length >= 3) {
-    score += 0.12;
+    score -= 0.14;
   } else {
-    score += 0.04;
-  }
-
-  const novelty = candidate.noveltyReason.toLowerCase();
-  if (/(regional|distinct|uncommon|specialist|identity|less common)/.test(novelty)) {
-    score += 0.08;
+    const words = dishNameWordCount(candidate.name);
+    if (words >= 4) {
+      score += 0.12;
+    } else if (words === 3) {
+      score += 0.08;
+    } else if (words === 2) {
+      score += 0.05;
+    }
   }
 
   if (candidate.discoveryConfidence === "high") {
-    score += 0.05;
+    score += 0.03;
   } else if (candidate.discoveryConfidence === "low") {
-    score -= 0.04;
+    score -= 0.06;
   }
 
   return roundScore(clamp01(score));
@@ -720,21 +748,14 @@ export function scoreFitnessAdaptability(
   }
 }
 
-export function scoreNovelty(candidate: CulinaryDiscoveryCandidate): number {
-  let score = 0.45;
-  if (candidate.discoveryConfidence === "high") {
-    score += 0.22;
-  } else if (candidate.discoveryConfidence === "medium") {
-    score += 0.1;
-  }
-  const reason = candidate.noveltyReason.toLowerCase();
-  if (/(regional|distinct|uncommon|specialist|identity|less common)/.test(reason)) {
-    score += 0.2;
-  }
-  if (isGenericName(candidate.name)) {
-    score -= 0.18;
-  }
-  return roundScore(clamp01(score));
+/**
+ * Standalone novelty is neutralized for candidate-ranking-v1.
+ * `noveltyReason` is unstructured prose and `discoveryConfidence` measures
+ * grounding quality, not culinary newness. Diversity comes from culinary
+ * interest, recent-repetition penalties, and pairwise similarity.
+ */
+export function scoreNovelty(_candidate: CulinaryDiscoveryCandidate): number {
+  return NEUTRAL_NOVELTY_SCORE;
 }
 
 export function recencyDecayFactor(lastSuggestedDaysAgo: number | undefined): number {
@@ -809,12 +830,29 @@ export function scoreRepetitionPenalty(
   return best;
 }
 
+export function classifyCulinarySimilarity(
+  score: number,
+): CandidateSimilarity["classification"] {
+  if (score >= NEAR_DUPLICATE_THRESHOLD) {
+    return "near_duplicate";
+  }
+  if (score >= SIMILARITY_PENALTY_THRESHOLD) {
+    return "similar";
+  }
+  return undefined;
+}
+
+function withSimilarityClassification(similarity: CandidateSimilarity): CandidateSimilarity {
+  const classification = classifyCulinarySimilarity(similarity.score);
+  return classification ? { ...similarity, classification } : similarity;
+}
+
 export function computeCandidateSimilarity(
   candidateA: CulinaryDiscoveryCandidate,
   candidateB: CulinaryDiscoveryCandidate,
 ): CandidateSimilarity {
   if (candidateA.candidateId === candidateB.candidateId) {
-    return {
+    return withSimilarityClassification({
       candidateAId: candidateA.candidateId,
       candidateBId: candidateB.candidateId,
       score: 1,
@@ -827,11 +865,11 @@ export function computeCandidateSimilarity(
         samePrimaryProtein: Boolean(candidateA.primaryProtein),
         sameCanonicalDish: true,
       },
-    };
+    });
   }
 
   if (normalizeDishName(candidateA.name) === normalizeDishName(candidateB.name)) {
-    return {
+    return withSimilarityClassification({
       candidateAId: candidateA.candidateId,
       candidateBId: candidateB.candidateId,
       score: 1,
@@ -844,7 +882,7 @@ export function computeCandidateSimilarity(
         samePrimaryProtein: sameNormalized(candidateA.primaryProtein, candidateB.primaryProtein),
         sameCanonicalDish: true,
       },
-    };
+    });
   }
 
   const sharedFlavorFamilies = sharedNormalized(candidateA.flavorFamilies, candidateB.flavorFamilies);
@@ -872,7 +910,7 @@ export function computeCandidateSimilarity(
     CULINARY_SIMILARITY_WEIGHTS.experienceTags * jaccard(candidateA.experienceTags, candidateB.experienceTags) +
     CULINARY_SIMILARITY_WEIGHTS.primaryProtein * (samePrimaryProtein ? 1 : 0);
 
-  return {
+  return withSimilarityClassification({
     candidateAId: candidateA.candidateId,
     candidateBId: candidateB.candidateId,
     score: roundScore(clamp01(weighted)),
@@ -885,7 +923,7 @@ export function computeCandidateSimilarity(
       samePrimaryProtein,
       sameCanonicalDish,
     },
-  };
+  });
 }
 
 export function similarityPenaltyFromScore(maxSimilarity: number): number {
@@ -914,6 +952,22 @@ export function composeRankingScore(breakdown: RankingScoreBreakdown): number {
     weights.repetitionPenalty * breakdown.repetitionPenalty +
     weights.similarityPenalty * breakdown.similarityPenalty;
   return roundScore((positive - negative) * 100, 2);
+}
+
+export function inspectableRankingScores(breakdown: RankingScoreBreakdown): {
+  baseScore: number;
+  effectiveScore: number;
+  similarityPenalty: number;
+  similarityDelta: number;
+} {
+  const baseScore = composeRankingScore({ ...breakdown, similarityPenalty: 0 });
+  const effectiveScore = composeRankingScore(breakdown);
+  return {
+    baseScore,
+    effectiveScore,
+    similarityPenalty: breakdown.similarityPenalty,
+    similarityDelta: roundScore(baseScore - effectiveScore, 2),
+  };
 }
 
 export type BaseCandidateScore = {
@@ -1089,7 +1143,28 @@ export function deriveCandidateRankingStats(
     deprioritizedCount: deprioritized.filter((item) => item.decision === "deprioritized").length,
     uniqueCuisineCount: uniqueCount(selected.map((item) => item.candidate.cuisineFamily)),
     uniqueProteinCount: uniqueCount(selected.map((item) => item.candidate.primaryProtein)),
-    uniqueFlavorProfileCount: uniqueCount(flavorTags),
+    uniqueFlavorFamilyCount: uniqueCount(flavorTags),
+  };
+}
+
+function toRankedCandidate(input: {
+  candidate: CulinaryDiscoveryCandidate;
+  breakdown: RankingScoreBreakdown;
+  decision: RankedCulinaryCandidate["decision"];
+  rank: number;
+  reasons: string[];
+  similarToCandidateIds?: string[];
+}): RankedCulinaryCandidate {
+  const scores = inspectableRankingScores(input.breakdown);
+  return {
+    candidate: input.candidate,
+    score: scores.effectiveScore,
+    baseScore: scores.baseScore,
+    scoreBreakdown: input.breakdown,
+    rank: input.rank,
+    decision: input.decision,
+    reasons: input.reasons,
+    similarToCandidateIds: input.similarToCandidateIds,
   };
 }
 
@@ -1180,24 +1255,25 @@ export function rankCulinaryCandidates(
       const similarNames = item.similarToCandidateIds
         .map((id) => selected.find((row) => row.candidate.candidateId === id)?.candidate.name)
         .filter((name): name is string => Boolean(name));
-      duplicates.push({
-        candidate: item.base.candidate,
-        score: item.score,
-        scoreBreakdown: item.breakdown,
-        rank: 0,
-        decision: "duplicate",
-        reasons: buildRankingReasons({
+      duplicates.push(
+        toRankedCandidate({
           candidate: item.base.candidate,
           breakdown: item.breakdown,
-          preference: item.base.preference,
-          source: item.base.source,
-          repetition: item.base.repetition,
+          rank: 0,
           decision: "duplicate",
-          similarToNames: similarNames,
-          cookingPreferences: request.cookingPreferences,
+          reasons: buildRankingReasons({
+            candidate: item.base.candidate,
+            breakdown: item.breakdown,
+            preference: item.base.preference,
+            source: item.base.source,
+            repetition: item.base.repetition,
+            decision: "duplicate",
+            similarToNames: similarNames,
+            cookingPreferences: request.cookingPreferences,
+          }),
+          similarToCandidateIds: item.similarToCandidateIds,
         }),
-        similarToCandidateIds: item.similarToCandidateIds,
-      });
+      );
       const index = remaining.findIndex((row) => row.candidate.candidateId === item.base.candidate.candidateId);
       if (index >= 0) {
         remaining.splice(index, 1);
@@ -1213,24 +1289,25 @@ export function rankCulinaryCandidates(
     const similarNames = pick.similarToCandidateIds
       .map((id) => selected.find((row) => row.candidate.candidateId === id)?.candidate.name)
       .filter((name): name is string => Boolean(name));
-    selected.push({
-      candidate: pick.base.candidate,
-      score: pick.score,
-      scoreBreakdown: pick.breakdown,
-      rank: selected.length + 1,
-      decision: "selected",
-      reasons: buildRankingReasons({
+    selected.push(
+      toRankedCandidate({
         candidate: pick.base.candidate,
         breakdown: pick.breakdown,
-        preference: pick.base.preference,
-        source: pick.base.source,
-        repetition: pick.base.repetition,
+        rank: selected.length + 1,
         decision: "selected",
-        similarToNames: similarNames,
-        cookingPreferences: request.cookingPreferences,
+        reasons: buildRankingReasons({
+          candidate: pick.base.candidate,
+          breakdown: pick.breakdown,
+          preference: pick.base.preference,
+          source: pick.base.source,
+          repetition: pick.base.repetition,
+          decision: "selected",
+          similarToNames: similarNames,
+          cookingPreferences: request.cookingPreferences,
+        }),
+        similarToCandidateIds: pick.similarToCandidateIds.length > 0 ? pick.similarToCandidateIds : undefined,
       }),
-      similarToCandidateIds: pick.similarToCandidateIds.length > 0 ? pick.similarToCandidateIds : undefined,
-    });
+    );
     const remainingIndex = remaining.findIndex(
       (row) => row.candidate.candidateId === pick.base.candidate.candidateId,
     );
@@ -1258,12 +1335,11 @@ export function rankCulinaryCandidates(
     const similarNames = similarTo
       .map((id) => selected.find((row) => row.candidate.candidateId === id)?.candidate.name)
       .filter((name): name is string => Boolean(name));
-    return {
+    return toRankedCandidate({
       candidate: base.candidate,
-      score: composeRankingScore(breakdown),
-      scoreBreakdown: breakdown,
+      breakdown,
       rank: 0,
-      decision: "deprioritized" as const,
+      decision: "deprioritized",
       reasons: buildRankingReasons({
         candidate: base.candidate,
         breakdown,
@@ -1275,7 +1351,7 @@ export function rankCulinaryCandidates(
         cookingPreferences: request.cookingPreferences,
       }),
       similarToCandidateIds: similarTo.length > 0 ? similarTo : undefined,
-    };
+    });
   });
 
   const deprioritized = [...duplicates, ...deprioritizedCore].sort(compareByScoreThenId);
@@ -1300,10 +1376,17 @@ export function rankCulinaryCandidates(
         continue;
       }
       seenPairs.add(key);
-      notableSimilarities.push(similarity);
+      notableSimilarities.push(withSimilarityClassification(similarity));
     }
   }
-  notableSimilarities.sort((a, b) => b.score - a.score);
+  notableSimilarities.sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    return similarityKey(a.candidateAId, a.candidateBId).localeCompare(
+      similarityKey(b.candidateAId, b.candidateBId),
+    );
+  });
 
   const result: CandidateRankingResult = {
     selected,
@@ -1327,6 +1410,24 @@ export function rankCulinaryCandidates(
 
 export function rankingPolicyVersion(): typeof CANDIDATE_RANKING_POLICY_VERSION {
   return CANDIDATE_RANKING_POLICY_VERSION;
+}
+
+export function strongestSimilarityDiagnostic(
+  similarities: readonly CandidateSimilarity[] | undefined,
+  candidateId: string,
+): CandidateSimilarity | undefined {
+  const matches = (similarities ?? []).filter(
+    (item) => item.candidateAId === candidateId || item.candidateBId === candidateId,
+  );
+  if (matches.length === 0) {
+    return undefined;
+  }
+  return [...matches].sort((a, b) => {
+    if (b.score !== a.score) {
+      return b.score - a.score;
+    }
+    return `${a.candidateAId}::${a.candidateBId}`.localeCompare(`${b.candidateAId}::${b.candidateBId}`);
+  })[0];
 }
 
 export function proteinSimilarityWeightIsLow(): boolean {

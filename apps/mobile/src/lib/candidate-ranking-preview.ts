@@ -9,6 +9,7 @@ import type {
   CulinaryDiscoveryResult,
   MealPreferences,
   RankCulinaryCandidatesResponse,
+  RankedCulinaryCandidate,
   RankingDecision,
 } from "@fitness-autopilot/contracts";
 import {
@@ -16,9 +17,12 @@ import {
   DEFAULT_TARGET_POOL_SIZE,
   NEAR_DUPLICATE_THRESHOLD,
   SIMILARITY_PENALTY_THRESHOLD,
+  inspectableRankingScores,
   rankCulinaryCandidates,
+  strongestSimilarityDiagnostic,
   SCENARIO_A_TIKKA_REDUNDANCY,
   SCENARIO_B_FISH_DIVERSITY,
+  SCENARIO_C_LARGE_MIXED_POOL,
   SCENARIO_PLAN006_MIX,
   FRESH_ONLY_LONG_DINNER,
   QUICK_FRESH_DINNER,
@@ -59,6 +63,8 @@ export type CandidateRankingPreviewSessionInput = {
   cookingPreferences: CookingPreferences | null;
 };
 
+export type CandidateRankingValidationFixtureId = "real" | "tikka" | "fish" | "mixed";
+
 export type CandidateRankingFormState = {
   mealType: CandidateRankingMealType;
   targetPoolSizeText: string;
@@ -68,6 +74,7 @@ export type CandidateRankingFormState = {
   proteinsText: string;
   experiencesText: string;
   dislikesText: string;
+  validationFixtureId: CandidateRankingValidationFixtureId;
 };
 
 export type CandidateRankingPreviewUiState = {
@@ -110,6 +117,7 @@ export function createCandidateRankingFormFromSession(
       ? meal.experiencePreferences.join(", ")
       : "",
     dislikesText: meal?.dislikes.join(", ") ?? "",
+    validationFixtureId: "real",
   };
 }
 
@@ -350,13 +358,79 @@ export function buildRankingDiagnosticsRows(
     { label: "Deprioritized count", value: String(result.stats.deprioritizedCount) },
     { label: "Unique cuisines", value: String(result.stats.uniqueCuisineCount) },
     { label: "Unique proteins", value: String(result.stats.uniqueProteinCount) },
-    { label: "Unique flavor profiles", value: String(result.stats.uniqueFlavorProfileCount) },
+    { label: "Unique flavor families", value: String(result.stats.uniqueFlavorFamilyCount) },
     { label: "Target pool size", value: String(result.policy.targetPoolSize) },
     { label: "Near-duplicate threshold", value: String(result.policy.nearDuplicateThreshold) },
     { label: "Similarity penalty threshold", value: String(result.policy.similarityPenaltyThreshold) },
+    { label: "Similarity pair count", value: String(result.similarities?.length ?? 0) },
+    {
+      label: "Near-duplicate pair count",
+      value: String(
+        (result.similarities ?? []).filter((item) => item.classification === "near_duplicate")
+          .length,
+      ),
+    },
     { label: "Request ID", value: meta?.requestId ?? "(local)" },
     { label: "Duration", value: `${meta?.durationMs ?? "—"} ms` },
   ];
+}
+
+export function formatBaseVsEffectiveScore(item: RankedCulinaryCandidate): string {
+  const inspectable = inspectableRankingScores(item.scoreBreakdown);
+  const penalty = inspectable.similarityDelta;
+  return [
+    `Base score: ${inspectable.baseScore.toFixed(1)}`,
+    `Similarity: ${penalty > 0 ? `-${penalty.toFixed(1)}` : "0.0"}`,
+    `Final score: ${inspectable.effectiveScore.toFixed(1)}`,
+  ].join("\n");
+}
+
+export function formatSimilaritySignals(
+  item: NonNullable<CandidateRankingResult["similarities"]>[number],
+): string {
+  const signals = item.signals;
+  const parts = [
+    signals.sharedFlavorFamilies.length > 0
+      ? `flavors ${signals.sharedFlavorFamilies.join(", ")}`
+      : null,
+    signals.sharedTechniques.length > 0
+      ? `techniques ${signals.sharedTechniques.join(", ")}`
+      : null,
+    signals.sameDishFormat ? "same dish format" : null,
+    signals.sameCuisineFamily ? "same cuisine family" : null,
+    signals.sameRegionalStyle ? "same regional style" : null,
+    signals.samePrimaryProtein ? "same primary protein" : null,
+  ].filter((part): part is string => Boolean(part));
+  return parts.length > 0 ? parts.join(" · ") : "no shared culinary signals";
+}
+
+export function describeRankingPenalty(
+  item: RankedCulinaryCandidate,
+  result: CandidateRankingResult,
+): string | null {
+  if (item.scoreBreakdown.similarityPenalty <= 0 && item.decision !== "duplicate") {
+    return null;
+  }
+  const diagnostic = strongestSimilarityDiagnostic(result.similarities, item.candidate.candidateId);
+  const partnerId =
+    diagnostic == null
+      ? item.similarToCandidateIds?.[0]
+      : diagnostic.candidateAId === item.candidate.candidateId
+        ? diagnostic.candidateBId
+        : diagnostic.candidateAId;
+  if (!partnerId) {
+    return null;
+  }
+  const partner = [...result.selected, ...result.deprioritized].find(
+    (row) => row.candidate.candidateId === partnerId,
+  );
+  const name = partner?.candidate.name ?? partnerId;
+  const classification =
+    diagnostic?.classification ?? (item.decision === "duplicate" ? "near_duplicate" : "similar");
+  const scoreLabel = diagnostic != null ? diagnostic.score.toFixed(2) : "—";
+  const signalLabel = diagnostic ? `\nShared: ${formatSimilaritySignals(diagnostic)}` : "";
+  const prefix = classification === "near_duplicate" ? "Near-duplicate of" : "Highly similar to";
+  return `${prefix} selected ${name}\nSimilarity: ${scoreLabel} (${classification.replace("_", " ")})${signalLabel}`;
 }
 
 export function formatScoreBreakdown(
@@ -554,6 +628,72 @@ export const RANKING_RECENT_CONCEPTS_SAMPLE = JSON.stringify(
   2,
 );
 
+export const CANDIDATE_RANKING_VALIDATION_FIXTURES = [
+  {
+    id: "real" as const,
+    label: "Real discovery candidates",
+  },
+  {
+    id: "tikka" as const,
+    label: "Tikka redundancy test",
+    patch: {
+      mealType: "dinner" as CandidateRankingMealType,
+      candidatesJson: JSON.stringify(SCENARIO_A_TIKKA_REDUNDANCY, null, 2),
+      targetPoolSizeText: "6",
+      validationFixtureId: "tikka" as const,
+    },
+  },
+  {
+    id: "fish" as const,
+    label: "Fish diversity test",
+    patch: {
+      mealType: "dinner" as CandidateRankingMealType,
+      candidatesJson: JSON.stringify(SCENARIO_B_FISH_DIVERSITY, null, 2),
+      targetPoolSizeText: "4",
+      validationFixtureId: "fish" as const,
+    },
+  },
+  {
+    id: "mixed" as const,
+    label: "Large mixed pool test",
+    patch: {
+      mealType: "dinner" as CandidateRankingMealType,
+      candidatesJson: JSON.stringify(SCENARIO_C_LARGE_MIXED_POOL, null, 2),
+      targetPoolSizeText: "8",
+      validationFixtureId: "mixed" as const,
+    },
+  },
+] as const;
+
+export function applyValidationFixture(
+  state: CandidateRankingPreviewUiState,
+  fixtureId: CandidateRankingValidationFixtureId,
+): CandidateRankingPreviewUiState {
+  if (fixtureId === "real") {
+    return {
+      ...state,
+      form: {
+        ...state.form,
+        validationFixtureId: "real",
+        candidatesJson: state.lastDiscovery
+          ? JSON.stringify(state.lastDiscovery.candidates, null, 2)
+          : state.form.candidatesJson,
+      },
+    };
+  }
+  const fixture = CANDIDATE_RANKING_VALIDATION_FIXTURES.find((item) => item.id === fixtureId);
+  if (!fixture || !("patch" in fixture)) {
+    return state;
+  }
+  return {
+    ...state,
+    form: {
+      ...state.form,
+      ...fixture.patch,
+    },
+  };
+}
+
 export const CANDIDATE_RANKING_QA_PRESETS = [
   {
     id: "A",
@@ -562,6 +702,7 @@ export const CANDIDATE_RANKING_QA_PRESETS = [
       mealType: "dinner" as CandidateRankingMealType,
       candidatesJson: JSON.stringify(SCENARIO_A_TIKKA_REDUNDANCY, null, 2),
       targetPoolSizeText: "6",
+      validationFixtureId: "tikka" as const,
     },
   },
   {
@@ -571,17 +712,19 @@ export const CANDIDATE_RANKING_QA_PRESETS = [
       mealType: "dinner" as CandidateRankingMealType,
       candidatesJson: JSON.stringify(SCENARIO_B_FISH_DIVERSITY, null, 2),
       targetPoolSizeText: "4",
+      validationFixtureId: "fish" as const,
     },
   },
   {
     id: "C",
-    label: "C · Indian/Mexican + spicy/saucy",
+    label: "C · Large mixed pool",
     patch: {
       mealType: "dinner" as CandidateRankingMealType,
-      candidatesJson: JSON.stringify(SCENARIO_PLAN006_MIX, null, 2),
+      candidatesJson: JSON.stringify(SCENARIO_C_LARGE_MIXED_POOL, null, 2),
       cuisinesText: "Indian, Mexican",
       experiencesText: "spicy, saucy_flavorful, crispy_textured",
       targetPoolSizeText: "8",
+      validationFixtureId: "mixed" as const,
     },
   },
   {

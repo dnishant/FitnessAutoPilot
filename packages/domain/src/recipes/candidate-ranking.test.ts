@@ -28,6 +28,7 @@ import {
   CULINARY_SIMILARITY_WEIGHTS,
   DEFAULT_TARGET_POOL_SIZE,
   NEAR_DUPLICATE_THRESHOLD,
+  NEUTRAL_NOVELTY_SCORE,
   SIMILARITY_PENALTY_THRESHOLD,
   SOURCE_QUALITY_SCORES,
   canonicalDishKey,
@@ -538,10 +539,10 @@ describe("iterative ranking", () => {
     expect(ranked.ok).toBe(true);
     if (!ranked.ok) return;
     expect(ranked.value.policy.version).toBe("candidate-ranking-v1");
-    expect(ranked.value.stats.inputCandidateCount).toBe(6);
+    expect(ranked.value.stats.inputCandidateCount).toBe(8);
     expect(
       ranked.value.stats.selectedCandidateCount + ranked.value.deprioritized.length,
-    ).toBe(6);
+    ).toBe(8);
     expect(
       ranked.value.stats.duplicateCount + ranked.value.stats.deprioritizedCount,
     ).toBe(ranked.value.deprioritized.length);
@@ -577,8 +578,10 @@ describe("iterative ranking", () => {
 });
 
 describe("novelty and composed score", () => {
-  it("gives generic dishes a weaker novelty signal", () => {
-    expect(scoreNovelty(GRILLED_CHICKEN_BOWL)).toBeLessThan(scoreNovelty(KERALA_MEEN_POLLICHATHU));
+  it("neutralizes standalone novelty instead of inventing a prose-derived score", () => {
+    expect(scoreNovelty(GRILLED_CHICKEN_BOWL)).toBe(NEUTRAL_NOVELTY_SCORE);
+    expect(scoreNovelty(KERALA_MEEN_POLLICHATHU)).toBe(NEUTRAL_NOVELTY_SCORE);
+    expect(scoreNovelty(CHICKEN_TIKKA)).toBe(NEUTRAL_NOVELTY_SCORE);
   });
 
   it("composes score from centralized weights", () => {

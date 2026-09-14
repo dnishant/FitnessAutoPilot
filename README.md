@@ -89,7 +89,7 @@ Hosted Edge Functions allow only ~2s CPU / 256MB. Search-grounded Gemini payload
 
 Deterministic ranking + culinary deduplication. No Gemini call.
 
-Hosted Candidate Ranking Preview: `/candidate-ranking-preview` (`Dev: Candidate Ranking` on Today). The preview ranks **in-process** with `candidate-ranking-v1` (no Gemini, no Edge Function, no CORS). Optional hosted endpoint:
+Hosted Candidate Ranking Preview: `/candidate-ranking-preview` (`Dev: Candidate Ranking` on Today). The preview ranks **in-process** with `candidate-ranking-v1` (no Gemini, no Edge Function, no CORS). Validation fixtures (Tikka redundancy, fish diversity, large mixed pool) can be ranked without discovery. Optional hosted endpoint:
 
 ```bash
 pnpm sync:edge
