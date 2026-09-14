@@ -16,8 +16,10 @@ import {
   CANDIDATE_RANKING_PREVIEW_LOADING,
   CANDIDATE_RANKING_PREVIEW_TITLE,
   CANDIDATE_RANKING_QA_PRESETS,
+  CANDIDATE_RANKING_VALIDATION_FIXTURES,
   RANKING_RECENT_CONCEPTS_SAMPLE,
   applyDiscoveryCandidates,
+  applyValidationFixture,
   beginCandidateRanking,
   buildDiscoveryRequestFromRankingForm,
   buildRankingContextRows,
@@ -25,7 +27,9 @@ import {
   buildCandidateRankingRequest,
   canStartCandidateRanking,
   createCandidateRankingPreviewUiState,
+  describeRankingPenalty,
   failCandidateRanking,
+  formatBaseVsEffectiveScore,
   formatScoreBreakdown,
   rankingDecisionLabel,
   similarityScoreFor,
@@ -90,6 +94,7 @@ function RankedCard(props: {
       </Text>
       <Text style={styles.candidateMeta}>
         {rankingDecisionLabel(item.decision)} · score {item.score.toFixed(2)}
+        {`\n${formatBaseVsEffectiveScore(item)}`}
         {`\nCuisine · ${c.cuisineFamily}`}
         {c.regionalStyle ? `\nRegion · ${c.regionalStyle}` : ""}
         {c.primaryProtein ? `\nProtein · ${c.primaryProtein}` : ""}
@@ -121,6 +126,9 @@ function RankedCard(props: {
       ))}
       {similarNames.length > 0 ? (
         <Text style={styles.candidateLine}>Similar to · {similarNames.join(" · ")}</Text>
+      ) : null}
+      {describeRankingPenalty(item, result) ? (
+        <Text style={styles.candidateReason}>{describeRankingPenalty(item, result)}</Text>
       ) : null}
     </View>
   );
@@ -350,6 +358,27 @@ export default function CandidateRankingPreviewScreen() {
         <Text style={styles.secondaryButtonText}>Load recent tikka sample</Text>
       </Pressable>
 
+      <Text style={styles.sectionHeading}>Validation fixtures</Text>
+      <Text style={styles.hint}>
+        Controlled ranking tests. Fixture ranking never calls Gemini.
+      </Text>
+      <View style={styles.presetWrap}>
+        {CANDIDATE_RANKING_VALIDATION_FIXTURES.map((fixture) => {
+          const selected = state.form.validationFixtureId === fixture.id;
+          return (
+            <Pressable
+              key={fixture.id}
+              style={[styles.presetChip, selected && styles.chipSelected]}
+              onPress={() => setState((prev) => applyValidationFixture(prev, fixture.id))}
+            >
+              <Text style={[styles.presetChipText, selected && styles.chipTextSelected]}>
+                {fixture.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
       <Text style={styles.sectionHeading}>QA presets</Text>
       <View style={styles.presetWrap}>
         {CANDIDATE_RANKING_QA_PRESETS.map((preset) => (
@@ -430,6 +459,24 @@ export default function CandidateRankingPreviewScreen() {
             onToggle={() => setState((prev) => ({ ...prev, detailsOpen: !prev.detailsOpen }))}
           >
             <KeyValueRows rows={buildRankingDiagnosticsRows(state.result, state.meta)} />
+            {(state.result.similarities ?? []).length > 0 ? (
+              <>
+                <Text style={styles.rawHeading}>Similarity pairs</Text>
+                {state.result.similarities!.map((pair) => (
+                  <Text
+                    key={`${pair.candidateAId}::${pair.candidateBId}`}
+                    style={styles.candidateLine}
+                  >
+                    {pair.candidateAId} ↔ {pair.candidateBId} · {pair.score.toFixed(2)} ·{" "}
+                    {(pair.classification ?? "similar").replace("_", " ")}
+                  </Text>
+                ))}
+              </>
+            ) : (
+              <Text style={styles.candidateReason}>
+                No pairs exceeded the similarity penalty threshold.
+              </Text>
+            )}
             <Text style={styles.rawHeading}>Raw ranking JSON</Text>
             <Text style={styles.rawBlock}>{JSON.stringify(state.result, null, 2)}</Text>
           </CollapsibleSection>

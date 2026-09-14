@@ -9,11 +9,16 @@ import {
   CANDIDATE_RANKING_PREVIEW_ROUTE,
   CANDIDATE_RANKING_PREVIEW_TITLE,
   CANDIDATE_RANKING_QA_PRESETS,
+  CANDIDATE_RANKING_VALIDATION_FIXTURES,
+  applyValidationFixture,
   beginCandidateRanking,
   buildCandidateRankingRequest,
+  buildRankingDiagnosticsRows,
   canStartCandidateRanking,
   createCandidateRankingPreviewUiState,
+  describeRankingPenalty,
   failCandidateRanking,
+  formatBaseVsEffectiveScore,
   humanizeCandidateRankingError,
   invokeCandidateRanking,
   parseCandidateRankingFailure,
@@ -30,6 +35,7 @@ const sampleResult: CandidateRankingResult = {
     {
       candidate: CHICKEN_TIKKA,
       score: 70,
+      baseScore: 70,
       scoreBreakdown: {
         userPreferenceFit: 0.5,
         culinaryInterest: 0.8,
@@ -49,6 +55,7 @@ const sampleResult: CandidateRankingResult = {
     {
       candidate: PANEER_TIKKA,
       score: 40,
+      baseScore: 70,
       scoreBreakdown: {
         userPreferenceFit: 0.5,
         culinaryInterest: 0.8,
@@ -72,7 +79,7 @@ const sampleResult: CandidateRankingResult = {
     deprioritizedCount: 0,
     uniqueCuisineCount: 1,
     uniqueProteinCount: 1,
-    uniqueFlavorProfileCount: 3,
+    uniqueFlavorFamilyCount: 3,
   },
   policy: {
     version: "candidate-ranking-v1",
@@ -90,6 +97,7 @@ describe("candidate ranking preview", () => {
     expect(screen).toContain("CANDIDATE_RANKING_PREVIEW_TITLE");
     expect(screen).toContain("Rank Candidates");
     expect(screen).toContain("Discover then Rank");
+    expect(screen).toContain("Validation fixtures");
     expect(CANDIDATE_RANKING_PREVIEW_TITLE).toBe("Dev: Candidate Ranking");
     expect(layout).toContain("candidate-ranking-preview");
     expect(today).toContain("/candidate-ranking-preview");
@@ -172,7 +180,13 @@ describe("candidate ranking preview", () => {
     expect(state.status).toBe("error");
   });
 
-  it("includes QA presets for the PLAN-006 manual scenarios", () => {
+  it("includes validation fixtures and QA presets", () => {
+    expect(CANDIDATE_RANKING_VALIDATION_FIXTURES.map((fixture) => fixture.id)).toEqual([
+      "real",
+      "tikka",
+      "fish",
+      "mixed",
+    ]);
     expect(CANDIDATE_RANKING_QA_PRESETS.map((preset) => preset.id)).toEqual([
       "A",
       "B",
@@ -180,6 +194,32 @@ describe("candidate ranking preview", () => {
       "D",
       "E",
     ]);
+    const state = createCandidateRankingPreviewUiState();
+    const tikka = applyValidationFixture(state, "tikka");
+    expect(tikka.form.validationFixtureId).toBe("tikka");
+    expect(tikka.form.targetPoolSizeText).toBe("6");
+    const mixed = applyValidationFixture(state, "mixed");
+    expect(mixed.form.targetPoolSizeText).toBe("8");
+    expect(JSON.parse(mixed.form.candidatesJson).length).toBeGreaterThanOrEqual(15);
+  });
+
+  it("exposes base vs effective scores and similarity diagnostics from local ranking", () => {
+    const ranked = rankCulinaryCandidatesLocally({
+      mealType: "dinner",
+      candidates: [CHICKEN_TIKKA, PANEER_TIKKA],
+      userPreferences: {},
+      targetPoolSize: 2,
+    });
+    expect(ranked.ok).toBe(true);
+    if (!ranked.ok) return;
+    const rows = buildRankingDiagnosticsRows(ranked.result, ranked.meta);
+    expect(rows.some((row) => row.label === "Unique flavor families")).toBe(true);
+    expect(rows.some((row) => row.label === "Similarity pair count")).toBe(true);
+    const duplicate = ranked.result.deprioritized.find((item) => item.decision === "duplicate");
+    expect(duplicate).toBeDefined();
+    expect(formatBaseVsEffectiveScore(duplicate!)).toContain("Base score:");
+    expect(formatBaseVsEffectiveScore(duplicate!)).toContain("Final score:");
+    expect(describeRankingPenalty(duplicate!, ranked.result)).toContain("Chicken Tikka");
   });
 
   it("keeps Gemini off the ranking client path", () => {

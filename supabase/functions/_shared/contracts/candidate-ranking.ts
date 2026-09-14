@@ -44,9 +44,14 @@ export const RankingScoreBreakdownSchema = z.object({
   similarityPenalty: z.number().min(0).max(1),
 });
 
+export const SimilarityClassificationSchema = z.enum(["similar", "near_duplicate"]);
+
 export const RankedCulinaryCandidateSchema = z.object({
   candidate: CulinaryDiscoveryCandidateSchema,
+  /** Effective score after similarity penalty (0–100 scale). */
   score: z.number(),
+  /** Isolated score before similarity against the selected pool. */
+  baseScore: z.number(),
   scoreBreakdown: RankingScoreBreakdownSchema,
   rank: z.number().int().positive(),
   decision: RankingDecisionSchema,
@@ -68,6 +73,7 @@ export const CandidateSimilaritySchema = z.object({
   candidateAId: z.string().trim().min(1).max(80),
   candidateBId: z.string().trim().min(1).max(80),
   score: z.number().min(0).max(1),
+  classification: SimilarityClassificationSchema.optional(),
   signals: CandidateSimilaritySignalsSchema,
 });
 
@@ -85,7 +91,7 @@ export const CandidateRankingStatsSchema = z.object({
   deprioritizedCount: z.number().int().nonnegative(),
   uniqueCuisineCount: z.number().int().nonnegative(),
   uniqueProteinCount: z.number().int().nonnegative(),
-  uniqueFlavorProfileCount: z.number().int().nonnegative(),
+  uniqueFlavorFamilyCount: z.number().int().nonnegative(),
 });
 
 export const CandidateRankingResultSchema = z.object({
@@ -111,6 +117,7 @@ export const RankCulinaryCandidatesResponseSchema = z.object({
 
 export type CandidateRankingMealType = z.infer<typeof CandidateRankingMealTypeSchema>;
 export type RankingDecision = z.infer<typeof RankingDecisionSchema>;
+export type SimilarityClassification = z.infer<typeof SimilarityClassificationSchema>;
 export type CandidateRankingUserPreferences = z.infer<
   typeof CandidateRankingUserPreferencesSchema
 >;
