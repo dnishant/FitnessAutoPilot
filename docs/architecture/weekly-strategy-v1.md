@@ -30,7 +30,7 @@ It does **not** resolve recipes, calculate authoritative nutrition, or invent un
 
 - Input: `RankedWeeklyStrategyRequest` (`packages/contracts`)
 - Output: `RankedWeeklyStrategy` (candidate IDs + prep metadata) + deterministic `RankedWeeklyStrategyQualityStats`
-- Prompt version: `weekly-strategy-ranked-v1.1` (PLAN-007.1 practicality guardrails)
+- Prompt version: `weekly-strategy-ranked-v1.1.1` (PLAN-007.1 practicality guardrails + repertoire-first hardening)
 - One Gemini call per week normally; at most one corrective retry when unique candidates exceed the variety-level hard max
 - `uniqueCandidateIds`, quality stats, and complexity status are calculated in code
 - Names are hydrated from the supplied candidate pools — Gemini cannot silently rename a dish

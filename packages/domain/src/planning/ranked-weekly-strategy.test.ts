@@ -99,14 +99,33 @@ describe("ranked weekly strategy request parsing", () => {
 });
 
 describe("ranked weekly strategy prompt", () => {
-  it("is versioned weekly-strategy-ranked-v1.1 and prioritizes practicality over variety maximization", () => {
+  it("is versioned weekly-strategy-ranked-v1.1.1 and prioritizes repertoire-first practicality", () => {
     const prompt = buildRankedWeeklyStrategyPrompt(sampleRankedWeeklyStrategyRequest());
-    expect(prompt.version).toBe("weekly-strategy-ranked-v1.1");
-    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1.1");
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1.1.1");
+    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1.1.1");
     expect(prompt.systemInstruction).toContain("Do NOT invent");
     expect(prompt.systemInstruction).toContain("NO original_concept");
     expect(prompt.systemInstruction).toContain("Do NOT rename, healthify");
     expect(prompt.systemInstruction).toContain("Variety is a constraint to prevent boredom");
+    expect(prompt.systemInstruction).toContain("WEEKLY REPERTOIRE FIRST");
+    expect(prompt.systemInstruction).toContain("schedule ONLY from that chosen repertoire");
+    expect(prompt.systemInstruction).toContain("prefer 7–9 unique candidates overall");
+    expect(prompt.systemInstruction).toContain("Absolute hard maximum: 10 unique candidates");
+    expect(prompt.systemInstruction).toContain(
+      "A strategy above the hard maximum is INVALID and will be rejected by the server",
+    );
+    expect(prompt.systemInstruction).toContain("Above hard max 10 is INVALID");
+    expect(prompt.systemInstruction).toContain("3–4 unique lunch candidates");
+    expect(prompt.systemInstruction).toContain("4–5 unique dinner candidates");
+    expect(prompt.systemInstruction).toContain("LUNCH REPERTOIRE");
+    expect(prompt.systemInstruction).toContain("fully_prepped");
+    expect(prompt.systemInstruction).toContain("component_prepped");
+    expect(prompt.systemInstruction).toContain(
+      "Similarity should affect scheduling of the repertoire",
+    );
+    expect(prompt.systemInstruction).toContain(
+      "Do not infer piggyback prep merely because two dishes probably contain aromatics",
+    );
     expect(prompt.systemInstruction).toContain("weekly prep practicality");
     expect(prompt.systemInstruction).toContain("Do not create a restaurant tasting-menu week");
     expect(prompt.systemInstruction).toContain("Repetition is a useful meal-prep tool");
@@ -512,8 +531,11 @@ describe("weekly variety complexity policy", () => {
     expect(evaluation.status).toBe("excessive");
     const feedback = buildComplexityRetryFeedback(request, evaluation);
     expect(feedback).toContain("13 unique candidates");
-    expect(feedback).toContain("no more than 9 unique candidates if possible");
-    expect(feedback).toContain("absolutely no more than 10");
+    expect(feedback).toContain("compact weekly repertoire");
+    expect(feedback).toContain("Preferred: 7–9 unique candidates total");
+    expect(feedback).toContain("Absolute maximum: 10 unique candidates total");
+    expect(feedback).toContain("3–4 unique lunch candidates");
+    expect(feedback).toContain("4–5 unique dinner candidates");
     expect(feedback).toContain("Increase strategic repetition");
   });
 

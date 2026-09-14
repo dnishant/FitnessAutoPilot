@@ -345,6 +345,31 @@ export function buildRankedWeeklyStrategyPrompt(
           .join("; ")
       : "(none)";
 
+  const lunchRepertoireNote =
+    cookingPreferences.cookingStyle === "ready_lunch_fresh_dinner"
+      ? [
+          "LUNCH REPERTOIRE:",
+          "For ready_lunch_fresh_dinner, lunches should carry more repetition than dinners.",
+          "When choosing recurring lunch candidates, strongly prefer:",
+          "1. fully_prepped",
+          "2. component_prepped",
+          "Use quick_fresh_finish lunches occasionally when they meaningfully improve the week.",
+          "Do not fill the lunch schedule with seven different dishes simply because each is individually quick to cook.",
+          "A batch-friendly lunch repeated twice is usually better than adding another independent lunch workflow.",
+          "Preserve dinner freshness: dinners may have somewhat more variety than lunches,",
+          "but still stay inside the overall hard unique maximum.",
+        ].join(" ")
+      : "";
+
+  const repertoireSplitNote =
+    cookingPreferences.cookingStyle === "ready_lunch_fresh_dinner"
+      ? [
+          `For ready_lunch_fresh_dinner + ${varietyLevel}:`,
+          `Lunch repertoire: prefer approximately ${policy.minPreferredUniqueLunchCandidates}–${policy.maxPreferredUniqueLunchCandidates} unique lunch candidates.`,
+          `Dinner repertoire: prefer approximately ${policy.minPreferredUniqueDinnerCandidates}–${policy.maxPreferredUniqueDinnerCandidates} unique dinner candidates.`,
+        ].join(" ")
+      : "Choose a compact repertoire that matches the cooking style while staying within the hard unique maximum.";
+
   const systemInstruction = [
     "You are Fitness Autopilot's weekly meal strategy planner (PLAN-007 / PLAN-007.1).",
     "Select and schedule meal concepts from the supplied ranked culinary candidate pools.",
@@ -376,7 +401,17 @@ export function buildRankedWeeklyStrategyPrompt(
     "Minimize weekly cooking and prep complexity while satisfying the user's desired variety level.",
     "Variety is a constraint to prevent boredom, not something to maximize.",
     "Every additional unique dish has a weekly complexity cost.",
-    "Variety prevents boredom, but weekly cooking complexity is minimized.",
+    "",
+    "WEEKLY REPERTOIRE FIRST:",
+    "Do not choose meals independently one slot at a time.",
+    "Before assigning Monday–Sunday meals, first mentally choose a compact weekly repertoire from the supplied candidate pools.",
+    `For ${varietyLevel}: prefer ${policy.minPreferredUniqueCandidates}–${policy.maxPreferredUniqueCandidates} unique candidates overall.`,
+    `Absolute hard maximum: ${policy.maxHardUniqueCandidates} unique candidates.`,
+    "The hard maximum is not guidance. A strategy above the hard maximum is INVALID and will be rejected by the server.",
+    repertoireSplitNote,
+    "Once the repertoire provides sufficient culinary variety, stop adding new dishes.",
+    "Then schedule ONLY from that chosen repertoire across all 14 meal slots.",
+    "Repeating a repertoire member is usually preferable to introducing another independent recipe merely for novelty.",
     "",
     "Do not create a restaurant tasting-menu week.",
     "The user is meal prepping at home.",
@@ -389,32 +424,36 @@ export function buildRankedWeeklyStrategyPrompt(
     "Complexity-aware selection:",
     "Before selecting a new candidate, ask:",
     "Does introducing this meal add enough culinary value to justify another independent prep workflow?",
-    "If not, prefer a suitable repeat.",
+    "If not, prefer a suitable repeat from the repertoire.",
     "Once the week already has enough culinary diversity, stop adding new dishes simply to increase variety.",
     "Do not always force the minimum unique count — an eighth candidate may be better than seven when it",
-    "materially improves satisfaction without significant complexity. Optimize practicality, not a single counter.",
+    "materially improves satisfaction without significant complexity, as long as you stay at or under the hard maximum.",
+    "Optimize practicality, not a single counter.",
     "",
     "Priorities, in order:",
     "1. candidate validity / hard constraints (only supplied IDs; allergies; dietary restrictions; never invent)",
-    "2. weekly prep practicality",
+    "2. weekly prep practicality / hard unique-candidate maximum",
     "3. cooking-style compatibility",
-    "4. strategic repetition",
-    "5. sufficient culinary variety (boredom constraint — do NOT maximize)",
-    "6. candidate quality/rank",
+    "4. strategic repetition within the chosen repertoire",
+    "5. sufficient culinary variety (boredom constraint — do NOT maximize; stay within preferred band when possible)",
+    "6. candidate quality/rank (prior only — not a quota)",
     "7. likely ingredient/prep reuse (conceptual only)",
     "8. fitness adaptability",
     "",
     "Candidate rank behavior:",
     "- Prefer higher-ranked candidates when other considerations are similar.",
     "- Do NOT simply schedule rank #1, #2, #3 as the first meals of the week.",
-    "- A rank #7 candidate may be better than rank #2 if #2 is redundant with meals already scheduled",
-    "  or if repeating an already-selected meal-prep-friendly dish is more practical.",
+    "- Rank is a prior, not a quota.",
+    "- Once a strong recurring lunch candidate has been selected, it may be better to repeat it",
+    "  than introduce a lower-ranked candidate solely to increase variety.",
+    "- A lower-ranked candidate may still be better when it completes the repertoire without adding prep burden.",
     "",
     "Operational variety semantics:",
     `- varietyLevel=${varietyLevel}: ${varietyNote}`,
     `- Complexity policy: ${formatComplexityPolicy(policy)}.`,
-    "- These preferred ranges are soft planner targets, not exact quotas.",
-    "- Never exceed the hard max unique candidates.",
+    `- Preferred unique range ${policy.minPreferredUniqueCandidates}–${policy.maxPreferredUniqueCandidates} is a soft target.`,
+    `- Exactly at hard max ${policy.maxHardUniqueCandidates} is allowed only when justified.`,
+    `- Above hard max ${policy.maxHardUniqueCandidates} is INVALID.`,
     "- Cuisine count and flavor-family count are NOT hard constraints.",
     "",
     "Culinary variety (sufficient, not maximal):",
@@ -424,11 +463,12 @@ export function buildRankedWeeklyStrategyPrompt(
     "- Goal: strategic repetition + flavor rotation — NOT the same chicken dish every day, and NOT 14 unrelated recipes.",
     "",
     "Adjacent meal similarity:",
-    "- Avoid highly similar culinary experiences next to one another.",
+    "- First create a practical repertoire. Then arrange that repertoire to avoid monotonous adjacent meals.",
+    "- Similarity should affect scheduling of the repertoire, not continuously cause new dishes to be added.",
+    "- Bad: meal A is similar to the previous meal → select another brand-new candidate.",
+    "- Preferred: meal A is similar to the previous meal → schedule another already-selected repertoire meal here.",
+    "- Avoid highly similar culinary experiences next to one another when the repertoire allows a better arrangement.",
     "- The important window is Monday lunch → Monday dinner → Tuesday lunch, and so on.",
-    "- Avoid sequences like Chicken Tikka → Paneer Tikka → Butter Chicken / Fish Tikka.",
-    "- Prefer sequences like Chicken Tikka → Pescado Veracruzana → Chicken Tikka several days later.",
-    "- This is a planning objective, not a rigid cuisine-alternation algorithm.",
     "",
     "Strategic repetition (positively encouraged):",
     "- Repetition is a useful meal-prep tool.",
@@ -443,6 +483,7 @@ export function buildRankedWeeklyStrategyPrompt(
     "Cooking / prep:",
     `- cookingStyle=${cookingPreferences.cookingStyle}: ${cookingNote}`,
     `- ${lunchDinnerSplitNote}`,
+    lunchRepertoireNote,
     `- ${finishNote}`,
     `- prepFrequency=${cookingPreferences.prepFrequency}: ${prepFrequencyNote}`,
     `- maxPrepSessionMinutes=${formatPrepSessionMinutes(cookingPreferences.maxPrepSessionMinutes)}.`,
@@ -456,12 +497,15 @@ export function buildRankedWeeklyStrategyPrompt(
     "- direct_leftover: dinner itself becomes tomorrow's lunch. Use sparingly. The lunch candidateId MUST equal the previous day's dinner candidateId.",
     "- Monday lunch has no previous dinner in this week — use independent_meal_prep.",
     "- Dinner slots must omit lunchPreparationStrategy.",
+    "- Because exact ingredient lists are not resolved yet, default to independent_meal_prep unless a shared prep dependency is very obvious from structured candidate metadata.",
+    "- Do not infer piggyback prep merely because two dishes probably contain aromatics, herbs, chili, citrus, seeds, or common pantry ingredients.",
+    "- If the claimed reuse cannot be explained concretely from the supplied candidate fields, choose independent_meal_prep.",
     "",
     "Ingredient reuse and planning reasons:",
     "- You do not have resolved ingredient lists. Speak only of likely ingredient/prep reuse.",
     "- Do not claim specific ingredient/prep reuse unless it is strongly supported by candidate metadata.",
     "- Use cautious language when exact ingredients are unresolved.",
-    "- Bad: 'Uses the chopped onion and parsley from Tuesday.' / 'leveraging chili and herb prep from Tuesday'",
+    "- Bad: 'Uses the chopped onion and parsley from Tuesday.' / 'leveraging chili and herb prep from Tuesday' / 'seed prep piggybacked from Thursday dinner'",
     "- Acceptable: 'Pairs well with the existing batch-prep structure.'",
     "- Best: only claim specific reuse when candidate metadata makes it obvious.",
     "- For repeats, prefer reasons like: 'Repeated intentionally to reuse the batch-prepped dish while spacing the meal several days from its first appearance.'",
@@ -481,7 +525,7 @@ export function buildRankedWeeklyStrategyPrompt(
     "",
     "Do not include uniqueCandidateIds or metadata — the server calculates those.",
     `Prompt version: ${RANKED_WEEKLY_STRATEGY_PROMPT_VERSION}`,
-  ].join("\n");
+  ].filter((line) => line !== "").join("\n");
 
   const userPrompt = [
     "Generate a 7-day lunch+dinner weekly meal strategy by selecting supplied candidate IDs.",
@@ -582,24 +626,36 @@ export function evaluateWeeklyComplexity(
   };
 }
 
+export function exceedsHardUniqueCandidateLimit(
+  uniqueCandidateCount: number,
+  policy: VarietyComplexityPolicy,
+): boolean {
+  return uniqueCandidateCount > policy.maxHardUniqueCandidates;
+}
+
 export function buildComplexityRetryFeedback(
   request: RankedWeeklyStrategyRequest,
   evaluation: WeeklyComplexityEvaluation,
 ): string {
   const policy = evaluation.policy;
   const varietyLevel = evaluation.varietyLevel;
+  const preferredMin = policy.minPreferredUniqueCandidates;
   const preferredMax = policy.maxPreferredUniqueCandidates;
   const hardMax = policy.maxHardUniqueCandidates;
   return [
     `Your previous ${varietyLevel} plan used ${evaluation.uniqueCandidateCount} unique candidates across 14 meal slots.`,
-    "That is too complex for a user who primarily meal preps once per week (or otherwise needs a practical home meal-prep week).",
-    `Regenerate the week using no more than ${preferredMax} unique candidates if possible, and absolutely no more than ${hardMax}.`,
+    `This violates the ${varietyLevel} hard maximum of ${hardMax} unique candidates and is too complex for once-weekly meal prep.`,
+    "Regenerate the week.",
+    "First choose a compact weekly repertoire, then schedule only from that repertoire.",
+    `Preferred: ${preferredMin}–${preferredMax} unique candidates total.`,
+    cookingPreferencesReadyLunchHint(request),
+    `Absolute maximum: ${hardMax} unique candidates total.`,
     "Increase strategic repetition, especially for lunches.",
+    "Do not introduce another candidate merely to increase variety.",
     "Prefer repeating already selected meal-prep-friendly dishes over introducing additional independent recipes.",
     "Do not reduce quality by creating adjacent repetitive meals.",
     "Keep the original candidate pools, preferences, cooking context, and structural requirements.",
     "Do not invent dishes. Do not cross lunch/dinner pools.",
-    cookingPreferencesReadyLunchHint(request),
   ]
     .filter(Boolean)
     .join(" ");
@@ -611,8 +667,8 @@ function cookingPreferencesReadyLunchHint(request: RankedWeeklyStrategyRequest):
   }
   const policy = getWeeklyVarietyComplexityPolicy(request.foodPreferences.varietyLevel);
   return [
-    `For ready_lunch_fresh_dinner, prefer roughly ${policy.minPreferredUniqueLunchCandidates}–${policy.maxPreferredUniqueLunchCandidates} unique lunches`,
-    `and ${policy.minPreferredUniqueDinnerCandidates}–${policy.maxPreferredUniqueDinnerCandidates} unique dinners.`,
+    `Approximately ${policy.minPreferredUniqueLunchCandidates}–${policy.maxPreferredUniqueLunchCandidates} unique lunch candidates.`,
+    `Approximately ${policy.minPreferredUniqueDinnerCandidates}–${policy.maxPreferredUniqueDinnerCandidates} unique dinner candidates.`,
   ].join(" ");
 }
 

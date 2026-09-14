@@ -14,7 +14,7 @@ PLAN-007 must compose a 7-day lunch + dinner strategy by **selecting and schedul
 
 - Evolve the existing PLAN-004 `WeeklyStrategyGenerator` / `GeminiWeeklyStrategyGenerator` / `generate-weekly-strategy` Edge Function rather than creating a parallel weekly-planning stack.
 - Add `RankedWeeklyStrategyGenerator.generateRankedWeeklyStrategy` on the same Gemini adapter.
-- Version the prompt as `weekly-strategy-ranked-v1` (PLAN-007), then `weekly-strategy-ranked-v1.1` (PLAN-007.1 practicality guardrails).
+- Version the prompt as `weekly-strategy-ranked-v1` (PLAN-007), then `weekly-strategy-ranked-v1.1` / `weekly-strategy-ranked-v1.1.1` (PLAN-007.1 practicality guardrails).
 - Use **one** Gemini structured-output call for the whole week normally; allow **at most one** corrective retry when unique-candidate count exceeds the variety-level hard max (`EXCESSIVE_WEEKLY_COMPLEXITY`).
 - Candidate IDs are authoritative. Hydrate names from the supplied pool. Do not provide an `original_concept` escape hatch.
 - Insufficient pools, unknown IDs, cross-pool references, leftover-policy violations, piggyback when disabled, obvious finish-time incompatibilities, and unrepaired excessive complexity return typed failures. Do not silently repair arbitrary model output.

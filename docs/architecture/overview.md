@@ -20,7 +20,7 @@ Fitness Autopilot is a modular monolith.
    - search-grounded culinary discovery (provider-independent; Gemini + Google Search grounding in `packages/llm`)
    - deterministic culinary candidate ranking + deduplication (`candidate-ranking-v1`; no LLM)
    - weekly meal strategy generation (provider-independent concepts; Gemini adapter in `packages/llm`)
-   - ranked-candidate weekly strategy (`weekly-strategy-ranked-v1.1`; selects PLAN-006 candidate IDs with practicality guardrails)
+   - ranked-candidate weekly strategy (`weekly-strategy-ranked-v1.1.1`; selects PLAN-006 candidate IDs with practicality guardrails)
    - portioning
    - one-day planner
 4. **Infrastructure** (`supabase`) — Postgres + RLS + Edge Functions that call domain logic and persist immutable prescriptions. LLM credentials stay server-side (`generate-recipe`, `culinary-discovery`, `generate-weekly-strategy`). Ranking (`rank-culinary-candidates`) is deterministic and does not call Gemini. `generate-weekly-strategy` dispatches PLAN-007 when ranked lunch/dinner pools are present.

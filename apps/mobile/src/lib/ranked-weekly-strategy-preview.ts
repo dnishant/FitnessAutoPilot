@@ -20,6 +20,8 @@ import {
   RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
   SCENARIO_C_LARGE_MIXED_POOL,
   buildRankedWeeklyStrategyPrompt,
+  exceedsHardUniqueCandidateLimit,
+  getWeeklyVarietyComplexityPolicy,
   rankCulinaryCandidates,
 } from "@fitness-autopilot/domain";
 import {
@@ -352,9 +354,11 @@ export function buildRankedQualityStatRows(
     cookingStyle?: string;
     complexityRetry?: {
       occurred: boolean;
+      providerCallCount?: number;
       firstAttemptUniqueCandidates?: number;
       finalAttemptUniqueCandidates?: number;
     };
+    providerCallCount?: number;
   },
 ): Array<{ label: string; value: string }> {
   const rows: Array<{ label: string; value: string }> = [];
@@ -367,11 +371,18 @@ export function buildRankedQualityStatRows(
   if (options?.cookingStyle) {
     rows.push({ label: "Cooking style", value: options.cookingStyle });
   }
+  const policy = options?.varietyLevel
+    ? getWeeklyVarietyComplexityPolicy(options.varietyLevel)
+    : undefined;
   const preferredRange = stats.preferredUniqueCandidateRange;
   const preferredRangeValue =
     preferredRange?.min !== undefined && preferredRange?.max !== undefined
       ? `${preferredRange.min}–${preferredRange.max}`
-      : "(n/a)";
+      : policy
+        ? `${policy.minPreferredUniqueCandidates}–${policy.maxPreferredUniqueCandidates}`
+        : "(n/a)";
+  const hardMax =
+    stats.hardMaxUniqueCandidates ?? policy?.maxHardUniqueCandidates ?? undefined;
   rows.push(
     { label: "Unique dishes", value: String(stats.uniqueCandidateCount) },
     { label: "Unique lunch dishes", value: formatOptionalStat(stats.uniqueLunchCandidateCount) },
@@ -383,7 +394,7 @@ export function buildRankedQualityStatRows(
     },
     {
       label: "Hard max unique dishes",
-      value: formatOptionalStat(stats.hardMaxUniqueCandidates),
+      value: formatOptionalStat(hardMax),
     },
     { label: "Complexity status", value: formatOptionalStat(stats.complexityStatus) },
     { label: "Piggyback lunches", value: String(stats.piggybackLunchCount) },
@@ -405,6 +416,14 @@ export function buildRankedQualityStatRows(
     { label: "Adjacent high-similarity", value: String(stats.adjacentHighSimilarityCount) },
     { label: "Max adjacent similarity", value: stats.maxAdjacentSimilarity.toFixed(3) },
   );
+  const providerCallCount =
+    options?.providerCallCount ??
+    options?.complexityRetry?.providerCallCount ??
+    (options?.complexityRetry?.occurred ? 2 : 1);
+  rows.push({
+    label: "Provider calls",
+    value: String(providerCallCount),
+  });
   if (options?.complexityRetry) {
     rows.push({
       label: "Complexity retry",
@@ -508,6 +527,32 @@ export async function invokeGenerateRankedWeeklyStrategy(
     };
   }
   const payload = data as GenerateRankedWeeklyStrategyResponse;
+  const varietyLevel = request.foodPreferences.varietyLevel;
+  const policy = getWeeklyVarietyComplexityPolicy(varietyLevel);
+  if (exceedsHardUniqueCandidateLimit(payload.stats.uniqueCandidateCount, policy)) {
+    return {
+      ok: false,
+      error: {
+        message: `Weekly plan used ${payload.stats.uniqueCandidateCount} unique candidates which exceeds the hard maximum of ${policy.maxHardUniqueCandidates} for ${varietyLevel}.`,
+        code: "EXCESSIVE_WEEKLY_COMPLEXITY",
+        diagnostics: JSON.stringify({
+          varietyLevel,
+          preferredUniqueRange: [
+            policy.minPreferredUniqueCandidates,
+            policy.maxPreferredUniqueCandidates,
+          ],
+          hardMaxUniqueCandidates: policy.maxHardUniqueCandidates,
+          firstAttemptUniqueCandidateCount:
+            payload.meta?.complexityRetry?.firstAttemptUniqueCandidates ??
+            payload.meta?.firstAttemptUniqueCandidates,
+          finalAttemptUniqueCandidateCount: payload.stats.uniqueCandidateCount,
+          providerCallCount:
+            payload.meta?.providerCallCount ??
+            payload.meta?.complexityRetry?.providerCallCount,
+        }),
+      },
+    };
+  }
   return {
     ok: true,
     strategy: payload.strategy,

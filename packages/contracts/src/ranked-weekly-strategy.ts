@@ -20,7 +20,7 @@ import {
  * prevents boredom without maximizing independent prep workflows.
  */
 
-export const RANKED_WEEKLY_STRATEGY_PROMPT_VERSION = "weekly-strategy-ranked-v1.1" as const;
+export const RANKED_WEEKLY_STRATEGY_PROMPT_VERSION = "weekly-strategy-ranked-v1.1.1" as const;
 
 export const MIN_RANKED_CANDIDATES_PER_MEAL_TYPE = 1;
 
@@ -107,6 +107,7 @@ export const RankedWeeklyStrategySummarySchema = z.object({
 
 export const RankedWeeklyComplexityRetryMetadataSchema = z.object({
   occurred: z.boolean(),
+  providerCallCount: z.number().int().positive().max(2),
   firstAttemptUniqueCandidates: z.number().int().nonnegative().optional(),
   finalAttemptUniqueCandidates: z.number().int().nonnegative().optional(),
 });
@@ -200,6 +201,9 @@ export const GenerateRankedWeeklyStrategyResponseSchema = z.object({
       model: z.string().min(1),
       durationMs: z.number().nonnegative().optional(),
       complexityRetry: RankedWeeklyComplexityRetryMetadataSchema.optional(),
+      providerCallCount: z.number().int().positive().max(2).optional(),
+      firstAttemptUniqueCandidates: z.number().int().nonnegative().optional(),
+      finalUniqueCandidates: z.number().int().nonnegative().optional(),
     })
     .optional(),
 });

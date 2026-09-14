@@ -12,6 +12,7 @@ import {
   buildRankedWeeklyStrategyRetryPrompt,
   buildWeeklyStrategyPrompt,
   evaluateWeeklyComplexity,
+  exceedsHardUniqueCandidateLimit,
   parseRankedWeeklyStrategyRequest,
   parseWeeklyStrategyRequest,
   rankedWeeklyStrategyError,
@@ -340,13 +341,18 @@ export class GeminiWeeklyStrategyGenerator
     }
 
     const firstComplexity = evaluateWeeklyComplexity(firstValidated.value, parsed.value);
-    if (firstComplexity.status !== "excessive") {
+    const firstExceedsHard = exceedsHardUniqueCandidateLimit(
+      firstComplexity.uniqueCandidateCount,
+      firstComplexity.policy,
+    );
+    if (!firstExceedsHard) {
       const strategy: RankedWeeklyStrategy = {
         ...firstValidated.value,
         metadata: {
           ...baseMetadata,
           complexityRetry: {
             occurred: false,
+            providerCallCount: 1,
             finalAttemptUniqueCandidates: firstComplexity.uniqueCandidateCount,
           },
         },
@@ -400,16 +406,24 @@ export class GeminiWeeklyStrategyGenerator
     }
 
     const retryComplexity = evaluateWeeklyComplexity(retryValidated.value, parsed.value);
-    if (retryComplexity.status === "excessive") {
+    if (
+      exceedsHardUniqueCandidateLimit(
+        retryComplexity.uniqueCandidateCount,
+        retryComplexity.policy,
+      )
+    ) {
       const mapped = rankedWeeklyStrategyError(
         "EXCESSIVE_WEEKLY_COMPLEXITY",
         `Weekly plan still used ${retryComplexity.uniqueCandidateCount} unique candidates after a corrective retry (hard max ${retryComplexity.policy.maxHardUniqueCandidates} for ${retryComplexity.varietyLevel}).`,
         {
-          firstAttemptUniqueCandidates: firstComplexity.uniqueCandidateCount,
-          finalAttemptUniqueCandidates: retryComplexity.uniqueCandidateCount,
-          hardMaxUniqueCandidates: retryComplexity.policy.maxHardUniqueCandidates,
-          preferredMaxUniqueCandidates: retryComplexity.policy.maxPreferredUniqueCandidates,
           varietyLevel: retryComplexity.varietyLevel,
+          preferredUniqueRange: [
+            retryComplexity.policy.minPreferredUniqueCandidates,
+            retryComplexity.policy.maxPreferredUniqueCandidates,
+          ],
+          hardMaxUniqueCandidates: retryComplexity.policy.maxHardUniqueCandidates,
+          firstAttemptUniqueCandidateCount: firstComplexity.uniqueCandidateCount,
+          finalAttemptUniqueCandidateCount: retryComplexity.uniqueCandidateCount,
         },
       );
       this.log({
@@ -435,6 +449,7 @@ export class GeminiWeeklyStrategyGenerator
         ...baseMetadata,
         complexityRetry: {
           occurred: true,
+          providerCallCount: 2,
           firstAttemptUniqueCandidates: firstComplexity.uniqueCandidateCount,
           finalAttemptUniqueCandidates: retryComplexity.uniqueCandidateCount,
         },

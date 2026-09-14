@@ -190,8 +190,23 @@ export default function WeeklyStrategyPreviewScreen() {
         varietyLevel: state.request?.foodPreferences.varietyLevel ?? varietyLevel,
         prepFrequency: state.request?.cookingPreferences.prepFrequency,
         cookingStyle: state.request?.cookingPreferences.cookingStyle,
-        complexityRetry:
-          state.meta?.complexityRetry ?? state.strategy?.metadata.complexityRetry,
+        providerCallCount:
+          state.meta?.providerCallCount ??
+          state.meta?.complexityRetry?.providerCallCount ??
+          state.strategy?.metadata.complexityRetry?.providerCallCount,
+        complexityRetry: (() => {
+          const retry =
+            state.meta?.complexityRetry ?? state.strategy?.metadata.complexityRetry;
+          if (!retry) {
+            return undefined;
+          }
+          return {
+            occurred: retry.occurred,
+            providerCallCount: retry.providerCallCount,
+            firstAttemptUniqueCandidates: retry.firstAttemptUniqueCandidates,
+            finalAttemptUniqueCandidates: retry.finalAttemptUniqueCandidates,
+          };
+        })(),
       })
     : [];
   const usageRows = state.stats ? buildRankedCandidateUsageRows(state.stats) : [];

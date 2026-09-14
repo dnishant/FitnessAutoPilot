@@ -208,9 +208,10 @@ describe("Gemini ranked weekly strategy generator (PLAN-007 / PLAN-007.1)", () =
     const retryPrompt = spy.mock.calls[1]?.[0]?.contents as string;
     expect(retryPrompt).toContain("CORRECTIVE RETRY FEEDBACK");
     expect(retryPrompt).toContain("13 unique candidates");
-    expect(retryPrompt).toContain("absolutely no more than 10");
+    expect(retryPrompt).toContain("Absolute maximum: 10 unique candidates total");
     expect(strategy.metadata.complexityRetry).toEqual({
       occurred: true,
+      providerCallCount: 2,
       firstAttemptUniqueCandidates: 13,
       finalAttemptUniqueCandidates: 8,
     });
@@ -218,31 +219,13 @@ describe("Gemini ranked weekly strategy generator (PLAN-007 / PLAN-007.1)", () =
   });
 
   it("returns EXCESSIVE_WEEKLY_COMPLEXITY after an unsuccessful corrective retry", async () => {
-    const spy = vi.fn(async () => ({
-      text: JSON.stringify(sampleRankedWeekPayloadWithUniqueCount(12)),
-    }));
-    const generator = new GeminiWeeklyStrategyGenerator({
-      model: DEFAULT_GEMINI_MODEL,
-      client: mockClient(spy),
-    });
-    await expect(
-      generator.generateRankedWeeklyStrategy(sampleRankedWeeklyStrategyRequest()),
-    ).rejects.toMatchObject({
-      code: "EXCESSIVE_WEEKLY_COMPLEXITY",
-    });
-    expect(spy).toHaveBeenCalledTimes(2);
-  });
-
-  it("preserves candidate integrity validation across complexity retry", async () => {
-    const badRetry = sampleRankedWeekPayload();
-    badRetry.days[0]!.lunch.candidateId = "invented-on-retry";
     const spy = vi
       .fn()
       .mockResolvedValueOnce({
-        text: JSON.stringify(sampleRankedWeekPayloadWithUniqueCount(11)),
+        text: JSON.stringify(sampleRankedWeekPayloadWithUniqueCount(13)),
       })
       .mockResolvedValueOnce({
-        text: JSON.stringify(badRetry),
+        text: JSON.stringify(sampleRankedWeekPayloadWithUniqueCount(12)),
       });
     const generator = new GeminiWeeklyStrategyGenerator({
       model: DEFAULT_GEMINI_MODEL,
@@ -251,8 +234,89 @@ describe("Gemini ranked weekly strategy generator (PLAN-007 / PLAN-007.1)", () =
     await expect(
       generator.generateRankedWeeklyStrategy(sampleRankedWeeklyStrategyRequest()),
     ).rejects.toMatchObject({
-      code: "INVALID_CANDIDATE_REFERENCE",
+      code: "EXCESSIVE_WEEKLY_COMPLEXITY",
+      details: {
+        varietyLevel: "balanced",
+        preferredUniqueRange: [7, 9],
+        hardMaxUniqueCandidates: 10,
+        firstAttemptUniqueCandidateCount: 13,
+        finalAttemptUniqueCandidateCount: 12,
+      },
     });
+    expect(spy).toHaveBeenCalledTimes(2);
+  });
+
+  it("records providerCallCount=1 when the first plan is accepted", async () => {
+    const spy = vi.fn(async () => ({ text: JSON.stringify(sampleRankedWeekPayload()) }));
+    const generator = new GeminiWeeklyStrategyGenerator({
+      model: DEFAULT_GEMINI_MODEL,
+      client: mockClient(spy),
+    });
+    const strategy = await generator.generateRankedWeeklyStrategy(
+      sampleRankedWeeklyStrategyRequest(),
+    );
+    expect(strategy.metadata.complexityRetry).toEqual({
+      occurred: false,
+      providerCallCount: 1,
+      finalAttemptUniqueCandidates: strategy.uniqueCandidateIds.length,
+    });
+  });
+
+  it("accepts exactly 10 unique candidates without retry and marks above_preferred_range", async () => {
+    const spy = vi.fn(async () => ({
+      text: JSON.stringify(sampleRankedWeekPayloadWithUniqueCount(10)),
+    }));
+    const generator = new GeminiWeeklyStrategyGenerator({
+      model: DEFAULT_GEMINI_MODEL,
+      client: mockClient(spy),
+    });
+    const request = sampleRankedWeeklyStrategyRequest();
+    const strategy = await generator.generateRankedWeeklyStrategy(request);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(strategy.metadata.complexityRetry?.providerCallCount).toBe(1);
+    const stats = calculateRankedWeeklyStrategyQualityStats(strategy, request);
+    expect(stats.complexityStatus).toBe("above_preferred_range");
+    expect(stats.uniqueCandidateCount).toBe(10);
+  });
+
+  it("includes repertoire-first corrective feedback on complexity retry", async () => {
+    const spy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        text: JSON.stringify(sampleRankedWeekPayloadWithUniqueCount(13)),
+      })
+      .mockResolvedValueOnce({
+        text: JSON.stringify(sampleRankedWeekPayload()),
+      });
+    const generator = new GeminiWeeklyStrategyGenerator({
+      model: DEFAULT_GEMINI_MODEL,
+      client: mockClient(spy),
+    });
+    await generator.generateRankedWeeklyStrategy(sampleRankedWeeklyStrategyRequest());
+    const retryPrompt = spy.mock.calls[1]?.[0]?.contents as string;
+    expect(retryPrompt).toContain("compact weekly repertoire");
+    expect(retryPrompt).toContain("hard maximum of 10");
+    expect(retryPrompt).toContain("3–4 unique lunch");
+  });
+
+  it("preserves candidate integrity across a complexity retry", async () => {
+    const invalidRetry = sampleRankedWeekPayload();
+    invalidRetry.days[0]!.lunch.candidateId = "hallucinated-dish";
+    const spy = vi
+      .fn()
+      .mockResolvedValueOnce({
+        text: JSON.stringify(sampleRankedWeekPayloadWithUniqueCount(13)),
+      })
+      .mockResolvedValueOnce({
+        text: JSON.stringify(invalidRetry),
+      });
+    const generator = new GeminiWeeklyStrategyGenerator({
+      model: DEFAULT_GEMINI_MODEL,
+      client: mockClient(spy),
+    });
+    await expect(
+      generator.generateRankedWeeklyStrategy(sampleRankedWeeklyStrategyRequest()),
+    ).rejects.toMatchObject({ code: "INVALID_CANDIDATE_REFERENCE" });
     expect(spy).toHaveBeenCalledTimes(2);
   });
 });

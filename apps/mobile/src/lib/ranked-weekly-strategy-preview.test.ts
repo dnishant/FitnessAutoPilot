@@ -6,6 +6,7 @@ import type { NutritionTarget } from "@fitness-autopilot/contracts";
 import {
   calculateRankedWeeklyStrategyQualityStats,
   sampleRankedWeekPayload,
+  sampleRankedWeekPayloadWithUniqueCount,
   sampleRankedWeeklyStrategyRequest,
   validateRankedWeeklyStrategy,
   RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
@@ -21,6 +22,7 @@ import {
   buildRankedWeeklyStrategyRequestFromPreview,
   canStartRankedWeeklyGeneration,
   createRankedWeeklyStrategyPreviewUiState,
+  invokeGenerateRankedWeeklyStrategy,
   lunchPreparationStrategyLabel,
   rankedWeeklyPreviewContainsSecrets,
   scenarioPools,
@@ -171,9 +173,10 @@ describe("ranked weekly strategy preview", () => {
 
     const qualityRows = buildRankedQualityStatRows(legacyStats, { varietyLevel: "balanced" });
     expect(qualityRows.find((row) => row.label === "Unique lunch dishes")?.value).toBe("(n/a)");
-    expect(qualityRows.find((row) => row.label === "Preferred unique range")?.value).toBe("(n/a)");
+    // Policy fallback still surfaces preferred/hard max from varietyLevel when stats omit them.
+    expect(qualityRows.find((row) => row.label === "Preferred unique range")?.value).toBe("7–9");
     expect(qualityRows.find((row) => row.label === "Complexity status")?.value).toBe("(n/a)");
-    expect(qualityRows.find((row) => row.label === "Hard max unique dishes")?.value).toBe("(n/a)");
+    expect(qualityRows.find((row) => row.label === "Hard max unique dishes")?.value).toBe("10");
     expect(qualityRows.find((row) => row.label === "Cooking techniques")?.value).toBe("(n/a)");
 
     const usageRows = buildRankedCandidateUsageRows(legacyStats);
@@ -187,11 +190,88 @@ describe("ranked weekly strategy preview", () => {
   it("rebuilds the PLAN-007.1 prompt locally without secrets", () => {
     const request = sampleRankedWeeklyStrategyRequest();
     const prompt = buildRankedPromptPreview(request);
-    expect(prompt.version).toBe("weekly-strategy-ranked-v1.1");
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1.1.1");
     expect(prompt.userPrompt).toContain("andhra-green-chilli-chicken");
     expect(prompt.systemInstruction).toContain("Variety is a constraint to prevent boredom");
+    expect(prompt.systemInstruction).toContain("WEEKLY REPERTOIRE FIRST");
     expect(rankedWeeklyPreviewContainsSecrets(prompt.systemInstruction)).toBe(false);
     expect(rankedWeeklyPreviewContainsSecrets(prompt.userPrompt)).toBe(false);
+  });
+
+  it("rejects excessive unique-candidate stats from the preview invoke path", async () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    const strategy = validateRankedWeeklyStrategy(
+      sampleRankedWeekPayloadWithUniqueCount(13),
+      request,
+      {
+        provider: "test",
+        model: "test-model",
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+      },
+    );
+    expect(strategy.ok).toBe(true);
+    if (!strategy.ok) {
+      return;
+    }
+    const stats = calculateRankedWeeklyStrategyQualityStats(strategy.value, request);
+    const result = await invokeGenerateRankedWeeklyStrategy(async () => ({
+      data: {
+        strategy: strategy.value,
+        stats,
+        meta: {
+          requestId: "ws_test",
+          promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+          provider: "gemini",
+          model: "test-model",
+          providerCallCount: 2,
+          firstAttemptUniqueCandidates: 13,
+          finalUniqueCandidates: 13,
+        },
+      },
+      error: null,
+    }), request);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("EXCESSIVE_WEEKLY_COMPLEXITY");
+    expect(result.error.diagnostics).toContain('"hardMaxUniqueCandidates":10');
+    expect(result.error.diagnostics).toContain('"finalAttemptUniqueCandidateCount":13');
+  });
+
+  it("accepts a guarded successful response through the preview invoke path", async () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    const strategy = validateRankedWeeklyStrategy(sampleRankedWeekPayload(), request, {
+      provider: "test",
+      model: "test-model",
+      promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+    });
+    expect(strategy.ok).toBe(true);
+    if (!strategy.ok) {
+      return;
+    }
+    const stats = calculateRankedWeeklyStrategyQualityStats(strategy.value, request);
+    const result = await invokeGenerateRankedWeeklyStrategy(async () => ({
+      data: {
+        strategy: strategy.value,
+        stats,
+        meta: {
+          requestId: "ws_ok",
+          promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+          provider: "gemini",
+          model: "test-model",
+          providerCallCount: 1,
+          finalUniqueCandidates: stats.uniqueCandidateCount,
+        },
+      },
+      error: null,
+    }), request);
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    expect(result.stats.uniqueCandidateCount).toBeLessThanOrEqual(10);
+    expect(result.meta?.providerCallCount).toBe(1);
   });
 
   it("does not start generation while busy or with empty pools", () => {
