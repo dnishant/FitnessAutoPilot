@@ -15,6 +15,7 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "generate:dev": "tsx scripts/generate-recipe-dev.ts",
     "generate:weekly-strategy:dev": "tsx scripts/generate-weekly-strategy-dev.ts",
+    "generate:ranked-weekly-strategy:dev": "tsx scripts/generate-ranked-weekly-strategy-dev.ts",
     "discover:culinary:dev": "tsx scripts/discover-culinary-dev.ts"
   },
   "dependencies": {

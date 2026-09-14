@@ -19,3 +19,5 @@ export * from "./recipes/candidate-ranking-fixtures";
 export * from "./planning/portioning";
 export * from "./planning/planner";
 export * from "./planning/weekly-strategy";
+export * from "./planning/ranked-weekly-strategy";
+export * from "./planning/ranked-weekly-strategy-fixtures";

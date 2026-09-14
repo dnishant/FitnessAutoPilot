@@ -54,16 +54,17 @@ npx supabase functions deploy generate-recipe --project-ref <project-ref>
 
 If Preview shows only `Edge Function returned a non-2xx status code`, the function body was swallowed by supabase-js — check the function logs, and confirm `GEMINI_API_KEY` is set.
 
-### Dev-only live weekly strategy generation (PLAN-004)
+### Dev-only live weekly strategy generation (PLAN-004 / PLAN-007)
 
 Same server-side Gemini key:
 
 ```bash
 set -a && source supabase/.env && set +a
 pnpm generate:weekly-strategy:dev
+pnpm generate:ranked-weekly-strategy:dev
 ```
 
-Hosted Weekly Strategy Preview (`/weekly-strategy-preview`) calls the `generate-weekly-strategy` Edge Function.
+Hosted Weekly Strategy Preview (`/weekly-strategy-preview`) calls `generate-weekly-strategy`. When the body includes ranked `lunchCandidates` and `dinnerCandidates`, PLAN-007 selects candidate IDs (`weekly-strategy-ranked-v1`). Without pools, PLAN-004 unconstrained concepts still run.
 
 ### Dev-only live culinary discovery (PLAN-005)
 

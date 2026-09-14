@@ -20,9 +20,9 @@ Empty or omitted fields receive domain defaults before validation. Option values
 
 One current record per user on `user_profiles`. Completion is `cooking_preferences_completed_at IS NOT NULL`. Cooking columns are not defaulted in the database so incomplete users are not skipped.
 
-## Future planner semantics (document only)
+## Planner semantics (PLAN-007)
 
-These types and policies are **not implemented** in PLAN-002.
+PLAN-007 implements lunch preparation strategy on weekly lunch slots:
 
 ```ts
 type LunchPreparationStrategy =

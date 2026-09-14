@@ -24,5 +24,5 @@ A second Gemini call would hide the similarity model and make tests depend on a 
 - Discovery and ranking can be judged independently.
 - Protein-swapped clones can be marked duplicate while culinarily different fish dishes can all survive.
 - PLAN-006.1 keeps `candidate-ranking-v1` after validation: iterative selection was already MMR-style; diagnostics, culinary-interest discrimination, and novelty neutralization were hardened without changing weights or thresholds.
-- PLAN-007 can later consume selected candidate IDs without inventing recipes freely.
+- PLAN-007 can later consume selected candidate IDs without inventing recipes freely. See [ADR-018](./ADR-018-ranked-weekly-strategy.md).
 - Source-quality classification is a coarse heuristic, not a reputation database.

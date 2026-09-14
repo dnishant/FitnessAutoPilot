@@ -28,6 +28,7 @@ export const WEEK_DAYS = DayOfWeekSchema.options;
 export const PrepIntentSchema = z.enum([
   "fully_prepped",
   "component_prepped",
+  "quick_fresh_finish",
   "fresh",
 ]);
 

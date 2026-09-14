@@ -85,6 +85,8 @@ export function prepIntentLabel(intent: PrepIntent): string {
       return "Fully prepped";
     case "component_prepped":
       return "Component prepped";
+    case "quick_fresh_finish":
+      return "Quick fresh finish";
     case "fresh":
       return "Fresh";
   }

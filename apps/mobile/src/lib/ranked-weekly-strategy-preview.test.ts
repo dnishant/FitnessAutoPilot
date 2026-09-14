@@ -1,0 +1,147 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import type { NutritionTarget } from "@fitness-autopilot/contracts";
+import {
+  calculateRankedWeeklyStrategyQualityStats,
+  sampleRankedWeekPayload,
+  sampleRankedWeeklyStrategyRequest,
+  validateRankedWeeklyStrategy,
+  RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+} from "@fitness-autopilot/domain";
+import {
+  RANKED_WEEKLY_STRATEGY_FUNCTION_NAME,
+  RANKED_WEEK_PREVIEW_SCENARIOS,
+  applyRankedWeekScenario,
+  buildRankedCandidateUsageRows,
+  buildRankedPromptPreview,
+  buildRankedQualityStatRows,
+  buildRankedWeeklyDayViews,
+  buildRankedWeeklyStrategyRequestFromPreview,
+  canStartRankedWeeklyGeneration,
+  createRankedWeeklyStrategyPreviewUiState,
+  lunchPreparationStrategyLabel,
+  rankedWeeklyPreviewContainsSecrets,
+  scenarioPools,
+} from "./ranked-weekly-strategy-preview";
+import {
+  WEEKLY_STRATEGY_FUNCTION_NAME,
+  WEEKLY_STRATEGY_PREVIEW_ROUTE,
+} from "./weekly-strategy-preview";
+
+const here = dirname(fileURLToPath(import.meta.url));
+const mobileRoot = join(here, "../..");
+
+const nutritionTarget = {
+  id: "11111111-1111-1111-1111-111111111111",
+  userId: "22222222-2222-2222-2222-222222222222",
+  goalId: "33333333-3333-3333-3333-333333333333",
+  estimatedMaintenanceCalories: 2500,
+  targetCalories: 2200,
+  proteinG: 160,
+  fatG: 70,
+  fatMinG: 60,
+  fatMaxG: 80,
+  carbohydrateG: 220,
+  desiredRateKgPerWeek: -0.5,
+  algorithmName: "nutrition-target" as const,
+  algorithmVersion: "nutrition-target-v1",
+  inputSnapshot: {},
+  validFrom: "2026-09-10T00:00:00.000Z",
+  createdAt: "2026-09-10T00:00:00.000Z",
+} satisfies NutritionTarget;
+
+describe("ranked weekly strategy preview", () => {
+  it("keeps the PLAN-004.5 route and uses the same generate-weekly-strategy function", () => {
+    expect(WEEKLY_STRATEGY_PREVIEW_ROUTE).toBe("/weekly-strategy-preview");
+    expect(RANKED_WEEKLY_STRATEGY_FUNCTION_NAME).toBe(WEEKLY_STRATEGY_FUNCTION_NAME);
+    const screen = readFileSync(join(mobileRoot, "app/weekly-strategy-preview.tsx"), "utf8");
+    expect(screen).toContain("generateRankedWeeklyStrategy");
+    expect(screen).toContain("Discover lunch");
+    expect(screen).toContain("Discover dinner");
+    expect(screen).not.toContain("@google/genai");
+  });
+
+  it("loads fixture pools for Balanced/Simple/High/Tikka/Small scenarios", () => {
+    const balanced = scenarioPools("balanced");
+    expect(balanced.lunchCandidates.length).toBeGreaterThanOrEqual(12);
+    expect(balanced.dinnerCandidates.length).toBeGreaterThanOrEqual(12);
+    expect(balanced.varietyLevel).toBe("balanced");
+    expect(scenarioPools("simple").varietyLevel).toBe("simple");
+    expect(scenarioPools("high").varietyLevel).toBe("high");
+    expect(scenarioPools("tikka").lunchCandidates.some((item) => item.candidate.name.includes("Tikka"))).toBe(
+      true,
+    );
+    expect(scenarioPools("small").lunchCandidates).toHaveLength(4);
+    expect(scenarioPools("small").dinnerCandidates).toHaveLength(5);
+    expect(RANKED_WEEK_PREVIEW_SCENARIOS).toHaveLength(5);
+  });
+
+  it("builds a ranked request from session preferences plus candidate pools", () => {
+    const request = buildRankedWeeklyStrategyRequestFromPreview(
+      {
+        nutritionTarget,
+        mealPreferences: null,
+        cookingPreferences: null,
+      },
+      scenarioPools("balanced").lunchCandidates,
+      scenarioPools("balanced").dinnerCandidates,
+      "balanced",
+    );
+    expect(request).not.toBeNull();
+    if (!request) {
+      return;
+    }
+    expect(request.lunchCandidates.length).toBeGreaterThanOrEqual(12);
+    expect(request.dinnerCandidates.length).toBeGreaterThanOrEqual(12);
+    expect(request.foodPreferences.varietyLevel).toBe("balanced");
+    expect(request.nutrition.targetCaloriesPerDay).toBe(2200);
+  });
+
+  it("renders day views, quality stats, and candidate usage from a validated week", () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    const validated = validateRankedWeeklyStrategy(sampleRankedWeekPayload(), request, {
+      provider: "gemini",
+      model: "test",
+      promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+    });
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) {
+      return;
+    }
+    const stats = calculateRankedWeeklyStrategyQualityStats(validated.value, request);
+    const days = buildRankedWeeklyDayViews(
+      validated.value,
+      request.lunchCandidates,
+      request.dinnerCandidates,
+    );
+    expect(days).toHaveLength(7);
+    expect(days[0]?.lunch.name).toBe("Andhra Green Chilli Chicken");
+    expect(days[0]?.lunchRank).toMatch(/Rank #/);
+    expect(buildRankedQualityStatRows(stats).some((row) => row.label === "Unique dishes")).toBe(
+      true,
+    );
+    expect(buildRankedCandidateUsageRows(stats).length).toBe(stats.uniqueCandidateCount);
+    expect(lunchPreparationStrategyLabel("piggyback_prep")).toBe("Piggyback prep");
+  });
+
+  it("rebuilds the PLAN-007 prompt locally without secrets", () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    const prompt = buildRankedPromptPreview(request);
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1");
+    expect(prompt.userPrompt).toContain("andhra-green-chilli-chicken");
+    expect(rankedWeeklyPreviewContainsSecrets(prompt.systemInstruction)).toBe(false);
+    expect(rankedWeeklyPreviewContainsSecrets(prompt.userPrompt)).toBe(false);
+  });
+
+  it("does not start generation while busy or with empty pools", () => {
+    const idle = createRankedWeeklyStrategyPreviewUiState();
+    expect(canStartRankedWeeklyGeneration(idle)).toBe(true);
+    expect(canStartRankedWeeklyGeneration({ ...idle, busy: true })).toBe(false);
+    expect(canStartRankedWeeklyGeneration({ ...idle, lunchCandidates: [] })).toBe(false);
+    const next = applyRankedWeekScenario(idle, "small");
+    expect(next.lunchCandidates).toHaveLength(4);
+    expect(next.dinnerCandidates).toHaveLength(5);
+  });
+});

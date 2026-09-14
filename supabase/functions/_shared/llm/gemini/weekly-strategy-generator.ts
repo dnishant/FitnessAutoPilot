@@ -1,23 +1,34 @@
 import type {
+  RankedWeeklyStrategy,
+  RankedWeeklyStrategyRequest,
   WeeklyMealStrategy,
   WeeklyStrategyRequest,
 } from "../../contracts/index.ts";
 import {
+  RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
   WEEKLY_STRATEGY_PROMPT_VERSION,
+  assertSufficientRankedCandidates,
+  buildRankedWeeklyStrategyPrompt,
   buildWeeklyStrategyPrompt,
+  parseRankedWeeklyStrategyRequest,
   parseWeeklyStrategyRequest,
+  rankedWeeklyStrategyError,
+  validateRankedWeeklyStrategy,
   validateWeeklyMealStrategy,
   weeklyStrategyError,
+  type RankedWeeklyStrategyError,
+  type RankedWeeklyStrategyGenerator,
   type WeeklyStrategyError,
   type WeeklyStrategyGenerator,
 } from "../../domain/index.ts";
 import type { GeminiContentClient } from "./client.ts";
+import { geminiRankedWeeklyStrategyResponseJsonSchema } from "./ranked-weekly-strategy-schema.ts";
 import { geminiWeeklyStrategyResponseJsonSchema } from "./weekly-strategy-schema.ts";
 
 export type WeeklyStrategyLogEvent = {
   provider: "gemini";
   model: string;
-  promptVersion: typeof WEEKLY_STRATEGY_PROMPT_VERSION;
+  promptVersion: string;
   requestId: string;
   durationMs: number;
   success: boolean;
@@ -123,7 +134,9 @@ export function coerceWeeklyStrategyPayload(value: unknown): unknown {
   return record;
 }
 
-export class GeminiWeeklyStrategyGenerator implements WeeklyStrategyGenerator {
+export class GeminiWeeklyStrategyGenerator
+  implements WeeklyStrategyGenerator, RankedWeeklyStrategyGenerator
+{
   readonly provider = "gemini" as const;
   private readonly model: string;
   private readonly client: GeminiContentClient;
@@ -251,9 +264,150 @@ export class GeminiWeeklyStrategyGenerator implements WeeklyStrategyGenerator {
     return validated.value;
   }
 
+  async generateRankedWeeklyStrategy(
+    request: RankedWeeklyStrategyRequest,
+  ): Promise<RankedWeeklyStrategy> {
+    const started = this.now();
+    const requestId = this.requestIdFactory();
+    const parsed = parseRankedWeeklyStrategyRequest(request);
+    if (!parsed.ok) {
+      this.log({
+        provider: "gemini",
+        model: this.model,
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+        requestId,
+        durationMs: this.now() - started,
+        success: false,
+        errorCode: parsed.error.code,
+      });
+      throw parsed.error;
+    }
+
+    const sufficient = assertSufficientRankedCandidates(parsed.value);
+    if (!sufficient.ok) {
+      this.log({
+        provider: "gemini",
+        model: this.model,
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+        requestId,
+        durationMs: this.now() - started,
+        success: false,
+        errorCode: sufficient.error.code,
+        varietyLevel: parsed.value.foodPreferences.varietyLevel,
+        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+      });
+      throw sufficient.error;
+    }
+
+    const prompt = buildRankedWeeklyStrategyPrompt(parsed.value);
+    const metadata = {
+      provider: "gemini" as const,
+      model: this.model,
+      promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+    };
+
+    let rawText: string;
+    let usageMetadata: WeeklyStrategyLogEvent["usageMetadata"];
+    try {
+      const result = await this.client.generateContent({
+        model: this.model,
+        contents: prompt.userPrompt,
+        systemInstruction: prompt.systemInstruction,
+        responseMimeType: "application/json",
+        responseJsonSchema: geminiRankedWeeklyStrategyResponseJsonSchema(),
+      });
+      rawText = result.text;
+      usageMetadata = result.usageMetadata;
+    } catch (error) {
+      const mapped = mapRankedProviderError(error);
+      this.log({
+        provider: "gemini",
+        model: this.model,
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+        requestId,
+        durationMs: this.now() - started,
+        success: false,
+        errorCode: mapped.code,
+        varietyLevel: parsed.value.foodPreferences.varietyLevel,
+        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+      });
+      throw mapped;
+    }
+
+    let jsonValue: unknown;
+    try {
+      jsonValue = JSON.parse(rawText);
+    } catch (error) {
+      const mapped = rankedWeeklyStrategyError(
+        "LLM_INVALID_STRUCTURED_OUTPUT",
+        "Gemini returned non-JSON structured output.",
+        { cause: error instanceof Error ? error.message : String(error) },
+      );
+      this.log({
+        provider: "gemini",
+        model: this.model,
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+        requestId,
+        durationMs: this.now() - started,
+        success: false,
+        errorCode: mapped.code,
+        usageMetadata,
+        varietyLevel: parsed.value.foodPreferences.varietyLevel,
+        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+      });
+      throw mapped;
+    }
+
+    const sanitized = coerceWeeklyStrategyPayload(jsonValue);
+    const validated = validateRankedWeeklyStrategy(sanitized, parsed.value, metadata);
+    if (!validated.ok) {
+      this.log({
+        provider: "gemini",
+        model: this.model,
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+        requestId,
+        durationMs: this.now() - started,
+        success: false,
+        errorCode: validated.error.code,
+        usageMetadata,
+        varietyLevel: parsed.value.foodPreferences.varietyLevel,
+        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+      });
+      throw validated.error;
+    }
+
+    this.log({
+      provider: "gemini",
+      model: this.model,
+      promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+      requestId,
+      durationMs: this.now() - started,
+      success: true,
+      usageMetadata,
+      varietyLevel: parsed.value.foodPreferences.varietyLevel,
+      cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+    });
+
+    return validated.value;
+  }
+
   private log(event: WeeklyStrategyLogEvent): void {
     this.onLog?.(event);
   }
+}
+
+function mapRankedProviderError(error: unknown): RankedWeeklyStrategyError {
+  if (
+    error &&
+    typeof error === "object" &&
+    "code" in error &&
+    typeof (error as RankedWeeklyStrategyError).code === "string" &&
+    "message" in error
+  ) {
+    return error as RankedWeeklyStrategyError;
+  }
+  const message = error instanceof Error ? error.message : "Gemini provider request failed.";
+  return rankedWeeklyStrategyError("LLM_PROVIDER_ERROR", message);
 }
 
 function mapProviderError(error: unknown): WeeklyStrategyError {

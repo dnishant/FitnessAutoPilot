@@ -99,8 +99,8 @@ export const FINISH_TIME_OPTIONS = [
 }>;
 
 /**
- * Future weekly-planner lunch strategies. Documented only in PLAN-002.
- * Do not persist or expose this setting.
+ * Lunch preparation strategies used by PLAN-007.
+ * Not a user-facing PLAN-002 setting.
  */
 export const LunchPreparationStrategySchema = z.enum([
   "independent_meal_prep",
@@ -108,7 +108,7 @@ export const LunchPreparationStrategySchema = z.enum([
   "direct_leftover",
 ]);
 
-/** Future default leftover policy. Not collected or enforced in PLAN-002. */
+/** Planner default leftover policy. Not collected in PLAN-002. */
 export const MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK = 1;
 
 const CookingPreferenceFieldsSchema = z.object({

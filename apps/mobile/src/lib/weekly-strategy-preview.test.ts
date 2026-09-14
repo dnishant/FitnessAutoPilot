@@ -230,12 +230,13 @@ describe("weekly strategy preview route", () => {
     expect(today).toContain(WEEKLY_STRATEGY_PREVIEW_ROUTE);
     expect(today).toContain(WEEKLY_STRATEGY_PREVIEW_TITLE);
     expect(screen).toContain("WEEKLY_STRATEGY_PREVIEW_TITLE");
-    expect(screen).toContain("WEEKLY_STRATEGY_PREVIEW_LOADING");
-    expect(screen).toContain("Retry");
-    expect(screen).toContain("Raw WeeklyMealStrategy");
+    expect(screen).toContain("RANKED_WEEKLY_STRATEGY_PREVIEW_LOADING");
+    expect(screen).toContain("Generate Weekly Strategy");
     expect(screen).toContain("Planning Context");
-    expect(screen).toContain("AI Details");
-    expect(screen).toContain("Potential shared ingredients");
+    expect(screen).toContain("Raw structured result");
+    expect(screen).toContain("Prompt / context");
+    expect(screen).toContain("Discover lunch");
+    expect(screen).toContain("PLAN-007");
     expect(screen).not.toContain("Your grocery list");
     expect(screen).not.toContain("generateRecipe");
     expect(screen).not.toContain("@google/genai");
@@ -553,6 +554,7 @@ describe("weekly strategy preview architecture boundaries", () => {
     expect(lib).not.toContain("generateRecipe");
     expect(lib).toContain(WEEKLY_STRATEGY_FUNCTION_NAME);
     expect(session).toContain("generateWeeklyStrategy");
+    expect(session).toContain("generateRankedWeeklyStrategy");
     expect(session).toContain("invokeGenerateWeeklyStrategy");
     expect(session).not.toContain("@google/genai");
   });

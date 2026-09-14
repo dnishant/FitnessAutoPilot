@@ -29,6 +29,9 @@ import type {
   WeeklyMealStrategy,
   WeeklyStrategyRequest,
   WeeklyStrategyStats,
+  RankedWeeklyStrategy,
+  RankedWeeklyStrategyQualityStats,
+  RankedWeeklyStrategyRequest,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { completeOnboarding as completeOnboardingDomain } from "@fitness-autopilot/domain";
@@ -65,6 +68,9 @@ import {
   invokeGenerateWeeklyStrategy,
   type WeeklyStrategyGenerationMeta,
 } from "../lib/weekly-strategy-preview";
+import {
+  invokeGenerateRankedWeeklyStrategy,
+} from "../lib/ranked-weekly-strategy-preview";
 import {
   invokeCulinaryDiscovery,
   type CulinaryDiscoveryGenerationMeta,
@@ -136,6 +142,17 @@ type SessionValue = {
         ok: true;
         strategy: WeeklyMealStrategy;
         stats: WeeklyStrategyStats;
+        meta?: WeeklyStrategyGenerationMeta;
+      }
+    | { ok: false; error: string; code?: string; diagnostics?: string }
+  >;
+  generateRankedWeeklyStrategy: (
+    request: RankedWeeklyStrategyRequest,
+  ) => Promise<
+    | {
+        ok: true;
+        strategy: RankedWeeklyStrategy;
+        stats: RankedWeeklyStrategyQualityStats;
         meta?: WeeklyStrategyGenerationMeta;
       }
     | { ok: false; error: string; code?: string; diagnostics?: string }
@@ -773,6 +790,67 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return {
             ok: false,
             error: e instanceof Error ? e.message : "Failed to generate weekly strategy",
+          };
+        }
+      },
+      async generateRankedWeeklyStrategy(request) {
+        try {
+          if (useLocalPlanner) {
+            return {
+              ok: false,
+              error:
+                "Weekly strategy generation requires Supabase remote mode with server-side GEMINI_API_KEY. Local planner mode cannot call Gemini.",
+              code: "LLM_CONFIGURATION_ERROR",
+            };
+          }
+          if (!supabase) {
+            return {
+              ok: false,
+              error: "Supabase is not configured.",
+              code: "LLM_CONFIGURATION_ERROR",
+            };
+          }
+          if (!user) {
+            return { ok: false, error: "Not signed in" };
+          }
+          const client = supabase;
+          const result = await invokeGenerateRankedWeeklyStrategy(
+            async (functionName, options) => {
+              const invoked = await client.functions.invoke(functionName, options);
+              return {
+                data: invoked.data,
+                error: invoked.error
+                  ? {
+                      message: invoked.error.message,
+                      context:
+                        "context" in invoked.error
+                          ? (invoked.error as { context?: unknown }).context
+                          : undefined,
+                    }
+                  : null,
+              };
+            },
+            request,
+          );
+          if (!result.ok) {
+            return {
+              ok: false,
+              error: result.error.message,
+              code: result.error.code,
+              diagnostics: result.error.diagnostics,
+            };
+          }
+          return {
+            ok: true,
+            strategy: result.strategy,
+            stats: result.stats,
+            meta: result.meta,
+          };
+        } catch (e) {
+          return {
+            ok: false,
+            error:
+              e instanceof Error ? e.message : "Failed to generate ranked weekly strategy",
           };
         }
       },

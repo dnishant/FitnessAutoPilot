@@ -9,23 +9,27 @@ import {
 } from "react-native";
 import { useSession } from "../src/state/session";
 import {
-  WEEKLY_STRATEGY_PREVIEW_LOADING,
   WEEKLY_STRATEGY_PREVIEW_TITLE,
-  beginWeeklyStrategyGeneration,
   buildPlanningContextRows,
-  buildStrategyStatsRows,
-  buildStrategySummaryRows,
-  buildWeeklyDayViews,
-  buildWeeklyStrategyAiDetailsRows,
-  buildWeeklyStrategyRequest,
   canBuildWeeklyStrategyRequest,
-  canStartWeeklyStrategyGeneration,
-  createWeeklyStrategyPreviewUiState,
-  failWeeklyStrategyGeneration,
-  selectWeeklyStrategyHistoryEntry,
-  succeedWeeklyStrategyGeneration,
-  type WeeklyStrategyPreviewUiState,
 } from "../src/lib/weekly-strategy-preview";
+import {
+  RANKED_WEEKLY_STRATEGY_PREVIEW_LOADING,
+  RANKED_WEEK_PREVIEW_SCENARIOS,
+  applyRankedWeekScenario,
+  buildDiscoveryRequestForWeekPreview,
+  buildRankedCandidateUsageRows,
+  buildRankedPromptPreview,
+  buildRankedQualityStatRows,
+  buildRankedWeeklyDayViews,
+  buildRankedWeeklyStrategyRequestFromPreview,
+  canStartRankedWeeklyGeneration,
+  createRankedWeeklyStrategyPreviewUiState,
+  rankDiscoveryCandidatesForPreview,
+  scenarioPools,
+  type RankedWeekPreviewScenarioId,
+  type RankedWeeklyStrategyPreviewUiState,
+} from "../src/lib/ranked-weekly-strategy-preview";
 
 function CollapsibleSection(props: {
   title: string;
@@ -63,11 +67,12 @@ export default function WeeklyStrategyPreviewScreen() {
     nutritionTarget,
     mealPreferences,
     cookingPreferences,
-    generateWeeklyStrategy,
+    generateRankedWeeklyStrategy,
+    discoverCulinaryCandidates,
     useLocalMode,
   } = useSession();
-  const [state, setState] = useState<WeeklyStrategyPreviewUiState>(() =>
-    createWeeklyStrategyPreviewUiState(),
+  const [state, setState] = useState<RankedWeeklyStrategyPreviewUiState>(() =>
+    createRankedWeeklyStrategyPreviewUiState(),
   );
 
   const sessionInput = useMemo(
@@ -75,9 +80,16 @@ export default function WeeklyStrategyPreviewScreen() {
     [nutritionTarget, mealPreferences, cookingPreferences],
   );
 
+  const varietyLevel = scenarioPools(state.scenarioId).varietyLevel;
   const draftRequest = useMemo(
-    () => buildWeeklyStrategyRequest(sessionInput),
-    [sessionInput],
+    () =>
+      buildRankedWeeklyStrategyRequestFromPreview(
+        sessionInput,
+        state.lunchCandidates,
+        state.dinnerCandidates,
+        varietyLevel,
+      ),
+    [sessionInput, state.lunchCandidates, state.dinnerCandidates, varietyLevel],
   );
 
   const contextRows = useMemo(
@@ -86,63 +98,102 @@ export default function WeeklyStrategyPreviewScreen() {
   );
 
   const canGenerate =
-    canStartWeeklyStrategyGeneration(state) && canBuildWeeklyStrategyRequest(sessionInput);
+    canStartRankedWeeklyGeneration(state) && canBuildWeeklyStrategyRequest(sessionInput);
+
+  async function runDiscover(mealType: "lunch" | "dinner") {
+    const request = buildDiscoveryRequestForWeekPreview(mealType, sessionInput);
+    setState((prev) => ({
+      ...prev,
+      busy: true,
+      pipelineBusy: mealType,
+      error: null,
+    }));
+    const result = await discoverCulinaryCandidates(request);
+    if (!result.ok) {
+      setState((prev) => ({
+        ...prev,
+        busy: false,
+        pipelineBusy: null,
+        error: { message: result.error, code: result.code, diagnostics: result.diagnostics },
+      }));
+      return;
+    }
+    const ranked = rankDiscoveryCandidatesForPreview(
+      mealType,
+      result.result.candidates,
+      sessionInput,
+    );
+    setState((prev) => ({
+      ...prev,
+      busy: false,
+      pipelineBusy: null,
+      lunchCandidates: mealType === "lunch" ? ranked : prev.lunchCandidates,
+      dinnerCandidates: mealType === "dinner" ? ranked : prev.dinnerCandidates,
+      lunchSource: mealType === "lunch" ? "discover" : prev.lunchSource,
+      dinnerSource: mealType === "dinner" ? "discover" : prev.dinnerSource,
+    }));
+  }
 
   async function runGenerate() {
     if (!draftRequest) {
-      setState((prev) =>
-        failWeeklyStrategyGeneration(prev, {
+      setState((prev) => ({
+        ...prev,
+        error: {
           message: "A daily nutrition target is required before planning a week.",
           code: "INVALID_WEEKLY_STRATEGY_REQUEST",
-        }),
-      );
+        },
+      }));
       return;
     }
-    let started = false;
-    setState((prev) => {
-      if (!canStartWeeklyStrategyGeneration(prev)) {
-        return prev;
-      }
-      started = true;
-      return beginWeeklyStrategyGeneration(prev);
-    });
-    if (!started) {
+    if (!canStartRankedWeeklyGeneration(state)) {
       return;
     }
-    const result = await generateWeeklyStrategy(draftRequest);
+    setState((prev) => ({ ...prev, busy: true, pipelineBusy: "week", error: null }));
+    const result = await generateRankedWeeklyStrategy(draftRequest);
     if (!result.ok) {
-      setState((prev) =>
-        failWeeklyStrategyGeneration(prev, {
+      setState((prev) => ({
+        ...prev,
+        busy: false,
+        pipelineBusy: null,
+        error: {
           message: result.error,
           code: result.code,
           diagnostics: result.diagnostics,
-        }),
-      );
+        },
+      }));
       return;
     }
-    setState((prev) =>
-      succeedWeeklyStrategyGeneration(prev, {
-        request: draftRequest,
-        strategy: result.strategy,
-        stats: result.stats,
-        meta: result.meta,
-      }),
-    );
+    setState((prev) => ({
+      ...prev,
+      busy: false,
+      pipelineBusy: null,
+      error: null,
+      request: draftRequest,
+      strategy: result.strategy,
+      stats: result.stats,
+      meta: result.meta,
+    }));
   }
 
-  const current = state.current;
-  const dayViews = current ? buildWeeklyDayViews(current.strategy.days) : [];
-  const summaryRows = current ? buildStrategySummaryRows(current.strategy) : [];
-  const statsRows = current ? buildStrategyStatsRows(current.stats) : [];
-  const aiRows = current ? buildWeeklyStrategyAiDetailsRows(current.meta) : [];
+  const dayViews =
+    state.strategy != null
+      ? buildRankedWeeklyDayViews(
+          state.strategy,
+          state.lunchCandidates,
+          state.dinnerCandidates,
+        )
+      : [];
+  const statsRows = state.stats ? buildRankedQualityStatRows(state.stats) : [];
+  const usageRows = state.stats ? buildRankedCandidateUsageRows(state.stats) : [];
+  const promptPreview = draftRequest ? buildRankedPromptPreview(draftRequest) : null;
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{WEEKLY_STRATEGY_PREVIEW_TITLE}</Text>
       <Text style={styles.help}>
-        Dev/internal tool: generate one PLAN-004 weekly meal strategy from your saved
-        nutrition and preference profile. Concepts only — no detailed recipes or verified
-        meal nutrition.
+        PLAN-007 ranked weekly strategy. Load PLAN-001/002 preferences, supply ranked lunch
+        and dinner pools, then generate one 7-day lunch+dinner week from candidate IDs.
+        Concepts only — no recipe resolution or meal nutrition.
       </Text>
 
       {useLocalMode ? (
@@ -150,11 +201,39 @@ export default function WeeklyStrategyPreviewScreen() {
           <Text style={styles.warnTitle}>Local planner mode</Text>
           <Text style={styles.warnBody}>
             Weekly strategy generation requires Supabase remote mode
-            (`EXPO_PUBLIC_USE_LOCAL_PLANNER=false`) and server-side `GEMINI_API_KEY`. The
-            client never calls Gemini directly.
+            (`EXPO_PUBLIC_USE_LOCAL_PLANNER=false`) and server-side `GEMINI_API_KEY`. Ranking
+            fixtures still run in-process. The client never calls Gemini directly.
           </Text>
         </View>
       ) : null}
+
+      <Text style={styles.label}>QA scenario</Text>
+      <View style={styles.historyRow}>
+        {RANKED_WEEK_PREVIEW_SCENARIOS.map((scenario) => {
+          const selected = state.scenarioId === scenario.id;
+          return (
+            <Pressable
+              key={scenario.id}
+              style={[styles.historyChip, selected ? styles.historyChipSelected : null]}
+              disabled={state.busy}
+              onPress={() =>
+                setState((prev) =>
+                  applyRankedWeekScenario(prev, scenario.id as RankedWeekPreviewScenarioId),
+                )
+              }
+            >
+              <Text
+                style={[
+                  styles.historyChipText,
+                  selected ? styles.historyChipTextSelected : null,
+                ]}
+              >
+                {scenario.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
 
       <CollapsibleSection
         title="Planning Context"
@@ -176,19 +255,43 @@ export default function WeeklyStrategyPreviewScreen() {
         )}
       </CollapsibleSection>
 
+      <View style={styles.poolBox}>
+        <Text style={styles.subheading}>Ranked candidate pools</Text>
+        <Text style={styles.note}>
+          Lunch: {state.lunchCandidates.length} ({state.lunchSource}) · Dinner:{" "}
+          {state.dinnerCandidates.length} ({state.dinnerSource})
+        </Text>
+        <View style={styles.historyRow}>
+          <Pressable
+            style={[styles.secondary, state.busy ? styles.primaryDisabled : null]}
+            disabled={state.busy}
+            onPress={() => void runDiscover("lunch")}
+          >
+            <Text style={styles.secondaryText}>Discover lunch → rank</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.secondary, state.busy ? styles.primaryDisabled : null]}
+            disabled={state.busy}
+            onPress={() => void runDiscover("dinner")}
+          >
+            <Text style={styles.secondaryText}>Discover dinner → rank</Text>
+          </Pressable>
+        </View>
+      </View>
+
       <Pressable
         style={[styles.primary, !canGenerate ? styles.primaryDisabled : null]}
         disabled={!canGenerate}
-        onPress={runGenerate}
+        onPress={() => void runGenerate()}
       >
-        {state.busy ? (
+        {state.busy && state.pipelineBusy === "week" ? (
           <View style={styles.busyRow}>
             <ActivityIndicator color="#fff" />
-            <Text style={styles.primaryText}>{WEEKLY_STRATEGY_PREVIEW_LOADING}</Text>
+            <Text style={styles.primaryText}>{RANKED_WEEKLY_STRATEGY_PREVIEW_LOADING}</Text>
           </View>
         ) : (
           <Text style={styles.primaryText}>
-            {current ? "Generate Another Week" : "Generate Weekly Strategy"}
+            {state.strategy ? "Generate Another Week" : "Generate Weekly Strategy"}
           </Text>
         )}
       </Pressable>
@@ -203,126 +306,67 @@ export default function WeeklyStrategyPreviewScreen() {
           {state.error.diagnostics ? (
             <Text style={styles.errorDiagnostics}>{state.error.diagnostics}</Text>
           ) : null}
-          <Pressable
-            style={styles.retry}
-            disabled={!canGenerate}
-            onPress={runGenerate}
-          >
-            <Text style={styles.retryText}>Retry</Text>
-          </Pressable>
         </View>
       ) : null}
 
-      {state.history.length > 1 ? (
-        <View style={styles.historyBox}>
-          <Text style={styles.label}>Session history</Text>
-          <View style={styles.historyRow}>
-            {state.history.map((entry) => {
-              const selected = current?.id === entry.id;
-              return (
-                <Pressable
-                  key={entry.id}
-                  style={[styles.historyChip, selected ? styles.historyChipSelected : null]}
-                  disabled={state.busy}
-                  onPress={() =>
-                    setState((prev) => selectWeeklyStrategyHistoryEntry(prev, entry.id))
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.historyChipText,
-                      selected ? styles.historyChipTextSelected : null,
-                    ]}
-                  >
-                    {entry.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
-      ) : null}
-
-      {current ? (
+      {state.strategy && state.stats ? (
         <View style={styles.resultBox}>
-          <Text style={styles.subheading}>Strategy summary</Text>
-          <KeyValueRows rows={summaryRows} />
-
-          <Text style={styles.subheading}>Week stats</Text>
+          <Text style={styles.subheading}>Weekly summary</Text>
           <Text style={styles.note}>
-            Calculated by PLAN-004 application code — not by Gemini.
+            {state.strategy.strategySummary.varietyApproach}
+          </Text>
+          <Text style={styles.note}>{state.strategy.strategySummary.prepApproach}</Text>
+          <Text style={styles.note}>
+            {state.strategy.strategySummary.ingredientReuseApproach}
           </Text>
           <KeyValueRows rows={statsRows} />
 
-          <Text style={styles.subheading}>Potential shared ingredients</Text>
-          <Text style={styles.note}>
-            High-level planning intent only — not a verified grocery list.
-          </Text>
-          {current.strategy.sharedIngredientIntents.length ? (
-            current.strategy.sharedIngredientIntents.map((ingredient) => (
-              <Text key={ingredient} style={styles.listItem}>
-                • {ingredient}
-              </Text>
-            ))
-          ) : (
-            <Text style={styles.note}>(none listed)</Text>
-          )}
-
-          {current.strategy.planningNotes?.length ? (
-            <>
-              <Text style={styles.subheading}>Planning notes</Text>
-              {current.strategy.planningNotes.map((note, index) => (
-                <Text key={`note-${index}`} style={styles.listItem}>
-                  • {note}
-                </Text>
-              ))}
-            </>
-          ) : null}
+          <Text style={styles.subheading}>Candidate usage</Text>
+          <KeyValueRows rows={usageRows} />
 
           {dayViews.map((day) => (
-            <View key={day.day} style={styles.dayBox}>
+            <View key={day.dayLabel} style={styles.dayBox}>
               <Text style={styles.dayTitle}>{day.dayLabel}</Text>
-              {day.slots.map((slot) => (
-                <View key={`${day.day}-${slot.mealType}`} style={styles.slotBox}>
-                  <Text style={styles.slotType}>{slot.mealTypeLabel}</Text>
-                  <Text style={styles.slotName}>{slot.name}</Text>
-                  {slot.repeatLabel ? (
-                    <Text style={styles.repeatBadge}>{slot.repeatLabel}</Text>
-                  ) : null}
-                  {slot.metaLine ? <Text style={styles.slotMeta}>{slot.metaLine}</Text> : null}
-                  {slot.flavorLine ? (
-                    <Text style={styles.slotMeta}>Flavors: {slot.flavorLine}</Text>
-                  ) : null}
-                  {slot.experienceLine ? (
-                    <Text style={styles.slotMeta}>Experience: {slot.experienceLine}</Text>
-                  ) : null}
-                  <Text style={styles.slotMeta}>{slot.prepLine}</Text>
-                </View>
-              ))}
+              <View style={styles.slotBox}>
+                <Text style={styles.slotType}>Lunch</Text>
+                <Text style={styles.slotName}>{day.lunch.name}</Text>
+                <Text style={styles.slotMeta}>
+                  {day.lunchRank} · Prep: {day.lunchPrep}
+                  {day.lunchStrategy ? ` · ${day.lunchStrategy}` : ""}
+                </Text>
+              </View>
+              <View style={styles.slotBox}>
+                <Text style={styles.slotType}>Dinner</Text>
+                <Text style={styles.slotName}>{day.dinner.name}</Text>
+                <Text style={styles.slotMeta}>
+                  {day.dinnerRank} · Prep: {day.dinnerPrep}
+                </Text>
+              </View>
+              <Text style={styles.slotMeta}>Why: {day.why}</Text>
             </View>
           ))}
 
           <CollapsibleSection
-            title="AI Details"
-            open={state.showAiDetails}
-            onToggle={() =>
-              setState((prev) => ({ ...prev, showAiDetails: !prev.showAiDetails }))
-            }
+            title="Prompt / context"
+            open={state.showPrompt}
+            onToggle={() => setState((prev) => ({ ...prev, showPrompt: !prev.showPrompt }))}
           >
-            <KeyValueRows rows={aiRows} />
+            {promptPreview ? (
+              <>
+                <Text style={styles.note}>Version: {promptPreview.version}</Text>
+                <Text style={styles.rawJson}>{promptPreview.systemInstruction}</Text>
+                <Text style={styles.rawJson}>{promptPreview.userPrompt}</Text>
+              </>
+            ) : null}
           </CollapsibleSection>
 
           <CollapsibleSection
-            title="Raw WeeklyMealStrategy"
+            title="Raw structured result"
             open={state.showRaw}
             onToggle={() => setState((prev) => ({ ...prev, showRaw: !prev.showRaw }))}
           >
             <Text style={styles.rawJson}>
-              {JSON.stringify(
-                { strategy: current.strategy, stats: current.stats },
-                null,
-                2,
-              )}
+              {JSON.stringify({ strategy: state.strategy, stats: state.stats }, null, 2)}
             </Text>
           </CollapsibleSection>
         </View>
@@ -359,6 +403,13 @@ const styles = StyleSheet.create({
   },
   primaryDisabled: { opacity: 0.6 },
   primaryText: { color: "#fff", fontWeight: "700" },
+  secondary: {
+    backgroundColor: "#E7F2EB",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+  },
+  secondaryText: { color: "#1F6F4A", fontWeight: "700", fontSize: 12 },
   busyRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   errorBox: {
     backgroundColor: "#FCE8E8",
@@ -372,15 +423,6 @@ const styles = StyleSheet.create({
   errorMessage: { color: "#9B1C1C" },
   errorCode: { color: "#9B1C1C", fontFamily: "monospace", fontSize: 12 },
   errorDiagnostics: { color: "#7A3B3B", fontSize: 12 },
-  retry: {
-    alignSelf: "flex-start",
-    marginTop: 4,
-    backgroundColor: "#9B1C1C",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-  },
-  retryText: { color: "#fff", fontWeight: "700" },
   warnBox: {
     backgroundColor: "#FFF6DF",
     borderRadius: 8,
@@ -391,7 +433,6 @@ const styles = StyleSheet.create({
   },
   warnTitle: { fontWeight: "800", color: "#7A5A10" },
   warnBody: { color: "#7A5A10" },
-  historyBox: { gap: 8 },
   historyRow: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   historyChip: {
     borderWidth: 1,
@@ -404,6 +445,14 @@ const styles = StyleSheet.create({
   historyChipSelected: { backgroundColor: "#0B1F17", borderColor: "#0B1F17" },
   historyChipText: { color: "#0B1F17", fontWeight: "600", fontSize: 12 },
   historyChipTextSelected: { color: "#fff" },
+  poolBox: {
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#C9D9CF",
+    padding: 12,
+    gap: 8,
+  },
   resultBox: {
     backgroundColor: "#fff",
     borderRadius: 8,
@@ -413,7 +462,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   subheading: { marginTop: 8, fontWeight: "800", color: "#0B1F17" },
-  listItem: { color: "#0B1F17", lineHeight: 20 },
   dayBox: {
     marginTop: 8,
     paddingTop: 8,
@@ -426,7 +474,6 @@ const styles = StyleSheet.create({
   slotType: { color: "#3D5A4C", fontSize: 12, fontWeight: "700" },
   slotName: { color: "#0B1F17", fontWeight: "700" },
   slotMeta: { color: "#3D5A4C" },
-  repeatBadge: { color: "#1F6F4A", fontWeight: "700", fontSize: 12 },
   rawJson: {
     fontFamily: "monospace",
     fontSize: 11,
