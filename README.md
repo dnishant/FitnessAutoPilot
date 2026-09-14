@@ -89,12 +89,14 @@ Hosted Edge Functions allow only ~2s CPU / 256MB. Search-grounded Gemini payload
 
 Deterministic ranking + culinary deduplication. No Gemini call.
 
-Hosted Candidate Ranking Preview: `/candidate-ranking-preview` (`Dev: Candidate Ranking` on Today). Local planner mode ranks in-process. Remote mode calls `rank-culinary-candidates`:
+Hosted Candidate Ranking Preview: `/candidate-ranking-preview` (`Dev: Candidate Ranking` on Today). The preview ranks **in-process** with `candidate-ranking-v1` (no Gemini, no Edge Function, no CORS). Optional hosted endpoint:
 
 ```bash
 pnpm sync:edge
 npx supabase functions deploy rank-culinary-candidates --project-ref <project-ref>
 ```
+
+Gateway JWT stays off (`verify_jwt = false`) so browser `OPTIONS` preflight can reach the worker if you do call the hosted function.
 
 ### Local Supabase
 

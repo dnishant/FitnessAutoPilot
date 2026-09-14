@@ -603,6 +603,7 @@ describe("dev endpoint wiring", () => {
       "utf8",
     );
     expect(edge).toContain("rankCulinaryCandidates");
+    expect(edge).toContain("serveWithCors");
     expect(edge).not.toContain("createCulinaryDiscoveryProvider");
     expect(edge).not.toContain("@google/genai");
     expect(edge).not.toContain("GEMINI_API_KEY");

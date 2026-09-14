@@ -17,7 +17,7 @@ A second Gemini call would hide the similarity model and make tests depend on a 
 - Rank lunch and dinner only. Do not call Gemini.
 - Use iterative diversity selection (MMR-style) instead of isolated sort or cuisine/protein quotas.
 - Reuse PLAN-005 candidate types, PLAN-001 preference strings, PLAN-002 cooking-style fields, and PLAN-005 recent-concept shapes.
-- Expose ranking via Edge Function `rank-culinary-candidates` and a development preview. Local planner mode may run the domain engine in-process.
+- Expose ranking via Edge Function `rank-culinary-candidates` (CORS + in-function JWT, same as ADR-014) and a development preview. The preview ranks in-process because ranking needs no LLM credentials and must not fail on an undeployed function CORS preflight.
 
 ## Consequences
 

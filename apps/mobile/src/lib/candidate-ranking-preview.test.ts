@@ -14,7 +14,9 @@ import {
   canStartCandidateRanking,
   createCandidateRankingPreviewUiState,
   failCandidateRanking,
+  humanizeCandidateRankingError,
   invokeCandidateRanking,
+  parseCandidateRankingFailure,
   parseCandidatesJson,
   rankCulinaryCandidatesLocally,
   succeedCandidateRanking,
@@ -184,8 +186,41 @@ describe("candidate ranking preview", () => {
     const session = readFileSync(join(appRoot, "src/state/session.tsx"), "utf8");
     const lib = readFileSync(join(here, "candidate-ranking-preview.ts"), "utf8");
     expect(session).toContain("rankCulinaryCandidates");
+    expect(session).toContain("rankCulinaryCandidatesLocally");
+    expect(session).not.toContain("invokeCandidateRanking");
     expect(lib).toContain('CANDIDATE_RANKING_FUNCTION_NAME = "rank-culinary-candidates"');
     expect(lib).not.toContain("@google/genai");
     expect(lib).not.toContain("GEMINI_API_KEY");
+  });
+
+  it("humanizes unreachable Edge Function / CORS failures", () => {
+    expect(
+      humanizeCandidateRankingError("Failed to send a request to the Edge Function"),
+    ).toContain("in-process");
+    const parsed = parseCandidateRankingFailure({
+      errorMessage: "Failed to send a request to the Edge Function",
+      data: null,
+    });
+    expect(parsed.message).toContain("rank-culinary-candidates");
+    expect(parsed.message).not.toBe("Failed to send a request to the Edge Function");
+  });
+
+  it("serves rank-culinary-candidates with CORS like culinary-discovery", () => {
+    const ranking = readFileSync(
+      join(appRoot, "../../supabase/functions/rank-culinary-candidates/index.ts"),
+      "utf8",
+    );
+    const discovery = readFileSync(
+      join(appRoot, "../../supabase/functions/culinary-discovery/index.ts"),
+      "utf8",
+    );
+    const config = readFileSync(join(appRoot, "../../supabase/config.toml"), "utf8");
+    expect(ranking).toContain("serveWithCors");
+    expect(ranking).not.toMatch(/Deno\.serve\(/);
+    expect(discovery).toContain("serveWithCors");
+    expect(config).toContain("[functions.rank-culinary-candidates]");
+    expect(config).toMatch(
+      /\[functions\.rank-culinary-candidates\][\s\S]*?verify_jwt\s*=\s*false/,
+    );
   });
 });

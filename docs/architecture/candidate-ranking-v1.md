@@ -57,8 +57,8 @@ Selection is iterative (maximal marginal relevance style): pick the best remaini
 
 - Deterministic, explainable reasons generated from score components
 - Source quality is a coarse host/name heuristic (high / medium / lower / unknown). Unknown domains are neutral, not zero. YouTube is scored, not rejected.
-- Edge Function `rank-culinary-candidates` re-validates the request with Zod and runs the same domain engine
-- Mobile local-planner mode can rank in-process because no LLM credentials are required
+- Edge Function `rank-culinary-candidates` re-validates the request with Zod and runs the same domain engine (optional; uses CORS + `requireUser()`, `verify_jwt = false`)
+- The mobile preview ranks **in-process** via `candidate-ranking-v1`. Ranking does not need Gemini or a hosted function, so a missing `rank-culinary-candidates` deploy cannot cause a browser CORS error
 
 ## Non-goals
 

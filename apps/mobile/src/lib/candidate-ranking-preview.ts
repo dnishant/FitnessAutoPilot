@@ -386,6 +386,19 @@ export function similarityScoreFor(
   )?.score;
 }
 
+export function humanizeCandidateRankingError(message: string, code?: string): string {
+  if (message === "Failed to send a request to the Edge Function") {
+    return "Could not reach rank-culinary-candidates. Ranking does not need that function — the preview runs candidate-ranking-v1 in-process. If you still want the hosted endpoint, deploy it with CORS enabled (`npx supabase functions deploy rank-culinary-candidates`) and confirm EXPO_PUBLIC_SUPABASE_URL points at that project.";
+  }
+  if (message === "Edge Function returned a non-2xx status code") {
+    return "rank-culinary-candidates returned a non-2xx status. The preview can rank in-process without that function. If you are calling the hosted endpoint, deploy it with `verify_jwt = false` and CORS enabled.";
+  }
+  if (code === "INVALID_RANKING_REQUEST") {
+    return message;
+  }
+  return message;
+}
+
 export function parseCandidateRankingFailure(input: {
   errorMessage?: string | null;
   data?: unknown;
@@ -394,29 +407,34 @@ export function parseCandidateRankingFailure(input: {
   if (data && typeof data === "object") {
     const record = data as { code?: unknown; message?: unknown; error?: unknown };
     if (typeof record.code === "string" && record.error === undefined) {
+      const baseMessage =
+        typeof record.message === "string" && record.message.trim()
+          ? record.message
+          : input.errorMessage?.trim() || "Candidate ranking failed.";
       return {
-        message:
-          typeof record.message === "string" && record.message.trim()
-            ? record.message
-            : input.errorMessage?.trim() || "Candidate ranking failed.",
+        message: humanizeCandidateRankingError(baseMessage, record.code),
         code: record.code,
         diagnostics: sanitizeDiagnosticText(data),
       };
     }
     if ("error" in record && record.error && typeof record.error === "object") {
       const err = record.error as { code?: unknown; message?: unknown; details?: unknown };
+      const code = typeof err.code === "string" ? err.code : undefined;
+      const baseMessage =
+        typeof err.message === "string" && err.message.trim()
+          ? err.message
+          : input.errorMessage?.trim() || "Candidate ranking failed.";
       return {
-        message:
-          typeof err.message === "string" && err.message.trim()
-            ? err.message
-            : input.errorMessage?.trim() || "Candidate ranking failed.",
-        code: typeof err.code === "string" ? err.code : undefined,
+        message: humanizeCandidateRankingError(baseMessage, code),
+        code,
         diagnostics: sanitizeDiagnosticText(err.details ?? data),
       };
     }
   }
   return {
-    message: input.errorMessage?.trim() || "Candidate ranking failed.",
+    message: humanizeCandidateRankingError(
+      input.errorMessage?.trim() || "Candidate ranking failed.",
+    ),
     diagnostics: sanitizeDiagnosticText(data),
   };
 }

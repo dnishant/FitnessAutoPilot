@@ -70,7 +70,6 @@ import {
   type CulinaryDiscoveryGenerationMeta,
 } from "../lib/culinary-discovery-preview";
 import {
-  invokeCandidateRanking,
   rankCulinaryCandidatesLocally,
   type CandidateRankingGenerationMeta,
 } from "../lib/candidate-ranking-preview";
@@ -838,63 +837,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       },
       async rankCulinaryCandidates(request) {
         try {
-          if (useLocalPlanner) {
-            const ranked = rankCulinaryCandidatesLocally(request);
-            if (!ranked.ok) {
-              return {
-                ok: false,
-                error: ranked.error.message,
-                code: ranked.error.code,
-                diagnostics: ranked.error.diagnostics,
-              };
-            }
-            return {
-              ok: true,
-              result: ranked.result,
-              meta: ranked.meta,
-            };
-          }
-          if (!supabase) {
+          // Ranking is deterministic domain logic (no Gemini, no secrets).
+          // Always run in-process so the preview does not depend on a hosted
+          // Edge Function / CORS preflight. Discover-then-rank still uses
+          // culinary-discovery remotely when Gemini is required.
+          const ranked = rankCulinaryCandidatesLocally(request);
+          if (!ranked.ok) {
             return {
               ok: false,
-              error: "Supabase is not configured.",
-              code: "INVALID_RANKING_REQUEST",
-            };
-          }
-          if (!user) {
-            return { ok: false, error: "Not signed in" };
-          }
-          const client = supabase;
-          const result = await invokeCandidateRanking(
-            async (functionName, options) => {
-              const invoked = await client.functions.invoke(functionName, options);
-              return {
-                data: invoked.data,
-                error: invoked.error
-                  ? {
-                      message: invoked.error.message,
-                      context:
-                        "context" in invoked.error
-                          ? (invoked.error as { context?: unknown }).context
-                          : undefined,
-                    }
-                  : null,
-              };
-            },
-            request,
-          );
-          if (!result.ok) {
-            return {
-              ok: false,
-              error: result.error.message,
-              code: result.error.code,
-              diagnostics: result.error.diagnostics,
+              error: ranked.error.message,
+              code: ranked.error.code,
+              diagnostics: ranked.error.diagnostics,
             };
           }
           return {
             ok: true,
-            result: result.result,
-            meta: result.meta,
+            result: ranked.result,
+            meta: ranked.meta,
           };
         } catch (e) {
           return {

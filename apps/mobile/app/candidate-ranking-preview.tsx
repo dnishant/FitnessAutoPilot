@@ -222,16 +222,23 @@ export default function CandidateRankingPreviewScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{CANDIDATE_RANKING_PREVIEW_TITLE}</Text>
       <Text style={styles.subtitle}>
-        Deterministic ranking and culinary deduplication for lunch and dinner. No Gemini call.
-        Does not write a weekly plan.
+        Deterministic ranking and culinary deduplication for lunch and dinner. Runs
+        candidate-ranking-v1 in-process — no Gemini call and no Edge Function required. Does not
+        write a weekly plan.
       </Text>
 
       {useLocalMode ? (
         <Text style={styles.note}>
-          Local planner mode ranks in-process via `candidate-ranking-v1`. Discover-then-rank still
-          needs remote mode with a server-side Gemini key.
+          Discover-then-rank still needs remote mode (`EXPO_PUBLIC_USE_LOCAL_PLANNER=false`) and a
+          server-side Gemini key. Rank Candidates works in local planner mode.
         </Text>
-      ) : null}
+      ) : (
+        <Text style={styles.note}>
+          Rank Candidates runs in this browser via candidate-ranking-v1. It does not call
+          rank-culinary-candidates, so a missing/undeployed function cannot cause a CORS error.
+          Discover-then-rank still uses the hosted culinary-discovery function.
+        </Text>
+      )}
 
       <Text style={styles.sectionHeading}>Ranking inputs</Text>
       <Text style={styles.hint}>Meal type</Text>
