@@ -49,11 +49,13 @@ function CollapsibleSection(props: {
   );
 }
 
-function KeyValueRows(props: { rows: Array<{ label: string; value: string }> }) {
+function KeyValueRows(props: {
+  rows: Array<{ label: string; value: string; key?: string }>;
+}) {
   return (
     <View style={styles.kvList}>
-      {props.rows.map((row) => (
-        <View key={row.label} style={styles.kvRow}>
+      {props.rows.map((row, index) => (
+        <View key={row.key ?? `${row.label}:${index}`} style={styles.kvRow}>
           <Text style={styles.kvLabel}>{row.label}</Text>
           <Text style={styles.kvValue}>{row.value}</Text>
         </View>

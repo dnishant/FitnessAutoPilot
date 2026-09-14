@@ -24,6 +24,7 @@ import {
   lunchPreparationStrategyLabel,
   rankedWeeklyPreviewContainsSecrets,
   scenarioPools,
+  type RankedWeeklyStrategyQualityStatsLike,
 } from "./ranked-weekly-strategy-preview";
 import {
   WEEKLY_STRATEGY_FUNCTION_NAME,
@@ -128,6 +129,59 @@ describe("ranked weekly strategy preview", () => {
     expect(buildRankedCandidateUsageRows(stats).length).toBe(stats.uniqueCandidateCount);
     expect(buildRankedCandidateUsageRows(stats)[0]?.label).toMatch(/— \d+ meals?/);
     expect(lunchPreparationStrategyLabel("piggyback_prep")).toBe("Piggyback prep");
+  });
+
+  it("does not throw when building rows from old PLAN-007 stats without complexity/slots fields", () => {
+    // Shape returned by Edge Functions before PLAN-007.1 deployment.
+    const legacyStats: RankedWeeklyStrategyQualityStatsLike = {
+      totalMealSlots: 14,
+      uniqueCandidateCount: 2,
+      repeatedMealSlotCount: 12,
+      uniqueCuisineCount: 1,
+      uniqueProteinCount: 1,
+      uniqueFlavorFamilyCount: 1,
+      directLeftoverLunchCount: 2,
+      piggybackLunchCount: 3,
+      independentLunchCount: 2,
+      adjacentSameCandidateCount: 0,
+      adjacentSameCuisineCount: 2,
+      adjacentHighSimilarityCount: 1,
+      maxAdjacentSimilarity: 0.42,
+      averageCandidateRank: 1.5,
+      candidateUsage: [
+        {
+          candidateId: "dish-a",
+          name: "Chicken Bowl",
+          count: 7,
+          mealTypes: ["lunch", "dinner"],
+          // no slots
+        },
+        {
+          candidateId: "dish-b",
+          name: "Chicken Bowl",
+          count: 7,
+          mealTypes: ["lunch"],
+          // duplicate display label risk — keys must stay unique
+        },
+      ],
+    };
+
+    expect(() => buildRankedQualityStatRows(legacyStats, { varietyLevel: "balanced" })).not.toThrow();
+    expect(() => buildRankedCandidateUsageRows(legacyStats)).not.toThrow();
+
+    const qualityRows = buildRankedQualityStatRows(legacyStats, { varietyLevel: "balanced" });
+    expect(qualityRows.find((row) => row.label === "Unique lunch dishes")?.value).toBe("(n/a)");
+    expect(qualityRows.find((row) => row.label === "Preferred unique range")?.value).toBe("(n/a)");
+    expect(qualityRows.find((row) => row.label === "Complexity status")?.value).toBe("(n/a)");
+    expect(qualityRows.find((row) => row.label === "Hard max unique dishes")?.value).toBe("(n/a)");
+    expect(qualityRows.find((row) => row.label === "Cooking techniques")?.value).toBe("(n/a)");
+
+    const usageRows = buildRankedCandidateUsageRows(legacyStats);
+    expect(usageRows).toHaveLength(2);
+    expect(usageRows[0]?.value).toMatch(/Lunch/);
+    expect(usageRows[0]?.key).toBe("dish-a:0");
+    expect(usageRows[1]?.key).toBe("dish-b:1");
+    expect(new Set(usageRows.map((row) => row.key)).size).toBe(usageRows.length);
   });
 
   it("rebuilds the PLAN-007.1 prompt locally without secrets", () => {

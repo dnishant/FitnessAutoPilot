@@ -33,7 +33,7 @@ import {
   type WeeklyStrategyPreviewSessionInput,
 } from "./weekly-strategy-preview";
 import { rankCulinaryCandidatesLocally } from "./candidate-ranking-preview";
-import { readFunctionsInvokeErrorBody } from "./recipe-preview";
+import { mealTypeLabel, readFunctionsInvokeErrorBody } from "./recipe-preview";
 
 export const RANKED_WEEKLY_STRATEGY_FUNCTION_NAME = WEEKLY_STRATEGY_FUNCTION_NAME;
 export const RANKED_WEEKLY_STRATEGY_PREVIEW_LOADING = "Planning ranked week...";
@@ -296,8 +296,56 @@ export function buildRankedWeeklyDayViews(
   }));
 }
 
+function formatOptionalStat(value: unknown): string {
+  if (value === undefined || value === null) {
+    return "(n/a)";
+  }
+  return String(value);
+}
+
+/**
+ * Accepts full PLAN-007.1 stats or older PLAN-007 payloads missing complexity /
+ * slot fields. Preview UI must not throw when an undeployed Edge Function
+ * returns the older shape.
+ */
+export type RankedWeeklyStrategyQualityStatsLike = Omit<
+  RankedWeeklyStrategyQualityStats,
+  | "uniqueLunchCandidateCount"
+  | "uniqueDinnerCandidateCount"
+  | "uniqueCookingTechniqueCount"
+  | "fullyPreppedUniqueCandidateCount"
+  | "componentPreppedUniqueCandidateCount"
+  | "quickFreshUniqueCandidateCount"
+  | "freshUniqueCandidateCount"
+  | "complexityStatus"
+  | "preferredUniqueCandidateRange"
+  | "hardMaxUniqueCandidates"
+  | "candidateUsage"
+> & {
+  uniqueLunchCandidateCount?: number;
+  uniqueDinnerCandidateCount?: number;
+  uniqueCookingTechniqueCount?: number;
+  fullyPreppedUniqueCandidateCount?: number;
+  componentPreppedUniqueCandidateCount?: number;
+  quickFreshUniqueCandidateCount?: number;
+  freshUniqueCandidateCount?: number;
+  complexityStatus?: RankedWeeklyStrategyQualityStats["complexityStatus"];
+  preferredUniqueCandidateRange?: {
+    min?: number;
+    max?: number;
+  };
+  hardMaxUniqueCandidates?: number;
+  candidateUsage: Array<{
+    candidateId: string;
+    name: string;
+    count: number;
+    mealTypes: RankedWeeklyStrategyQualityStats["candidateUsage"][number]["mealTypes"];
+    slots?: RankedWeeklyStrategyQualityStats["candidateUsage"][number]["slots"];
+  }>;
+};
+
 export function buildRankedQualityStatRows(
-  stats: RankedWeeklyStrategyQualityStats,
+  stats: RankedWeeklyStrategyQualityStatsLike,
   options?: {
     varietyLevel?: VarietyLevel;
     prepFrequency?: string;
@@ -319,22 +367,33 @@ export function buildRankedQualityStatRows(
   if (options?.cookingStyle) {
     rows.push({ label: "Cooking style", value: options.cookingStyle });
   }
+  const preferredRange = stats.preferredUniqueCandidateRange;
+  const preferredRangeValue =
+    preferredRange?.min !== undefined && preferredRange?.max !== undefined
+      ? `${preferredRange.min}–${preferredRange.max}`
+      : "(n/a)";
   rows.push(
     { label: "Unique dishes", value: String(stats.uniqueCandidateCount) },
-    { label: "Unique lunch dishes", value: String(stats.uniqueLunchCandidateCount) },
-    { label: "Unique dinner dishes", value: String(stats.uniqueDinnerCandidateCount) },
+    { label: "Unique lunch dishes", value: formatOptionalStat(stats.uniqueLunchCandidateCount) },
+    { label: "Unique dinner dishes", value: formatOptionalStat(stats.uniqueDinnerCandidateCount) },
     { label: "Repeated slots", value: String(stats.repeatedMealSlotCount) },
     {
       label: "Preferred unique range",
-      value: `${stats.preferredUniqueCandidateRange.min}–${stats.preferredUniqueCandidateRange.max}`,
+      value: preferredRangeValue,
     },
-    { label: "Hard max unique dishes", value: String(stats.hardMaxUniqueCandidates) },
-    { label: "Complexity status", value: stats.complexityStatus },
+    {
+      label: "Hard max unique dishes",
+      value: formatOptionalStat(stats.hardMaxUniqueCandidates),
+    },
+    { label: "Complexity status", value: formatOptionalStat(stats.complexityStatus) },
     { label: "Piggyback lunches", value: String(stats.piggybackLunchCount) },
     { label: "Direct leftovers", value: String(stats.directLeftoverLunchCount) },
     { label: "Cuisines", value: String(stats.uniqueCuisineCount) },
     { label: "Proteins", value: String(stats.uniqueProteinCount) },
-    { label: "Cooking techniques", value: String(stats.uniqueCookingTechniqueCount) },
+    {
+      label: "Cooking techniques",
+      value: formatOptionalStat(stats.uniqueCookingTechniqueCount),
+    },
     { label: "Flavor families", value: String(stats.uniqueFlavorFamilyCount) },
     {
       label: "Average candidate rank",
@@ -380,13 +439,18 @@ const SHORT_DAY: Record<string, string> = {
 };
 
 export function buildRankedCandidateUsageRows(
-  stats: RankedWeeklyStrategyQualityStats,
-): Array<{ label: string; value: string }> {
-  return stats.candidateUsage.map((item) => {
-    const slotLabels = item.slots
-      .map((slot) => `${SHORT_DAY[slot.day] ?? slot.day} ${slot.mealType}`)
-      .join(", ");
+  stats: RankedWeeklyStrategyQualityStatsLike,
+): Array<{ label: string; value: string; key: string }> {
+  return stats.candidateUsage.map((item, index) => {
+    const slots = item.slots;
+    const slotLabels =
+      Array.isArray(slots) && slots.length > 0
+        ? slots
+            .map((slot) => `${SHORT_DAY[slot.day] ?? slot.day} ${slot.mealType}`)
+            .join(", ")
+        : item.mealTypes.map((type) => mealTypeLabel(type)).join(", ");
     return {
+      key: `${item.candidateId}:${index}`,
       label: `${item.name} — ${item.count} meal${item.count === 1 ? "" : "s"}`,
       value: slotLabels,
     };
