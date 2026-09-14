@@ -119,18 +119,23 @@ describe("ranked weekly strategy preview", () => {
     expect(days).toHaveLength(7);
     expect(days[0]?.lunch.name).toBe("Andhra Green Chilli Chicken");
     expect(days[0]?.lunchRank).toMatch(/Rank #/);
-    expect(buildRankedQualityStatRows(stats).some((row) => row.label === "Unique dishes")).toBe(
-      true,
-    );
+    expect(buildRankedQualityStatRows(stats, { varietyLevel: "balanced" }).some(
+      (row) => row.label === "Unique dishes",
+    )).toBe(true);
+    expect(
+      buildRankedQualityStatRows(stats).some((row) => row.label === "Complexity status"),
+    ).toBe(true);
     expect(buildRankedCandidateUsageRows(stats).length).toBe(stats.uniqueCandidateCount);
+    expect(buildRankedCandidateUsageRows(stats)[0]?.label).toMatch(/— \d+ meals?/);
     expect(lunchPreparationStrategyLabel("piggyback_prep")).toBe("Piggyback prep");
   });
 
-  it("rebuilds the PLAN-007 prompt locally without secrets", () => {
+  it("rebuilds the PLAN-007.1 prompt locally without secrets", () => {
     const request = sampleRankedWeeklyStrategyRequest();
     const prompt = buildRankedPromptPreview(request);
-    expect(prompt.version).toBe("weekly-strategy-ranked-v1");
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1.1");
     expect(prompt.userPrompt).toContain("andhra-green-chilli-chicken");
+    expect(prompt.systemInstruction).toContain("Variety is a constraint to prevent boredom");
     expect(rankedWeeklyPreviewContainsSecrets(prompt.systemInstruction)).toBe(false);
     expect(rankedWeeklyPreviewContainsSecrets(prompt.userPrompt)).toBe(false);
   });

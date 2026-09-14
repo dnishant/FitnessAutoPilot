@@ -29,15 +29,18 @@ import {
   humanizeWeeklyStrategyError,
   parseGenerateWeeklyStrategyFailure,
   prepIntentLabel,
-  type WeeklyStrategyGenerationMeta,
   type WeeklyStrategyPreviewError,
   type WeeklyStrategyPreviewSessionInput,
 } from "./weekly-strategy-preview";
 import { rankCulinaryCandidatesLocally } from "./candidate-ranking-preview";
-import { mealTypeLabel, readFunctionsInvokeErrorBody } from "./recipe-preview";
+import { readFunctionsInvokeErrorBody } from "./recipe-preview";
 
 export const RANKED_WEEKLY_STRATEGY_FUNCTION_NAME = WEEKLY_STRATEGY_FUNCTION_NAME;
 export const RANKED_WEEKLY_STRATEGY_PREVIEW_LOADING = "Planning ranked week...";
+
+export type RankedWeeklyStrategyGenerationMeta = NonNullable<
+  GenerateRankedWeeklyStrategyResponse["meta"]
+>;
 
 export type RankedWeekPreviewScenarioId =
   | "balanced"
@@ -70,7 +73,7 @@ export type RankedWeeklyStrategyPreviewUiState = {
   request: RankedWeeklyStrategyRequest | null;
   strategy: RankedWeeklyStrategy | null;
   stats: RankedWeeklyStrategyQualityStats | null;
-  meta?: WeeklyStrategyGenerationMeta;
+  meta?: RankedWeeklyStrategyGenerationMeta;
   showContext: boolean;
   showRaw: boolean;
   showPrompt: boolean;
@@ -295,15 +298,44 @@ export function buildRankedWeeklyDayViews(
 
 export function buildRankedQualityStatRows(
   stats: RankedWeeklyStrategyQualityStats,
+  options?: {
+    varietyLevel?: VarietyLevel;
+    prepFrequency?: string;
+    cookingStyle?: string;
+    complexityRetry?: {
+      occurred: boolean;
+      firstAttemptUniqueCandidates?: number;
+      finalAttemptUniqueCandidates?: number;
+    };
+  },
 ): Array<{ label: string; value: string }> {
-  return [
+  const rows: Array<{ label: string; value: string }> = [];
+  if (options?.varietyLevel) {
+    rows.push({ label: "Variety level", value: options.varietyLevel });
+  }
+  if (options?.prepFrequency) {
+    rows.push({ label: "Prep frequency", value: options.prepFrequency });
+  }
+  if (options?.cookingStyle) {
+    rows.push({ label: "Cooking style", value: options.cookingStyle });
+  }
+  rows.push(
     { label: "Unique dishes", value: String(stats.uniqueCandidateCount) },
-    { label: "Repeats", value: String(stats.repeatedMealSlotCount) },
+    { label: "Unique lunch dishes", value: String(stats.uniqueLunchCandidateCount) },
+    { label: "Unique dinner dishes", value: String(stats.uniqueDinnerCandidateCount) },
+    { label: "Repeated slots", value: String(stats.repeatedMealSlotCount) },
+    {
+      label: "Preferred unique range",
+      value: `${stats.preferredUniqueCandidateRange.min}–${stats.preferredUniqueCandidateRange.max}`,
+    },
+    { label: "Hard max unique dishes", value: String(stats.hardMaxUniqueCandidates) },
+    { label: "Complexity status", value: stats.complexityStatus },
+    { label: "Piggyback lunches", value: String(stats.piggybackLunchCount) },
+    { label: "Direct leftovers", value: String(stats.directLeftoverLunchCount) },
     { label: "Cuisines", value: String(stats.uniqueCuisineCount) },
     { label: "Proteins", value: String(stats.uniqueProteinCount) },
+    { label: "Cooking techniques", value: String(stats.uniqueCookingTechniqueCount) },
     { label: "Flavor families", value: String(stats.uniqueFlavorFamilyCount) },
-    { label: "Direct leftovers", value: String(stats.directLeftoverLunchCount) },
-    { label: "Piggyback lunches", value: String(stats.piggybackLunchCount) },
     {
       label: "Average candidate rank",
       value:
@@ -313,16 +345,52 @@ export function buildRankedQualityStatRows(
     },
     { label: "Adjacent high-similarity", value: String(stats.adjacentHighSimilarityCount) },
     { label: "Max adjacent similarity", value: stats.maxAdjacentSimilarity.toFixed(3) },
-  ];
+  );
+  if (options?.complexityRetry) {
+    rows.push({
+      label: "Complexity retry",
+      value: options.complexityRetry.occurred ? "Yes" : "No",
+    });
+    if (options.complexityRetry.occurred) {
+      rows.push(
+        {
+          label: "First attempt unique candidates",
+          value: String(options.complexityRetry.firstAttemptUniqueCandidates ?? "(n/a)"),
+        },
+        {
+          label: "Final attempt unique candidates",
+          value: String(
+            options.complexityRetry.finalAttemptUniqueCandidates ?? stats.uniqueCandidateCount,
+          ),
+        },
+      );
+    }
+  }
+  return rows;
 }
+
+const SHORT_DAY: Record<string, string> = {
+  monday: "Mon",
+  tuesday: "Tue",
+  wednesday: "Wed",
+  thursday: "Thu",
+  friday: "Fri",
+  saturday: "Sat",
+  sunday: "Sun",
+};
 
 export function buildRankedCandidateUsageRows(
   stats: RankedWeeklyStrategyQualityStats,
 ): Array<{ label: string; value: string }> {
-  return stats.candidateUsage.map((item) => ({
-    label: item.name,
-    value: `${item.count}× · ${item.mealTypes.map((type) => mealTypeLabel(type)).join(", ")}`,
-  }));
+  return stats.candidateUsage.map((item) => {
+    const slotLabels = item.slots
+      .map((slot) => `${SHORT_DAY[slot.day] ?? slot.day} ${slot.mealType}`)
+      .join(", ");
+    return {
+      label: `${item.name} — ${item.count} meal${item.count === 1 ? "" : "s"}`,
+      value: slotLabels,
+    };
+  });
 }
 
 export function buildRankedPromptPreview(request: RankedWeeklyStrategyRequest): {
@@ -351,7 +419,7 @@ export async function invokeGenerateRankedWeeklyStrategy(
       ok: true;
       strategy: RankedWeeklyStrategy;
       stats: RankedWeeklyStrategyQualityStats;
-      meta?: WeeklyStrategyGenerationMeta;
+      meta?: RankedWeeklyStrategyGenerationMeta;
     }
   | { ok: false; error: WeeklyStrategyPreviewError }
 > {
@@ -390,6 +458,9 @@ export function humanizeRankedWeeklyStrategyError(message: string, code?: string
   }
   if (code === "INVALID_CANDIDATE_REFERENCE") {
     return `${message} Gemini selected an ID that was not in the matching meal-type pool.`;
+  }
+  if (code === "EXCESSIVE_WEEKLY_COMPLEXITY") {
+    return `${message} The corrective complexity retry still exceeded the hard unique-candidate limit.`;
   }
   return humanizeWeeklyStrategyError(message, code);
 }

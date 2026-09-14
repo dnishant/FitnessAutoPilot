@@ -14,14 +14,15 @@ PLAN-007 must compose a 7-day lunch + dinner strategy by **selecting and schedul
 
 - Evolve the existing PLAN-004 `WeeklyStrategyGenerator` / `GeminiWeeklyStrategyGenerator` / `generate-weekly-strategy` Edge Function rather than creating a parallel weekly-planning stack.
 - Add `RankedWeeklyStrategyGenerator.generateRankedWeeklyStrategy` on the same Gemini adapter.
-- Version the prompt as `weekly-strategy-ranked-v1`.
-- Use **one** Gemini structured-output call for the whole week (never 14 calls).
+- Version the prompt as `weekly-strategy-ranked-v1` (PLAN-007), then `weekly-strategy-ranked-v1.1` (PLAN-007.1 practicality guardrails).
+- Use **one** Gemini structured-output call for the whole week normally; allow **at most one** corrective retry when unique-candidate count exceeds the variety-level hard max (`EXCESSIVE_WEEKLY_COMPLEXITY`).
 - Candidate IDs are authoritative. Hydrate names from the supplied pool. Do not provide an `original_concept` escape hatch.
-- Insufficient pools, unknown IDs, cross-pool references, leftover-policy violations, piggyback when disabled, and obvious finish-time incompatibilities return typed failures. Do not silently repair arbitrary model output.
+- Insufficient pools, unknown IDs, cross-pool references, leftover-policy violations, piggyback when disabled, obvious finish-time incompatibilities, and unrepaired excessive complexity return typed failures. Do not silently repair arbitrary model output.
+- Centralize Simple/Balanced/High unique-candidate preferred bands and hard caps in `WEEKLY_VARIETY_COMPLEXITY_POLICY`.
 - Reuse PLAN-006 `computeCandidateSimilarity` for adjacent-meal quality diagnostics.
 - Direct leftovers are a planner default, not a PLAN-002 setting: `MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK = 1`.
 - PLAN-004 unconstrained generation remains available when the request has no candidate pools, so existing PLAN-004 tests and the previous request shape stay valid.
-- The PLAN-004.5 preview (`/weekly-strategy-preview`) is evolved to load ranked lunch/dinner pools and generate the PLAN-007 week.
+- The PLAN-004.5 preview (`/weekly-strategy-preview`) is evolved to load ranked lunch/dinner pools and generate the PLAN-007 week, including complexity diagnostics and retry metadata.
 
 ## Consequences
 

@@ -11,12 +11,17 @@ import {
   ADJACENT_HIGH_SIMILARITY_THRESHOLD,
   MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK,
   RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+  WEEKLY_VARIETY_COMPLEXITY_POLICY,
   assertSufficientRankedCandidates,
+  buildComplexityRetryFeedback,
   buildRankedWeeklyStrategyPrompt,
   calculateRankedWeeklyStrategyQualityStats,
+  classifyWeeklyComplexityStatus,
   collectAdjacentMealPairs,
   collectRankedMealSlots,
   compactRankedCandidateForPrompt,
+  evaluateWeeklyComplexity,
+  getWeeklyVarietyComplexityPolicy,
   looksLikeRankedWeeklyStrategyRequest,
   parseRankedWeeklyStrategyRequest,
   validateRankedWeeklyStrategy,
@@ -28,6 +33,7 @@ import {
   PLAN007_SMALL_LUNCH_POOL,
   makeRankedCandidate,
   sampleRankedWeekPayload,
+  sampleRankedWeekPayloadWithUniqueCount,
   sampleRankedWeeklyStrategyRequest,
 } from "./ranked-weekly-strategy-fixtures";
 
@@ -93,13 +99,18 @@ describe("ranked weekly strategy request parsing", () => {
 });
 
 describe("ranked weekly strategy prompt", () => {
-  it("is versioned weekly-strategy-ranked-v1 and forbids invention", () => {
+  it("is versioned weekly-strategy-ranked-v1.1 and prioritizes practicality over variety maximization", () => {
     const prompt = buildRankedWeeklyStrategyPrompt(sampleRankedWeeklyStrategyRequest());
-    expect(prompt.version).toBe("weekly-strategy-ranked-v1");
-    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1");
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1.1");
+    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1.1");
     expect(prompt.systemInstruction).toContain("Do NOT invent");
     expect(prompt.systemInstruction).toContain("NO original_concept");
     expect(prompt.systemInstruction).toContain("Do NOT rename, healthify");
+    expect(prompt.systemInstruction).toContain("Variety is a constraint to prevent boredom");
+    expect(prompt.systemInstruction).toContain("weekly prep practicality");
+    expect(prompt.systemInstruction).toContain("Do not create a restaurant tasting-menu week");
+    expect(prompt.systemInstruction).toContain("Repetition is a useful meal-prep tool");
+    expect(prompt.systemInstruction).toContain("When uncertain, use independent_meal_prep");
     expect(prompt.systemInstruction).not.toMatch(/always choose the highest-ranked/i);
     expect(prompt.systemInstruction).toContain("Do NOT output calories, protein, carbs, fat, portion grams, or serving sizes");
     expect(prompt.userPrompt).not.toContain("caloriesKcal");
@@ -119,7 +130,7 @@ describe("ranked weekly strategy prompt", () => {
     expect(prompt.userPrompt).toContain("maxFinishMinutes: 10");
     expect(prompt.userPrompt).toContain("useDinnerPrepForNextLunch: true");
     expect(prompt.userPrompt).toContain("targetCaloriesPerDay: 2200");
-    expect(prompt.systemInstruction).toContain("Piggyback prep is NOT same-food reuse");
+    expect(prompt.systemInstruction).toContain("Use piggyback_prep ONLY when candidate metadata");
     expect(JSON.stringify(compactRankedCandidateForPrompt(PLAN007_LUNCH_POOL[1]!))).toContain(
       "andhra-green-chilli-chicken",
     );
@@ -329,7 +340,7 @@ describe("ranked weekly strategy validation", () => {
 });
 
 describe("ranked weekly strategy quality stats", () => {
-  it("calculates deterministic quality diagnostics", () => {
+  it("calculates deterministic quality and complexity diagnostics", () => {
     const request = sampleRankedWeeklyStrategyRequest();
     const validated = validateRankedWeeklyStrategy(clonePayload(), request, metadata);
     expect(validated.ok).toBe(true);
@@ -339,19 +350,31 @@ describe("ranked weekly strategy quality stats", () => {
     const stats = calculateRankedWeeklyStrategyQualityStats(validated.value, request);
     expect(stats.totalMealSlots).toBe(14);
     expect(stats.uniqueCandidateCount).toBe(validated.value.uniqueCandidateIds.length);
+    expect(stats.uniqueCandidateCount).toBe(8);
+    expect(stats.uniqueLunchCandidateCount).toBe(4);
+    expect(stats.uniqueDinnerCandidateCount).toBe(5);
     expect(stats.repeatedMealSlotCount).toBe(14 - stats.uniqueCandidateCount);
     expect(stats.uniqueCuisineCount).toBeGreaterThan(1);
     expect(stats.uniqueProteinCount).toBeGreaterThan(1);
+    expect(stats.uniqueCookingTechniqueCount).toBeGreaterThan(0);
     expect(stats.uniqueFlavorFamilyCount).toBeGreaterThan(1);
+    expect(stats.fullyPreppedUniqueCandidateCount).toBeGreaterThan(0);
     expect(stats.directLeftoverLunchCount).toBe(1);
-    expect(stats.piggybackLunchCount).toBe(2);
-    expect(stats.independentLunchCount).toBe(4);
+    expect(stats.piggybackLunchCount).toBe(1);
+    expect(stats.independentLunchCount).toBe(5);
+    expect(stats.complexityStatus).toBe("within_preferred_range");
+    expect(stats.preferredUniqueCandidateRange).toEqual({ min: 7, max: 9 });
+    expect(stats.hardMaxUniqueCandidates).toBe(10);
     expect(stats.candidateUsage.length).toBe(stats.uniqueCandidateCount);
     expect(stats.averageCandidateRank).toBeGreaterThan(0);
     const andhraUsage = stats.candidateUsage.find(
       (item) => item.candidateId === "andhra-green-chilli-chicken",
     );
     expect(andhraUsage?.count).toBe(2);
+    expect(andhraUsage?.slots).toEqual([
+      { day: "monday", mealType: "lunch" },
+      { day: "thursday", mealType: "lunch" },
+    ]);
   });
 
   it("reuses PLAN-006 similarity for adjacency diagnostics", () => {
@@ -390,5 +413,127 @@ describe("ranked weekly strategy quality stats", () => {
     const expected = computeCandidateSimilarity(lunch, dinner).score;
     expect(stats.worstAdjacentPair).toBeDefined();
     expect(expected).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("weekly variety complexity policy", () => {
+  it("centralizes simple/balanced/high preferred and hard ranges", () => {
+    expect(WEEKLY_VARIETY_COMPLEXITY_POLICY).toEqual({
+      simple: {
+        minPreferredUniqueCandidates: 5,
+        maxPreferredUniqueCandidates: 7,
+        maxHardUniqueCandidates: 8,
+        minPreferredUniqueLunchCandidates: 2,
+        maxPreferredUniqueLunchCandidates: 3,
+        minPreferredUniqueDinnerCandidates: 3,
+        maxPreferredUniqueDinnerCandidates: 4,
+      },
+      balanced: {
+        minPreferredUniqueCandidates: 7,
+        maxPreferredUniqueCandidates: 9,
+        maxHardUniqueCandidates: 10,
+        minPreferredUniqueLunchCandidates: 3,
+        maxPreferredUniqueLunchCandidates: 4,
+        minPreferredUniqueDinnerCandidates: 4,
+        maxPreferredUniqueDinnerCandidates: 5,
+      },
+      high: {
+        minPreferredUniqueCandidates: 9,
+        maxPreferredUniqueCandidates: 12,
+        maxHardUniqueCandidates: 13,
+        minPreferredUniqueLunchCandidates: 4,
+        maxPreferredUniqueLunchCandidates: 5,
+        minPreferredUniqueDinnerCandidates: 5,
+        maxPreferredUniqueDinnerCandidates: 6,
+      },
+    });
+    expect(getWeeklyVarietyComplexityPolicy("balanced").maxHardUniqueCandidates).toBe(10);
+  });
+
+  it("classifies Balanced boundaries: 8/9 within, 10 above, 11+ excessive", () => {
+    const policy = getWeeklyVarietyComplexityPolicy("balanced");
+    expect(classifyWeeklyComplexityStatus(8, policy)).toBe("within_preferred_range");
+    expect(classifyWeeklyComplexityStatus(9, policy)).toBe("within_preferred_range");
+    expect(classifyWeeklyComplexityStatus(10, policy)).toBe("above_preferred_range");
+    expect(classifyWeeklyComplexityStatus(11, policy)).toBe("excessive");
+  });
+
+  it("classifies Simple and High analogous boundaries", () => {
+    const simple = getWeeklyVarietyComplexityPolicy("simple");
+    expect(classifyWeeklyComplexityStatus(7, simple)).toBe("within_preferred_range");
+    expect(classifyWeeklyComplexityStatus(8, simple)).toBe("above_preferred_range");
+    expect(classifyWeeklyComplexityStatus(9, simple)).toBe("excessive");
+
+    const high = getWeeklyVarietyComplexityPolicy("high");
+    expect(classifyWeeklyComplexityStatus(12, high)).toBe("within_preferred_range");
+    expect(classifyWeeklyComplexityStatus(13, high)).toBe("above_preferred_range");
+    expect(classifyWeeklyComplexityStatus(14, high)).toBe("excessive");
+  });
+
+  it("evaluates complexity stats for Balanced acceptance bands", () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    for (const [uniqueCount, status] of [
+      [8, "within_preferred_range"],
+      [9, "within_preferred_range"],
+      [10, "above_preferred_range"],
+      [11, "excessive"],
+    ] as const) {
+      const validated = validateRankedWeeklyStrategy(
+        sampleRankedWeekPayloadWithUniqueCount(uniqueCount),
+        request,
+        metadata,
+      );
+      expect(validated.ok).toBe(true);
+      if (!validated.ok) {
+        continue;
+      }
+      const evaluation = evaluateWeeklyComplexity(validated.value, request);
+      expect(evaluation.uniqueCandidateCount).toBe(uniqueCount);
+      expect(evaluation.status).toBe(status);
+      const stats = calculateRankedWeeklyStrategyQualityStats(validated.value, request);
+      expect(stats.complexityStatus).toBe(status);
+      expect(stats.uniqueLunchCandidateCount).toBeGreaterThan(0);
+      expect(stats.uniqueDinnerCandidateCount).toBeGreaterThan(0);
+    }
+  });
+
+  it("builds corrective retry feedback for excessive weeks", () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    const validated = validateRankedWeeklyStrategy(
+      sampleRankedWeekPayloadWithUniqueCount(13),
+      request,
+      metadata,
+    );
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) {
+      return;
+    }
+    const evaluation = evaluateWeeklyComplexity(validated.value, request);
+    expect(evaluation.status).toBe("excessive");
+    const feedback = buildComplexityRetryFeedback(request, evaluation);
+    expect(feedback).toContain("13 unique candidates");
+    expect(feedback).toContain("no more than 9 unique candidates if possible");
+    expect(feedback).toContain("absolutely no more than 10");
+    expect(feedback).toContain("Increase strategic repetition");
+  });
+
+  it("allows strategic repetition without treating it as a structural failure", () => {
+    const result = validateRankedWeeklyStrategy(
+      clonePayload(),
+      sampleRankedWeeklyStrategyRequest(),
+      metadata,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) {
+      return;
+    }
+    const lunchRepeats = result.value.days.filter(
+      (day) => day.lunch.candidateId === "andhra-green-chilli-chicken",
+    );
+    const dinnerRepeats = result.value.days.filter(
+      (day) => day.dinner.candidateId === "kerala-meen-pollichathu",
+    );
+    expect(lunchRepeats.length).toBe(2);
+    expect(dinnerRepeats.length).toBe(2);
   });
 });

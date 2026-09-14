@@ -171,6 +171,7 @@ function dinnerSlot(
 
 /**
  * Valid 7-day lunch/dinner payload using supplied fixture IDs.
+ * Balanced-friendly: 8 unique candidates with strategic lunch/dinner repeats.
  * Direct leftover uses lamb-kofta (present in both pools).
  * Finish-prep dinners stay within 10 minutes.
  */
@@ -178,69 +179,68 @@ export function sampleRankedWeekPayload(): RankedWeeklyModelPayload {
   return {
     strategySummary: {
       varietyApproach:
-        "Rotate Andhra, Kerala, Mexican, Cajun, Sichuan, Levantine, and Thai experiences with two strategic repeats.",
+        "Enough culinary rotation to prevent boredom while keeping unique dishes in the Balanced preferred band.",
       prepApproach:
-        "Ready lunches, one piggyback pair, one rare leftover, and dinners finished in about 10 minutes.",
+        "Batch-friendly lunches with intentional repeats, one plausible piggyback, one rare leftover, and dinners finished in about 10 minutes.",
       ingredientReuseApproach:
-        "Likely ingredient/prep reuse of rice, onions, herbs, citrus, and chili aromatics — conceptual only.",
+        "Pairs well with an existing once-weekly batch-prep structure; only claim specific reuse when metadata makes it obvious.",
     },
     days: [
       {
         day: "monday",
         lunch: lunchSlot(
           "andhra-green-chilli-chicken",
-          "Spicy Andhra lunch that meal-preps well.",
+          "Spicy Andhra lunch that meal-preps well as a primary batch dish.",
         ),
         dinner: dinnerSlot(
           "kerala-meen-pollichathu",
-          "Banana-leaf fish after a spicy Indian lunch; different technique and region.",
+          "Adds a distinct banana-leaf fish dinner without a major extra prep burden.",
         ),
       },
       {
         day: "tuesday",
         lunch: lunchSlot(
           "kerala-beef-fry",
-          "Different Kerala lunch; aromatics can piggyback off Monday dinner.",
+          "Second batch-friendly lunch; likely shares coconut-chili aromatics prep with Monday dinner when metadata supports it.",
           { lunchPreparationStrategy: "piggyback_prep" },
         ),
         dinner: dinnerSlot(
           "cajun-blackened-redfish",
-          "Louisiana blackening is a distinct fish experience from banana-leaf roast.",
+          "Distinct blackened fish dinner experience spaced from banana-leaf roast.",
         ),
       },
       {
         day: "wednesday",
         lunch: lunchSlot(
           "pollo-pipian-verde",
-          "Pepita-sauce chicken for a different Mexican lunch experience.",
+          "Pepita-sauce chicken lunch that stores well for midweek repetition.",
           { prepIntent: "component_prepped" },
         ),
         dinner: dinnerSlot(
           "tandoori-chicken",
-          "Tandoori roast is spaced away from the Andhra lunch and uses a 9-minute finish.",
+          "Adds a distinct fresh dinner experience without introducing a major additional prep burden.",
         ),
       },
       {
         day: "thursday",
         lunch: lunchSlot(
           "andhra-green-chilli-chicken",
-          "Strategic repeat of a high-ranking lunch that preps well.",
+          "Repeated intentionally to reuse the batch-prepped dish while spacing the meal several days from its first appearance.",
         ),
         dinner: dinnerSlot(
-          "jamaican-jerk-chicken",
-          "Jerk heat is a different spice tradition than tandoori yogurt-chili.",
+          "kerala-meen-pollichathu",
+          "Strategic dinner repeat of banana-leaf fish spaced from Monday.",
         ),
       },
       {
         day: "friday",
         lunch: lunchSlot(
-          "mapo-tofu",
-          "Sichuan mala stew diversifies the week.",
-          { prepIntent: "component_prepped", lunchPreparationStrategy: "piggyback_prep" },
+          "kerala-beef-fry",
+          "Repeated intentionally to reuse Friday-bound batch prep while keeping lunch effort low.",
         ),
         dinner: dinnerSlot(
           "lamb-kofta",
-          "Levantine lamb kebab for weekend variety.",
+          "Levantine lamb dinner diversifies flavor and can become Saturday's rare leftover.",
           "component_prepped",
         ),
       },
@@ -259,15 +259,85 @@ export function sampleRankedWeekPayload(): RankedWeeklyModelPayload {
       {
         day: "sunday",
         lunch: lunchSlot(
-          "thai-green-curry",
-          "Thai green curry is a different coconut-chili experience.",
+          "pollo-pipian-verde",
+          "Repeated intentionally to finish the week with a meal-prep-friendly lunch already prepared.",
           { prepIntent: "component_prepped" },
         ),
         dinner: dinnerSlot(
-          "kerala-meen-pollichathu",
-          "Repeat banana-leaf fish at the end of the week to keep Sunday effort low.",
+          "cajun-blackened-redfish",
+          "Strategic dinner repeat that reuses an already-selected quick-finish fish without adjacent monotony.",
         ),
       },
     ],
+  };
+}
+
+/**
+ * Build a structurally valid independent-prep week with exactly `uniqueCount`
+ * unique candidates (using lunch-only / dinner-only IDs to avoid cross-pool issues).
+ */
+export function sampleRankedWeekPayloadWithUniqueCount(
+  uniqueCount: number,
+): RankedWeeklyModelPayload {
+  if (uniqueCount < 1 || uniqueCount > 14) {
+    throw new Error(`uniqueCount must be between 1 and 14 (received ${uniqueCount}).`);
+  }
+
+  const lunchOnly = PLAN007_LUNCH_POOL.filter(
+    (item) =>
+      !PLAN007_DINNER_POOL.some(
+        (dinner) => dinner.candidate.candidateId === item.candidate.candidateId,
+      ),
+  );
+  const dinnerOnly = PLAN007_DINNER_POOL.filter(
+    (item) =>
+      !PLAN007_LUNCH_POOL.some(
+        (lunch) => lunch.candidate.candidateId === item.candidate.candidateId,
+      ),
+  );
+
+  const lunchUniqueTarget = Math.min(Math.ceil(uniqueCount / 2), lunchOnly.length);
+  const dinnerUniqueTarget = Math.min(uniqueCount - lunchUniqueTarget, dinnerOnly.length);
+  if (lunchUniqueTarget + dinnerUniqueTarget < uniqueCount) {
+    throw new Error(
+      `Cannot build ${uniqueCount} unique candidates from non-overlapping lunch/dinner fixture pools.`,
+    );
+  }
+
+  const lunchIds = lunchOnly
+    .slice(0, lunchUniqueTarget)
+    .map((item) => item.candidate.candidateId);
+  const dinnerIds = dinnerOnly
+    .slice(0, dinnerUniqueTarget)
+    .map((item) => item.candidate.candidateId);
+
+  const days = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+  ] as const;
+
+  return {
+    strategySummary: {
+      varietyApproach: `Fixture targeting exactly ${uniqueCount} unique candidates.`,
+      prepApproach: "Independent meal prep only for complexity boundary tests.",
+      ingredientReuseApproach: "Conceptual reuse only.",
+    },
+    days: days.map((day, index) => ({
+      day,
+      lunch: lunchSlot(
+        lunchIds[index % lunchIds.length]!,
+        `Lunch slot ${index + 1} for complexity fixture.`,
+      ),
+      dinner: dinnerSlot(
+        dinnerIds[index % dinnerIds.length]!,
+        `Dinner slot ${index + 1} for complexity fixture.`,
+        "fully_prepped",
+      ),
+    })),
   };
 }

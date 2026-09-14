@@ -23,6 +23,7 @@ function statusFor(error: WeeklyStrategyError | RankedWeeklyStrategyError): numb
     case "INSUFFICIENT_CANDIDATES":
     case "INVALID_CANDIDATE_REFERENCE":
     case "INVALID_WEEK_STRUCTURE":
+    case "EXCESSIVE_WEEKLY_COMPLEXITY":
       return 422;
     case "LLM_CONFIGURATION_ERROR":
       return 500;
@@ -125,6 +126,9 @@ serveWithCors(async (req) => {
           provider: config.value.provider,
           model: config.value.gemini.model,
           durationMs: Date.now() - started,
+          ...(strategy.metadata.complexityRetry
+            ? { complexityRetry: strategy.metadata.complexityRetry }
+            : {}),
         },
       });
     } catch (error) {
