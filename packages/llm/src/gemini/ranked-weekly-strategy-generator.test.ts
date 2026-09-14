@@ -149,5 +149,7 @@ describe("Gemini ranked weekly strategy generator (PLAN-007)", () => {
     expect(schema).toContain("candidateId");
     expect(schema).toContain("lunchPreparationStrategy");
     expect(schema).not.toContain("$ref");
+    expect(schema).not.toContain("minItems");
+    expect(schema).not.toContain("maxItems");
   });
 });
