@@ -219,15 +219,29 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
     let grounded = assertDiscoveryWasGrounded(undefined);
 
     for (let attempt = 1; attempt <= maxGroundingAttempts; attempt += 1) {
+      const mealTypeNudge =
+        attempt === 1 &&
+        (parsed.value.mealType === "snack" || parsed.value.mealType === "breakfast")
+          ? [
+              "",
+              `MEAL-TYPE REMINDER: This request is for ${parsed.value.mealType}.`,
+              "You MUST still invoke the googleSearch tool before writing any candidates.",
+              parsed.value.mealType === "snack"
+                ? "Explore snack / street-food / small-plate / tea-time directions — do not invent snacks from memory or shrink dinner recipes."
+                : "Explore real breakfast formats for the requested cuisines — do not invent from memory.",
+            ].join("\n")
+          : "";
       const retryNudge =
         attempt === 1
-          ? ""
+          ? mealTypeNudge
           : [
               "",
               "CRITICAL RETRY: Your previous reply skipped Google Search grounding.",
               "You MUST invoke the googleSearch tool before writing any candidates.",
               "Do not answer from memory. Do not emit the JSON block until after Search runs.",
-              "Issue about 4–8 broad exploratory culinary searches first (not one remembered dish name per query),",
+              parsed.value.mealType === "snack"
+                ? "Search for snack / street-food / chaat / small-plate / tea-time ideas for the requested cuisines — not dinner mains."
+                : "Issue about 4–8 broad exploratory culinary searches first (not one remembered dish name per query),",
               "then grounded notes, then the final ```json block.",
             ].join("\n");
 

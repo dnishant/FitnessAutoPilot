@@ -103,7 +103,7 @@ describe("culinary discovery contracts", () => {
       discoveryMetadata: {
         provider: "gemini",
         model: "gemini-3.6-flash",
-        promptVersion: "culinary-discovery-v1.2",
+        promptVersion: "culinary-discovery-v1.3",
         requestedCandidateCount: 20,
         returnedCandidateCount: 1,
       },

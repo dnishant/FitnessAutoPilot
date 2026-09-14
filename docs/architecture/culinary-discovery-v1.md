@@ -46,7 +46,7 @@ Discovery therefore:
 
 ## Prompt version
 
-`culinary-discovery-v1.2`
+`culinary-discovery-v1.3`
 
 Refinements vs v1 / v1.1:
 
@@ -57,6 +57,7 @@ Refinements vs v1 / v1.1:
 - Homepage/root URLs and uncorrelated candidates are discarded.
 - Grounding coverage and source-quality diagnostics are distinct.
 - v1.2: stronger mandatory-search wording; provider uses minimal thinking + Edge retries restored.
+- v1.3: meal-type Search framing (especially snacks/breakfast) so lighter meals are not answered from memory without grounding.
 
 ## Provenance
 

@@ -286,6 +286,22 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     );
   });
 
+  it("nudges snack requests to search on the first attempt", async () => {
+    const generateContent = vi.fn(async () => ({
+      text: JSON.stringify({ candidates: [modelCandidate] }),
+      groundingMetadata: grounding,
+    }));
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client: mockClient(generateContent),
+    });
+    await provider.discover({ ...sampleRequest, mealType: "snack" });
+    const firstCall = generateContent.mock.calls[0]?.[0] as { contents?: string };
+    expect(firstCall.contents).toContain("MEAL-TYPE REMINDER");
+    expect(firstCall.contents).toContain("snack");
+    expect(firstCall.contents).toContain("googleSearch");
+  });
+
   it("maps grounding metadata safely without HTML entry point", () => {
     const mapped = mapGeminiGroundingMetadataForTests({
       webSearchQueries: ["q1"],

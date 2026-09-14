@@ -16,7 +16,7 @@ The previous PLAN-005 attempt used Edamam Recipe Search and was reverted. This A
 
 - Introduce a provider-independent `CulinaryDiscoveryProvider` in `packages/domain`.
 - Implement `GeminiGroundedCulinaryDiscoveryProvider` in `packages/llm` using `@google/genai` with the `googleSearch` tool (not legacy `googleSearchRetrieval`). Because Gemini 3.x currently suppresses grounding metadata when `responseJsonSchema` / JSON mime type are combined with Search, discovery uses search-first prompt JSON (fenced) and validates with Zod/domain schemas instead of Gemini structured-output mode.
-- Version prompts as `culinary-discovery-v1` (PLAN-005.1: `culinary-discovery-v1.1` exploration-first / count-as-target / `easy|moderate|hard`; follow-up `culinary-discovery-v1.2` uses minimal thinking + restored Search retries to reduce `DISCOVERY_NOT_GROUNDED`).
+- Version prompts as `culinary-discovery-v1` (PLAN-005.1: `culinary-discovery-v1.1` exploration-first / count-as-target / `easy|moderate|hard`; `culinary-discovery-v1.2` minimal thinking + Search retries; `culinary-discovery-v1.3` meal-type Search framing so snacks/breakfasts do not skip grounding).
 - Discovery Search calls set `thinkingConfig.thinkingLevel: "minimal"` and omit structured-output mime/schema so Google Search grounding metadata is more reliably returned.
 - Preserve safe grounding metadata (search queries, chunks, supports) without fabricating URLs or shipping search-widget HTML.
 - Validate candidates deterministically (schema, unique IDs/names, hard constraints, provenance). PLAN-005.1 additionally rejects obvious homepage/root URLs and candidates that cannot be correlated with grounding chunks when usable chunk hosts exist. Grounding coverage is not a source-quality score.
