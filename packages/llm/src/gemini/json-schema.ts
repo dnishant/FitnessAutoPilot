@@ -15,12 +15,15 @@ import { zodToJsonSchema } from "zod-to-json-schema";
  * - Zod `.max(n)` on arrays → `maxItems`, which Gemini 3.x currently rejects with
  *   opaque `400 INVALID_ARGUMENT` when used as `responseJsonSchema` (including
  *   with Google Search grounding). Strip `maxItems`; enforce caps after parse.
+ * - Zod `.min(n)` / `.length(n)` on arrays → `minItems`. Gemini 3.x also rejects
+ *   `minItems` on arrays of objects (PLAN-004 weekly strategy 400s; PLAN-007
+ *   uses the same `.length(7)`). Strip `minItems`; enforce counts after parse.
  *
  * Rules:
  * - Never pass `name`
  * - Always `$refStrategy: "none"`
  * - Strip meta keys (`$schema` / `definitions` / `$defs` / `$id`)
- * - Strip `maxItems`
+ * - Strip `maxItems` and `minItems`
  * - Normalize nullables + exclusive bounds
  * - Fail loud if any `$ref` remains
  */
@@ -54,8 +57,9 @@ export function sanitizeGeminiJsonSchema(value: unknown): unknown {
       key === "definitions" ||
       key === "$defs" ||
       key === "$id" ||
-      // Gemini 3.x responseJsonSchema rejects maxItems (culinary discovery 400s).
-      key === "maxItems"
+      // Gemini 3.x responseJsonSchema rejects array bounds (opaque 400s).
+      key === "maxItems" ||
+      key === "minItems"
     ) {
       continue;
     }

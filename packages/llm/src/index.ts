@@ -69,6 +69,10 @@ export {
   geminiWeeklyStrategyResponseJsonSchema,
 } from "./gemini/weekly-strategy-schema";
 export {
+  GeminiRankedWeeklyStrategyPayloadSchema,
+  geminiRankedWeeklyStrategyResponseJsonSchema,
+} from "./gemini/ranked-weekly-strategy-schema";
+export {
   GeminiCulinaryDiscoveryPayloadSchema,
   geminiCulinaryDiscoveryResponseJsonSchema,
 } from "./gemini/culinary-discovery-schema";

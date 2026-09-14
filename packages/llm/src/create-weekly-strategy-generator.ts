@@ -1,4 +1,7 @@
-import type { WeeklyStrategyGenerator } from "@fitness-autopilot/domain";
+import type {
+  RankedWeeklyStrategyGenerator,
+  WeeklyStrategyGenerator,
+} from "@fitness-autopilot/domain";
 import { weeklyStrategyError } from "@fitness-autopilot/domain";
 import { loadLlmServerConfig, type EnvReader, type LlmServerConfig } from "./config";
 import type { GeminiContentClient } from "./gemini/client";
@@ -17,7 +20,7 @@ export type CreateWeeklyStrategyGeneratorOptions = {
 
 export function createWeeklyStrategyGenerator(
   options: CreateWeeklyStrategyGeneratorOptions = {},
-): WeeklyStrategyGenerator {
+): WeeklyStrategyGenerator & RankedWeeklyStrategyGenerator {
   const configResult =
     options.config !== undefined
       ? { ok: true as const, value: options.config }

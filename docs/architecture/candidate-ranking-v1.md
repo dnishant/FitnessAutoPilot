@@ -13,7 +13,7 @@ PLAN-005 Lunch Discovery ─┐
                           ├─→ candidate-ranking-v1 ─→ selected + deprioritized pools
 PLAN-005 Dinner Discovery ┘
                                    ↓
-                              PLAN-007 (not in this slice)
+                              PLAN-007 weekly-strategy-ranked-v1
 ```
 
 No Gemini call. Ranking is a pure domain function over PLAN-005 metadata.

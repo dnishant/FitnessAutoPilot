@@ -95,7 +95,7 @@ describe("sanitizeGeminiJsonSchema", () => {
     });
   });
 
-  it("strips maxItems which Gemini 3.x responseJsonSchema rejects", () => {
+  it("strips minItems and maxItems which Gemini 3.x responseJsonSchema rejects", () => {
     const sanitized = sanitizeGeminiJsonSchema({
       type: "array",
       items: { type: "string" },
@@ -104,7 +104,7 @@ describe("sanitizeGeminiJsonSchema", () => {
     }) as Record<string, unknown>;
 
     expect(sanitized.maxItems).toBeUndefined();
-    expect(sanitized.minItems).toBe(1);
+    expect(sanitized.minItems).toBeUndefined();
     expect(sanitized.type).toBe("array");
   });
 });

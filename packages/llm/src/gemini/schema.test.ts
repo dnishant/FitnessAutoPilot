@@ -13,6 +13,8 @@ describe("geminiRecipeResponseJsonSchema", () => {
     expect(schema.$defs).toBeUndefined();
     expect(schema.$schema).toBeUndefined();
     expect(() => assertNoJsonSchemaRefs(schema)).not.toThrow();
+    expect(JSON.stringify(schema)).not.toContain("minItems");
+    expect(JSON.stringify(schema)).not.toContain("maxItems");
   });
 });
 
@@ -34,6 +36,12 @@ describe("geminiWeeklyStrategyResponseJsonSchema", () => {
     expect(serialized).not.toContain('"anyOf"');
     expect(serialized).not.toContain('"type":"null"');
     expect(serialized).not.toContain("exclusiveMinimum");
+  });
+
+  it("does not emit minItems/maxItems Gemini 3.x rejects", () => {
+    const serialized = JSON.stringify(geminiWeeklyStrategyResponseJsonSchema());
+    expect(serialized).not.toContain("minItems");
+    expect(serialized).not.toContain("maxItems");
   });
 });
 

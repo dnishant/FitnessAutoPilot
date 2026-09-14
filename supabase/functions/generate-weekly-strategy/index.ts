@@ -5,14 +5,24 @@ import {
   parseWeeklyStrategyRequest,
   type WeeklyStrategyError,
 } from "../_shared/domain/planning/weekly-strategy.ts";
+import {
+  RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+  calculateRankedWeeklyStrategyQualityStats,
+  looksLikeRankedWeeklyStrategyRequest,
+  parseRankedWeeklyStrategyRequest,
+  type RankedWeeklyStrategyError,
+} from "../_shared/domain/planning/ranked-weekly-strategy.ts";
 import { createWeeklyStrategyGenerator } from "../_shared/llm/create-weekly-strategy-generator.ts";
 import { loadLlmServerConfig } from "../_shared/llm/config.ts";
 
-function statusFor(error: WeeklyStrategyError): number {
+function statusFor(error: WeeklyStrategyError | RankedWeeklyStrategyError): number {
   switch (error.code) {
     case "INVALID_WEEKLY_STRATEGY_REQUEST":
     case "WEEKLY_STRATEGY_VALIDATION_FAILED":
     case "LLM_INVALID_STRUCTURED_OUTPUT":
+    case "INSUFFICIENT_CANDIDATES":
+    case "INVALID_CANDIDATE_REFERENCE":
+    case "INVALID_WEEK_STRUCTURE":
       return 422;
     case "LLM_CONFIGURATION_ERROR":
       return 500;
@@ -23,16 +33,16 @@ function statusFor(error: WeeklyStrategyError): number {
   }
 }
 
-function asWeeklyStrategyError(error: unknown): WeeklyStrategyError {
+function asStrategyError(error: unknown): WeeklyStrategyError | RankedWeeklyStrategyError {
   if (
     error &&
     typeof error === "object" &&
     "code" in error &&
     "message" in error &&
-    typeof (error as WeeklyStrategyError).code === "string" &&
-    typeof (error as WeeklyStrategyError).message === "string"
+    typeof (error as { code: unknown }).code === "string" &&
+    typeof (error as { message: unknown }).message === "string"
   ) {
-    return error as WeeklyStrategyError;
+    return error as WeeklyStrategyError | RankedWeeklyStrategyError;
   }
   return {
     code: "LLM_PROVIDER_ERROR",
@@ -56,6 +66,83 @@ serveWithCors(async (req) => {
       { error: { code: "INVALID_WEEKLY_STRATEGY_REQUEST", message: "Invalid JSON body" } },
       400,
     );
+  }
+
+  const rankedRequest = looksLikeRankedWeeklyStrategyRequest(body);
+  if (rankedRequest) {
+    const parsed = parseRankedWeeklyStrategyRequest(body);
+    if (!parsed.ok) {
+      return json({ error: parsed.error }, statusFor(parsed.error));
+    }
+
+    const config = loadLlmServerConfig((key) => Deno.env.get(key));
+    if (!config.ok) {
+      return json(
+        {
+          error: {
+            code: config.error.code,
+            message: config.error.message,
+          },
+        },
+        500,
+      );
+    }
+
+    const started = Date.now();
+    let requestId = `ws_${crypto.randomUUID()}`;
+    try {
+      const generator = createWeeklyStrategyGenerator({
+        config: config.value,
+        onLog: (event) => {
+          requestId = event.requestId;
+          console.log(
+            JSON.stringify({
+              event: "generate_ranked_weekly_strategy",
+              provider: event.provider,
+              model: event.model,
+              promptVersion: event.promptVersion,
+              requestId: event.requestId,
+              durationMs: event.durationMs,
+              success: event.success,
+              errorCode: event.errorCode,
+              usageMetadata: event.usageMetadata,
+              varietyLevel: event.varietyLevel,
+              cookingStyle: event.cookingStyle,
+              userIdPresent: true,
+            }),
+          );
+        },
+      });
+
+      const strategy = await generator.generateRankedWeeklyStrategy(parsed.value);
+      const stats = calculateRankedWeeklyStrategyQualityStats(strategy, parsed.value);
+      return json({
+        strategy,
+        stats,
+        meta: {
+          requestId,
+          promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+          provider: config.value.provider,
+          model: config.value.gemini.model,
+          durationMs: Date.now() - started,
+        },
+      });
+    } catch (error) {
+      const mapped = asStrategyError(error);
+      console.log(
+        JSON.stringify({
+          event: "generate_ranked_weekly_strategy",
+          provider: config.value.provider,
+          model: config.value.gemini.model,
+          promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+          requestId,
+          durationMs: Date.now() - started,
+          success: false,
+          errorCode: mapped.code,
+        }),
+      );
+      return json({ error: mapped }, statusFor(mapped));
+    }
   }
 
   const parsed = parseWeeklyStrategyRequest(body);
@@ -116,7 +203,7 @@ serveWithCors(async (req) => {
       },
     });
   } catch (error) {
-    const mapped = asWeeklyStrategyError(error);
+    const mapped = asStrategyError(error);
     console.log(
       JSON.stringify({
         event: "generate_weekly_strategy",

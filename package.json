@@ -15,6 +15,7 @@
     "sync:edge": "bash scripts/sync-edge-shared.sh",
     "generate:recipe:dev": "pnpm --filter @fitness-autopilot/llm generate:dev",
     "generate:weekly-strategy:dev": "pnpm --filter @fitness-autopilot/llm generate:weekly-strategy:dev",
+    "generate:ranked-weekly-strategy:dev": "pnpm --filter @fitness-autopilot/llm generate:ranked-weekly-strategy:dev",
     "discover:culinary:dev": "pnpm --filter @fitness-autopilot/llm discover:culinary:dev"
   },
   "engines": {

@@ -46,6 +46,8 @@ export const GeminiWeeklyMealStrategyPayloadSchema = z.object({
     snackPattern: z.string().min(1).max(400),
     prepApproach: z.string().min(1).max(600),
   }),
+  // `.length(7)` documents the week; Gemini 3.x rejects minItems/maxItems, so
+  // the sanitizer strips both. Domain validation still requires exactly 7 days.
   days: z.array(GeminiWeeklyDayStrategyPayloadSchema).length(7),
   sharedIngredientIntents: z.array(z.string().min(1).max(160)).max(40),
   planningNotes: z.array(z.string().min(1).max(400)).max(20).optional(),

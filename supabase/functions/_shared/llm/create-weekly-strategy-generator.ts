@@ -1,4 +1,7 @@
-import type { WeeklyStrategyGenerator } from "../domain/index.ts";
+import type {
+  RankedWeeklyStrategyGenerator,
+  WeeklyStrategyGenerator,
+} from "../domain/index.ts";
 import { weeklyStrategyError } from "../domain/index.ts";
 import { loadLlmServerConfig, type EnvReader, type LlmServerConfig } from "./config.ts";
 import type { GeminiContentClient } from "./gemini/client.ts";
@@ -17,7 +20,7 @@ export type CreateWeeklyStrategyGeneratorOptions = {
 
 export function createWeeklyStrategyGenerator(
   options: CreateWeeklyStrategyGeneratorOptions = {},
-): WeeklyStrategyGenerator {
+): WeeklyStrategyGenerator & RankedWeeklyStrategyGenerator {
   const configResult =
     options.config !== undefined
       ? { ok: true as const, value: options.config }
