@@ -92,6 +92,7 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
   it("implements CulinaryDiscoveryProvider and enables Google Search grounding", async () => {
     const generateContent = vi.fn(async (params) => {
       expect(params.tools).toEqual([{ googleSearch: {} }]);
+      expect(params.thinkingConfig).toEqual({ thinkingLevel: "minimal" });
       // Gemini 3.x drops grounding when responseJsonSchema / mime JSON are set.
       expect(params.responseMimeType).toBeUndefined();
       expect(params.responseJsonSchema).toBeUndefined();
@@ -102,6 +103,8 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
       expect(params.systemInstruction).toContain("Do not preselect a famous publication");
       expect(params.systemInstruction).toContain("Aim for approximately 4–8 Google Search queries");
       expect(params.systemInstruction).toContain("Do not add filler candidates");
+      expect(params.systemInstruction).toContain("DISCOVERY_NOT_GROUNDED");
+      expect(params.systemInstruction).toContain("invoke the googleSearch tool");
       expect(params.contents).toContain("Indian");
       expect(params.contents).toContain("Chicken");
       expect(params.contents).toContain("Chicken Tikka");
@@ -262,7 +265,43 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
       join(repoRoot, "supabase/functions/culinary-discovery/index.ts"),
       "utf8",
     );
-    expect(edgeFn).toContain("maxGroundingAttempts: 1");
+    expect(edgeFn).toContain("maxGroundingAttempts: 3");
+  });
+
+  it("requests minimal thinking and Google Search on every discovery call", async () => {
+    const generateContent = vi.fn(async () => ({
+      text: JSON.stringify({ candidates: [modelCandidate] }),
+      groundingMetadata: grounding,
+    }));
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client: mockClient(generateContent),
+    });
+    await provider.discover(sampleRequest);
+    expect(generateContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tools: [{ googleSearch: {} }],
+        thinkingConfig: { thinkingLevel: "minimal" },
+      }),
+    );
+  });
+
+  it("nudges snack requests to search on the first attempt", async () => {
+    const generateContent = vi.fn(async (params: { contents?: string }) => {
+      expect(params.contents).toContain("MEAL-TYPE REMINDER");
+      expect(params.contents).toContain("snack");
+      expect(params.contents).toMatch(/googleSearch|Google Search/i);
+      return {
+        text: JSON.stringify({ candidates: [modelCandidate] }),
+        groundingMetadata: grounding,
+      };
+    });
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client: mockClient(generateContent),
+    });
+    await provider.discover({ ...sampleRequest, mealType: "snack" });
+    expect(generateContent).toHaveBeenCalledTimes(1);
   });
 
   it("maps grounding metadata safely without HTML entry point", () => {

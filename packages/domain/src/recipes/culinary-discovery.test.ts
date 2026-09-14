@@ -347,8 +347,8 @@ describe("culinary discovery domain", () => {
   it("builds exploration-first v1.1 prompt with count-as-target and no dish-first or famous-site targeting", () => {
     const prompt = buildCulinaryDiscoveryPrompt(baseRequest);
     const combined = `${prompt.systemInstruction}\n${prompt.userPrompt}`;
-    expect(prompt.version).toBe("culinary-discovery-v1.1");
-    expect(CULINARY_DISCOVERY_PROMPT_VERSION).toBe("culinary-discovery-v1.1");
+    expect(prompt.version).toBe("culinary-discovery-v1.3");
+    expect(CULINARY_DISCOVERY_PROMPT_VERSION).toBe("culinary-discovery-v1.3");
     expect(prompt.systemInstruction).toContain("at most 8 one-line bullets");
     expect(prompt.systemInstruction).toContain("EXPLORATION-FIRST SEARCH");
     expect(prompt.systemInstruction).toContain(
@@ -369,6 +369,9 @@ describe("culinary discovery domain", () => {
     expect(prompt.systemInstruction).toContain("Do NOT prescribe recipe modifications");
     expect(prompt.systemInstruction).toContain("should not normally become the canonical candidate source");
     expect(prompt.systemInstruction).toContain("DO NOT search primarily for healthy");
+    expect(prompt.systemInstruction).toContain("DISCOVERY_NOT_GROUNDED");
+    expect(prompt.systemInstruction).toContain("invoke the googleSearch tool");
+    expect(prompt.systemInstruction).toContain("including snack and breakfast");
     expect(prompt.systemInstruction).toContain("Chicken Tikka");
     expect(prompt.systemInstruction).toContain("Changing only the protein does not count");
     expect(prompt.userPrompt).toContain("Indian");
@@ -410,6 +413,18 @@ describe("culinary discovery domain", () => {
     ).toBe(true);
     expect(assertDiscoveryWasGrounded({ hasSearchEntryPoint: true }).ok).toBe(true);
     expect(assertDiscoveryWasGrounded({ groundingChunks: [] }).ok).toBe(false);
+  });
+
+  it("adds snack-specific search guidance so snacks are not answered from memory", () => {
+    const snackPrompt = buildCulinaryDiscoveryPrompt({
+      ...baseRequest,
+      mealType: "snack",
+    });
+    expect(snackPrompt.systemInstruction).toContain("MEAL TYPE = snack");
+    expect(snackPrompt.systemInstruction).toContain("Snacks are not exempt from grounding");
+    expect(snackPrompt.systemInstruction).toContain("street snacks");
+    expect(snackPrompt.userPrompt).toContain("MEAL TYPE = snack");
+    expect(snackPrompt.userPrompt).toContain("Do not invent snacks from memory");
   });
 
   it("calculates unique source/domain counts locally", () => {

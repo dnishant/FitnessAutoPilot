@@ -39,6 +39,12 @@ export type GeminiSafeGroundingMetadata = {
   imageSearchQueries?: string[];
 };
 
+/** Gemini 3.x thinking control (prefer thinkingLevel over thinkingBudget). */
+export type GeminiThinkingConfig = {
+  thinkingLevel?: "minimal" | "low" | "medium" | "high";
+  thinkingBudget?: number;
+};
+
 export type GeminiGenerateContentParams = {
   model: string;
   contents: string;
@@ -53,6 +59,12 @@ export type GeminiGenerateContentParams = {
   responseJsonSchema?: Record<string, unknown>;
   /** Optional built-in tools (e.g. Google Search grounding). */
   tools?: GeminiGoogleSearchTool[];
+  /**
+   * Optional thinking control. Culinary discovery uses `thinkingLevel: "minimal"`
+   * because default/medium thinking often searches during the thought phase and
+   * then omits `groundingMetadata` (or skips Search entirely for JSON-heavy prompts).
+   */
+  thinkingConfig?: GeminiThinkingConfig;
 };
 
 export type GeminiGenerateContentResult = {

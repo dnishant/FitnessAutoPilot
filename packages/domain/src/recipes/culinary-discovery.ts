@@ -15,7 +15,7 @@ import {
 } from "@fitness-autopilot/contracts";
 import { err, ok, type Result } from "@fitness-autopilot/validation";
 
-export const CULINARY_DISCOVERY_PROMPT_VERSION = "culinary-discovery-v1.1" as const;
+export const CULINARY_DISCOVERY_PROMPT_VERSION = "culinary-discovery-v1.3" as const;
 export const DEFAULT_CULINARY_DISCOVERY_CANDIDATE_COUNT = 20;
 /** Soft guidance for Gemini; the API does not expose a hard search-count cap. */
 export const GUIDED_CULINARY_SEARCH_QUERY_RANGE = { min: 4, max: 8 } as const;
@@ -111,6 +111,41 @@ function listOrNone(values: readonly string[] | undefined): string {
     return "(none specified)";
   }
   return values.join(", ");
+}
+
+/**
+ * Meal-type-specific search framing. Lighter meals (especially snacks) are more
+ * likely to be answered from memory; spell out that Search is still required.
+ */
+export function mealTypeSearchGuidance(
+  mealType: CulinaryDiscoveryRequest["mealType"],
+): readonly string[] {
+  switch (mealType) {
+    case "snack":
+      return [
+        "MEAL TYPE = snack — Google Search is still mandatory. Snacks are not exempt from grounding.",
+        "Do not invent snacks from memory. Do not shrink dinner mains and call them snacks.",
+        "Explore real snack formats for the requested cuisines: street snacks, chaat, small plates, hand foods, savory bites, sweet snacks, tea-time items, shareable appetizers.",
+        "Prefer snack-scale culinary identity (chutneys, spice mixes, crunchy/soft contrast, portable or small-plate formats).",
+        "Do not default to protein bars, yogurt bowls, or generic “healthy snack” articles unless the user explicitly asked for that.",
+      ];
+    case "breakfast":
+      return [
+        "MEAL TYPE = breakfast — Google Search is still mandatory. Do not invent breakfasts from memory.",
+        "Explore real breakfast formats for the requested cuisines: morning breads, egg dishes, porridges, savory breakfasts, regional morning plates — not dinner leftovers rebranded as breakfast.",
+      ];
+    case "lunch":
+      return [
+        "MEAL TYPE = lunch — Google Search is still mandatory.",
+        "Prefer dishes that work as a midday meal (bowls, plates, handhelds, composed lunches), not oversized dinner feasts unless they truly fit lunch.",
+      ];
+    case "dinner":
+    default:
+      return [
+        "MEAL TYPE = dinner — Google Search is still mandatory.",
+        "Explore dinner-worthy dishes with real culinary identity for the requested cuisines.",
+      ];
+  }
 }
 
 function hostnameFromUrl(url: string): string | null {
@@ -714,7 +749,11 @@ export function buildCulinaryDiscoveryPrompt(
     "",
     "SEARCH FIRST — mandatory. Do not rely primarily on memorized recipes.",
     "Use Google Search grounding. Issue exploratory culinary-direction searches BEFORE writing any final candidates.",
-    "IMPORTANT: Asking for JSON-only without searching causes discovery to fail. You must actually search.",
+    "IMPORTANT: Asking for JSON-only without searching causes discovery to fail with DISCOVERY_NOT_GROUNDED.",
+    "You must invoke the googleSearch tool in this turn. Writing the JSON fence first without Search is invalid.",
+    "This applies to every meal type, including snack and breakfast — lighter meals still require live Search grounding.",
+    "",
+    ...mealTypeSearchGuidance(request.mealType),
     "",
     "OUTPUT FORMAT (two sections, in order):",
     "1) Brief grounded notes: at most 8 one-line bullets (dish title + domain/URL only). No excerpts, HTML, or long commentary.",
@@ -792,6 +831,7 @@ export function buildCulinaryDiscoveryPrompt(
     "Discover source-backed culinary candidates for Fitness Autopilot.",
     "",
     `Meal type: ${request.mealType}`,
+    ...mealTypeSearchGuidance(request.mealType),
     `Target candidate count (maximum/target, not an exact quota): ${targetCount}`,
     "Return up to that many candidates. Do not add filler candidates merely to meet the count.",
     "Prefer fewer excellent, well-grounded candidates over weak or repetitive ones.",

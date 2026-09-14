@@ -29,18 +29,26 @@ a deterministic cap on the number of Google Search queries.
 Discovery therefore:
 
 1. Enables `googleSearch` **without** structured-output mime/schema.
-2. Prompts for brief grounded notes, then a trailing fenced JSON block.
-3. Extracts and Zod/domain-validates the JSON server-side.
-4. CLI retries up to 3 times with a stronger search nudge when grounding metadata is absent. The hosted Edge Function uses **one** attempt: extra retries re-parse huge Search-grounded payloads and trip Supabase `WORKER_RESOURCE_LIMIT` (~2s CPU / 256MB).
-5. Search-grounded Edge calls use a REST client that drops `searchEntryPoint` HTML before JSON.parse. The CLI (`pnpm discover:culinary:dev`) is the fallback when Edge still runs out of compute.
-6. Fails with `DISCOVERY_NOT_GROUNDED` when search metadata is still absent after retries.
-7. Guides the model toward approximately 4–8 exploratory searches (prompt guidance, not a hard API limit).
+2. Sets `thinkingConfig.thinkingLevel: "minimal"` — default/medium thinking often
+   skips Search on JSON-heavy prompts or searches during thinking and omits
+   `groundingMetadata`.
+3. Prompts for brief grounded notes, then a trailing fenced JSON block.
+4. Extracts and Zod/domain-validates the JSON server-side.
+5. Retries up to 3 times (CLI and Edge) with a stronger search nudge when
+   grounding metadata is absent. Ungrounded replies are small; grounded replies
+   strip `searchEntryPoint` HTML before `JSON.parse`, so retries no longer trip
+   Supabase `WORKER_RESOURCE_LIMIT` the way SDK parsing did.
+6. Search-grounded Edge calls use a REST client that drops `searchEntryPoint`
+   HTML before JSON.parse. The CLI (`pnpm discover:culinary:dev`) remains the
+   fallback if Edge still runs out of compute.
+7. Fails with `DISCOVERY_NOT_GROUNDED` when search metadata is still absent after retries.
+8. Guides the model toward approximately 4–8 exploratory searches (prompt guidance, not a hard API limit).
 
 ## Prompt version
 
-`culinary-discovery-v1.1` (PLAN-005.1)
+`culinary-discovery-v1.3`
 
-Refinements vs v1:
+Refinements vs v1 / v1.1:
 
 - Exploration-first search (broad culinary directions before dish-name verification).
 - Source-quality guidance without famous-publication targeting.
@@ -48,6 +56,8 @@ Refinements vs v1:
 - Fitness adaptability is `easy | moderate | hard` and must not prescribe recipe substitutions.
 - Homepage/root URLs and uncorrelated candidates are discarded.
 - Grounding coverage and source-quality diagnostics are distinct.
+- v1.2: stronger mandatory-search wording; provider uses minimal thinking + Edge retries restored.
+- v1.3: meal-type Search framing (especially snacks/breakfast) so lighter meals are not answered from memory without grounding.
 
 ## Provenance
 

@@ -81,7 +81,9 @@ serveWithCors(async (req) => {
   try {
     const provider = createCulinaryDiscoveryProvider({
       config: config.value,
-      maxGroundingAttempts: 1,
+      // Ungrounded replies are small; grounded replies strip searchEntryPoint HTML.
+      // Retries are required because Gemini 3.x often skips Search on JSON-heavy prompts.
+      maxGroundingAttempts: 3,
       onLog: (event) => {
         requestId = event.requestId;
         console.log(
