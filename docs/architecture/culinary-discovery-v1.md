@@ -82,7 +82,7 @@ rejected-for-weak-provenance count, and generic-homepage count.
 ## Non-goals
 
 - Weekly strategy integration (PLAN-004 remains unchanged)
-- Multi-cuisine orchestration / ranking (later PLAN-006)
+- Weekly planner consumption of ranked candidates (PLAN-007)
 - Detailed recipe extraction / instructions
 - USDA / nutrition verification / portion solving
 - Persistent meal-history database

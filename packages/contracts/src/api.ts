@@ -2,6 +2,7 @@ import { z } from "zod";
 import { UserProfileSchema } from "./profile";
 import { GoalTypeSchema } from "./goal";
 import { GenerateCulinaryDiscoveryRequestSchema } from "./culinary-discovery";
+import { RankCulinaryCandidatesRequestSchema } from "./candidate-ranking";
 import { GenerateRecipeRequestSchema } from "./recipe-generation";
 import { GenerateWeeklyStrategyRequestSchema } from "./weekly-strategy";
 
@@ -40,6 +41,9 @@ export { GenerateWeeklyStrategyRequestSchema };
 
 /** Edge Function body for POST /culinary-discovery (PLAN-005). */
 export { GenerateCulinaryDiscoveryRequestSchema };
+
+/** Edge Function body for POST /rank-culinary-candidates (PLAN-006). */
+export { RankCulinaryCandidatesRequestSchema };
 
 export type UpsertProfileRequest = z.infer<typeof UpsertProfileRequestSchema>;
 export type CreateGoalRequest = z.infer<typeof CreateGoalRequestSchema>;

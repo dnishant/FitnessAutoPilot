@@ -1,0 +1,378 @@
+import type { CulinaryDiscoveryCandidate } from "@fitness-autopilot/contracts";
+
+type CandidateOverrides = Partial<CulinaryDiscoveryCandidate> &
+  Pick<CulinaryDiscoveryCandidate, "candidateId" | "name">;
+
+export function makeRankingCandidate(overrides: CandidateOverrides): CulinaryDiscoveryCandidate {
+  const candidateId = overrides.candidateId;
+  return {
+    source: {
+      name: "Example Source",
+      url: `https://example.com/recipes/${candidateId}`,
+      author: "A. Author",
+    },
+    cuisineFamily: "Indian",
+    regionalStyle: null,
+    primaryProtein: "Chicken",
+    dishFormat: "plate",
+    flavorFamilies: ["savory"],
+    cookingTechniques: ["saute"],
+    textureTags: [],
+    experienceTags: [],
+    whyItIsInteresting: "A test culinary candidate.",
+    fitnessAdaptability: "moderate",
+    fitnessAdaptabilityReason:
+      "Portions can be scaled later while preserving the sauce and core flavor profile.",
+    mealPrepAdaptability: "component_prepped",
+    estimatedFinishMinutesAfterPrep: 12,
+    noveltyReason: "Test fixture.",
+    discoveryConfidence: "medium",
+    ...overrides,
+  };
+}
+
+export const CHICKEN_TIKKA = makeRankingCandidate({
+  candidateId: "tikka-chicken",
+  name: "Chicken Tikka",
+  source: {
+    name: "Serious Eats",
+    url: "https://www.seriouseats.com/chicken-tikka",
+    author: "Kenji",
+  },
+  cuisineFamily: "Indian",
+  regionalStyle: "Punjab",
+  primaryProtein: "Chicken",
+  dishFormat: "tikka kebab",
+  flavorFamilies: ["tandoori", "yogurt-chili", "smoky"],
+  cookingTechniques: ["marinate", "tandoor grill", "char"],
+  textureTags: ["charred", "tender"],
+  experienceTags: ["spicy", "smoky"],
+  whyItIsInteresting: "Classic Punjabi yogurt-chili marinade with tandoor char.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "component_prepped",
+  estimatedFinishMinutesAfterPrep: 8,
+  noveltyReason: "Recognizable tandoori classic.",
+  discoveryConfidence: "high",
+});
+
+export const PANEER_TIKKA = makeRankingCandidate({
+  candidateId: "tikka-paneer",
+  name: "Paneer Tikka",
+  source: {
+    name: "Archana's Kitchen",
+    url: "https://www.archanaskitchen.com/paneer-tikka",
+    author: "Archana",
+  },
+  cuisineFamily: "Indian",
+  regionalStyle: "Punjab",
+  primaryProtein: "Paneer",
+  dishFormat: "tikka kebab",
+  flavorFamilies: ["tandoori", "yogurt-chili", "smoky"],
+  cookingTechniques: ["marinate", "tandoor grill", "char"],
+  textureTags: ["charred", "tender"],
+  experienceTags: ["spicy", "smoky"],
+  whyItIsInteresting: "Same tandoori marinade and char as chicken tikka, with paneer.",
+  fitnessAdaptability: "moderate",
+  mealPrepAdaptability: "quick_fresh_finish",
+  estimatedFinishMinutesAfterPrep: 10,
+  noveltyReason: "Protein-swapped tandoori tikka.",
+  discoveryConfidence: "high",
+});
+
+export const FISH_TIKKA = makeRankingCandidate({
+  candidateId: "tikka-fish",
+  name: "Fish Tikka",
+  source: {
+    name: "Veg Recipes of India",
+    url: "https://www.vegrecipesofindia.com/fish-tikka",
+    author: "Dassana",
+  },
+  cuisineFamily: "Indian",
+  regionalStyle: "Punjab",
+  primaryProtein: "Fish",
+  dishFormat: "tikka kebab",
+  flavorFamilies: ["tandoori", "yogurt-chili", "smoky"],
+  cookingTechniques: ["marinate", "tandoor grill", "char"],
+  textureTags: ["charred", "tender"],
+  experienceTags: ["spicy", "smoky"],
+  whyItIsInteresting: "Tandoori tikka experience with fish instead of chicken.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "quick_fresh_finish",
+  estimatedFinishMinutesAfterPrep: 9,
+  noveltyReason: "Same tikka experience, different protein.",
+  discoveryConfidence: "medium",
+});
+
+export const ANDHRA_GREEN_CHILLI_CHICKEN = makeRankingCandidate({
+  candidateId: "andhra-green-chilli-chicken",
+  name: "Andhra Green Chilli Chicken",
+  source: {
+    name: "Specialist Andhra Kitchen",
+    url: "https://andhracooking.example.com/green-chilli-chicken",
+    author: "Lakshmi",
+  },
+  cuisineFamily: "Indian",
+  regionalStyle: "Andhra",
+  primaryProtein: "Chicken",
+  dishFormat: "skillet fry",
+  flavorFamilies: ["green chili", "curry leaf", "mustard", "tangy"],
+  cookingTechniques: ["tempering", "high-heat stir-fry", "masala coating"],
+  textureTags: ["glossy", "seared"],
+  experienceTags: ["spicy", "saucy_flavorful"],
+  whyItIsInteresting: "Andhra green chilli heat with curry leaf tempering, not a tandoori marinade.",
+  fitnessAdaptability: "moderate",
+  mealPrepAdaptability: "quick_fresh_finish",
+  estimatedFinishMinutesAfterPrep: 12,
+  noveltyReason: "Regional Andhra preparation uncommon in default tikka-heavy lists.",
+  discoveryConfidence: "high",
+});
+
+export const KERALA_BEEF_FRY = makeRankingCandidate({
+  candidateId: "kerala-beef-fry",
+  name: "Kerala Beef Fry",
+  source: {
+    name: "Specialist Kerala Kitchen",
+    url: "https://keralacooking.example.com/beef-fry",
+    author: "Maya",
+  },
+  cuisineFamily: "Indian",
+  regionalStyle: "Kerala",
+  primaryProtein: "Beef",
+  dishFormat: "dry roast fry",
+  flavorFamilies: ["coconut", "black pepper", "garam masala", "curry leaf"],
+  cookingTechniques: ["slow roast", "coconut oil fry", "reduce to dry"],
+  textureTags: ["crispy", "caramelized"],
+  experienceTags: ["crispy_textured", "comforting"],
+  whyItIsInteresting: "Deeply reduced Kerala beef with coconut oil and pepper.",
+  fitnessAdaptability: "hard",
+  mealPrepAdaptability: "fully_prepped",
+  estimatedFinishMinutesAfterPrep: 6,
+  noveltyReason: "Regional Kerala dry fry, distinct from tandoori or stew formats.",
+  discoveryConfidence: "high",
+});
+
+export const KERALA_MEEN_POLLICHATHU = makeRankingCandidate({
+  candidateId: "kerala-meen-pollichathu",
+  name: "Kerala Meen Pollichathu",
+  source: {
+    name: "Specialist Kerala Kitchen",
+    url: "https://keralacooking.example.com/meen-pollichathu",
+    author: "Maya",
+  },
+  cuisineFamily: "Indian",
+  regionalStyle: "Kerala",
+  primaryProtein: "Fish",
+  dishFormat: "banana-leaf parcel",
+  flavorFamilies: ["coconut", "mustard", "curry leaf", "tangy"],
+  cookingTechniques: ["masala paste", "banana-leaf roast", "shallow fry"],
+  textureTags: ["moist", "aromatic steam"],
+  experienceTags: ["saucy_flavorful"],
+  whyItIsInteresting: "Pearl-spot style fish roasted in banana leaf with coconut-mustard masala.",
+  fitnessAdaptability: "moderate",
+  mealPrepAdaptability: "quick_fresh_finish",
+  estimatedFinishMinutesAfterPrep: 7,
+  noveltyReason: "Regional Kerala banana-leaf fish, uncommon in default plans.",
+  discoveryConfidence: "high",
+});
+
+export const PESCADO_ZARANDEADO = makeRankingCandidate({
+  candidateId: "pescado-zarandeado",
+  name: "Pescado Zarandeado",
+  source: {
+    name: "Pati Jinich",
+    url: "https://patijinich.com/pescado-zarandeado",
+    author: "Pati Jinich",
+  },
+  cuisineFamily: "Mexican",
+  regionalStyle: "Nayarit / Sinaloa",
+  primaryProtein: "Fish",
+  dishFormat: "butterflied grilled fish",
+  flavorFamilies: ["chile", "citrus", "wood-fire", "savory-sweet"],
+  cookingTechniques: ["butterfly", "adobo slather", "open-fire grill"],
+  textureTags: ["charred", "flaky"],
+  experienceTags: ["smoky", "spicy"],
+  whyItIsInteresting: "Pacific coast butterflied fish with chile-mayo adobo over wood fire.",
+  fitnessAdaptability: "moderate",
+  mealPrepAdaptability: "fresh_only",
+  estimatedFinishMinutesAfterPrep: 25,
+  noveltyReason: "Coastal Mexican grill tradition distinct from tomato or blackening sauces.",
+  discoveryConfidence: "high",
+});
+
+export const PESCADO_VERACRUZANA = makeRankingCandidate({
+  candidateId: "pescado-veracruzana",
+  name: "Pescado a la Veracruzana",
+  source: {
+    name: "Rick Bayless",
+    url: "https://www.rickbayless.com/recipe/pescado-a-la-veracruzana",
+    author: "Rick Bayless",
+  },
+  cuisineFamily: "Mexican",
+  regionalStyle: "Veracruz",
+  primaryProtein: "Fish",
+  dishFormat: "tomato-olive fish stew",
+  flavorFamilies: ["tomato", "olive", "caper", "oregano"],
+  cookingTechniques: ["simmer", "sofrito", "braise"],
+  textureTags: ["saucy", "briny"],
+  experienceTags: ["saucy_flavorful", "comforting"],
+  whyItIsInteresting: "Gulf tomato-olive-caper sauce with a Mediterranean-Mexican identity.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "component_prepped",
+  estimatedFinishMinutesAfterPrep: 10,
+  noveltyReason: "Veracruz coastal stew, not a grilled chile fish.",
+  discoveryConfidence: "high",
+});
+
+export const CAJUN_BLACKENED_REDFISH = makeRankingCandidate({
+  candidateId: "cajun-blackened-redfish",
+  name: "Cajun Blackened Redfish",
+  source: {
+    name: "Food52",
+    url: "https://food52.com/recipes/cajun-blackened-redfish",
+    author: "Food52",
+  },
+  cuisineFamily: "American",
+  regionalStyle: "Cajun / Louisiana",
+  primaryProtein: "Fish",
+  dishFormat: "blackened fillet",
+  flavorFamilies: ["cayenne", "paprika", "thyme", "butter"],
+  cookingTechniques: ["blackening spice", "cast-iron sear"],
+  textureTags: ["crusted", "crispy"],
+  experienceTags: ["spicy", "crispy_textured"],
+  whyItIsInteresting: "Louisiana blackening crust in screaming-hot cast iron.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "quick_fresh_finish",
+  estimatedFinishMinutesAfterPrep: 7,
+  noveltyReason: "Cajun spice-crust technique, not a sauce-based fish stew.",
+  discoveryConfidence: "high",
+});
+
+export const GRILLED_CHICKEN_BOWL = makeRankingCandidate({
+  candidateId: "grilled-chicken-bowl",
+  name: "Grilled Chicken Bowl",
+  source: {
+    name: "Allrecipes",
+    url: "https://www.allrecipes.com/grilled-chicken-bowl",
+    author: null,
+  },
+  cuisineFamily: "American",
+  regionalStyle: null,
+  primaryProtein: "Chicken",
+  dishFormat: "bowl",
+  flavorFamilies: ["savory"],
+  cookingTechniques: ["grilled"],
+  textureTags: [],
+  experienceTags: [],
+  whyItIsInteresting: "Simple grilled chicken over rice.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "fully_prepped",
+  estimatedFinishMinutesAfterPrep: 5,
+  noveltyReason: "Common default grilled protein bowl.",
+  discoveryConfidence: "low",
+});
+
+export const POLLO_PIPIAN_VERDE = makeRankingCandidate({
+  candidateId: "pollo-pipian-verde",
+  name: "Pollo en Pipián Verde",
+  source: {
+    name: "Pati Jinich",
+    url: "https://patijinich.com/pollo-en-pipian-verde",
+    author: "Pati Jinich",
+  },
+  cuisineFamily: "Mexican",
+  regionalStyle: "Puebla / Central Mexico",
+  primaryProtein: "Chicken",
+  dishFormat: "seed-sauce stew",
+  flavorFamilies: ["pumpkin seed", "tomatillo", "epazote", "green chile"],
+  cookingTechniques: ["toast seeds", "blend sauce", "simmer"],
+  textureTags: ["silky", "saucy"],
+  experienceTags: ["saucy_flavorful"],
+  whyItIsInteresting: "Green pepita sauce with tomatillo tang rather than a tomato mole.",
+  fitnessAdaptability: "moderate",
+  mealPrepAdaptability: "component_prepped",
+  estimatedFinishMinutesAfterPrep: 8,
+  noveltyReason: "Regional Mexican seed sauce with a distinct eating experience.",
+  discoveryConfidence: "high",
+});
+
+export const FRESH_ONLY_LONG_DINNER = makeRankingCandidate({
+  candidateId: "fresh-only-long",
+  name: "Whole Roast Spatchcock Chicken",
+  source: {
+    name: "NYT Cooking",
+    url: "https://cooking.nytimes.com/recipes/spatchcock-chicken",
+    author: "NYT Cooking",
+  },
+  cuisineFamily: "American",
+  regionalStyle: null,
+  primaryProtein: "Chicken",
+  dishFormat: "roast bird",
+  flavorFamilies: ["herbs", "garlic", "citrus"],
+  cookingTechniques: ["spatchcock", "high-heat roast"],
+  textureTags: ["crispy skin"],
+  experienceTags: ["comforting", "crispy_textured"],
+  whyItIsInteresting: "Crisp-skinned roast chicken, cooked entirely from fresh.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "fresh_only",
+  estimatedFinishMinutesAfterPrep: 25,
+  noveltyReason: "Whole-bird roast rather than a saucy regional stew.",
+  discoveryConfidence: "medium",
+});
+
+export const QUICK_FRESH_DINNER = makeRankingCandidate({
+  candidateId: "quick-fresh-dinner",
+  name: "Chile-Lime Shrimp Tacos",
+  source: {
+    name: "Food52",
+    url: "https://food52.com/recipes/chile-lime-shrimp-tacos",
+    author: "Food52",
+  },
+  cuisineFamily: "Mexican",
+  regionalStyle: "Baja",
+  primaryProtein: "Shrimp",
+  dishFormat: "taco",
+  flavorFamilies: ["chile", "lime", "cilantro"],
+  cookingTechniques: ["quick saute", "warm tortillas"],
+  textureTags: ["juicy", "crisp slaw"],
+  experienceTags: ["spicy", "fresh"],
+  whyItIsInteresting: "Fast chile-lime shrimp with a fresh finish.",
+  fitnessAdaptability: "easy",
+  mealPrepAdaptability: "quick_fresh_finish",
+  estimatedFinishMinutesAfterPrep: 7,
+  noveltyReason: "Weeknight Baja-style taco with a short fresh finish.",
+  discoveryConfidence: "high",
+});
+
+/** Scenario A — Tikka redundancy plus distinct Indian/Mexican dishes. */
+export const SCENARIO_A_TIKKA_REDUNDANCY: CulinaryDiscoveryCandidate[] = [
+  CHICKEN_TIKKA,
+  PANEER_TIKKA,
+  FISH_TIKKA,
+  ANDHRA_GREEN_CHILLI_CHICKEN,
+  KERALA_BEEF_FRY,
+  PESCADO_ZARANDEADO,
+];
+
+/** Scenario B — fish dishes that should remain culinarily independent. */
+export const SCENARIO_B_FISH_DIVERSITY: CulinaryDiscoveryCandidate[] = [
+  KERALA_MEEN_POLLICHATHU,
+  PESCADO_ZARANDEADO,
+  PESCADO_VERACRUZANA,
+  CAJUN_BLACKENED_REDFISH,
+];
+
+export const SCENARIO_PLAN006_MIX: CulinaryDiscoveryCandidate[] = [
+  CHICKEN_TIKKA,
+  PANEER_TIKKA,
+  FISH_TIKKA,
+  KERALA_MEEN_POLLICHATHU,
+  PESCADO_ZARANDEADO,
+  PESCADO_VERACRUZANA,
+  CAJUN_BLACKENED_REDFISH,
+  ANDHRA_GREEN_CHILLI_CHICKEN,
+  KERALA_BEEF_FRY,
+  POLLO_PIPIAN_VERDE,
+  GRILLED_CHICKEN_BOWL,
+  QUICK_FRESH_DINNER,
+  FRESH_ONLY_LONG_DINNER,
+];

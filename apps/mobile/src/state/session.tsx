@@ -8,6 +8,8 @@ import {
 } from "react";
 import type {
   CalorieTarget,
+  CandidateRankingRequest,
+  CandidateRankingResult,
   CompleteOnboardingRequest,
   CreateGoalRequest,
   CulinaryDiscoveryRequest,
@@ -67,6 +69,11 @@ import {
   invokeCulinaryDiscovery,
   type CulinaryDiscoveryGenerationMeta,
 } from "../lib/culinary-discovery-preview";
+import {
+  invokeCandidateRanking,
+  rankCulinaryCandidatesLocally,
+  type CandidateRankingGenerationMeta,
+} from "../lib/candidate-ranking-preview";
 
 type SessionUser = { id: string; email: string };
 
@@ -141,6 +148,16 @@ type SessionValue = {
         ok: true;
         result: CulinaryDiscoveryResult;
         meta?: CulinaryDiscoveryGenerationMeta;
+      }
+    | { ok: false; error: string; code?: string; diagnostics?: string }
+  >;
+  rankCulinaryCandidates: (
+    request: CandidateRankingRequest,
+  ) => Promise<
+    | {
+        ok: true;
+        result: CandidateRankingResult;
+        meta?: CandidateRankingGenerationMeta;
       }
     | { ok: false; error: string; code?: string; diagnostics?: string }
   >;
@@ -816,6 +833,73 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return {
             ok: false,
             error: e instanceof Error ? e.message : "Failed to discover culinary candidates",
+          };
+        }
+      },
+      async rankCulinaryCandidates(request) {
+        try {
+          if (useLocalPlanner) {
+            const ranked = rankCulinaryCandidatesLocally(request);
+            if (!ranked.ok) {
+              return {
+                ok: false,
+                error: ranked.error.message,
+                code: ranked.error.code,
+                diagnostics: ranked.error.diagnostics,
+              };
+            }
+            return {
+              ok: true,
+              result: ranked.result,
+              meta: ranked.meta,
+            };
+          }
+          if (!supabase) {
+            return {
+              ok: false,
+              error: "Supabase is not configured.",
+              code: "INVALID_RANKING_REQUEST",
+            };
+          }
+          if (!user) {
+            return { ok: false, error: "Not signed in" };
+          }
+          const client = supabase;
+          const result = await invokeCandidateRanking(
+            async (functionName, options) => {
+              const invoked = await client.functions.invoke(functionName, options);
+              return {
+                data: invoked.data,
+                error: invoked.error
+                  ? {
+                      message: invoked.error.message,
+                      context:
+                        "context" in invoked.error
+                          ? (invoked.error as { context?: unknown }).context
+                          : undefined,
+                    }
+                  : null,
+              };
+            },
+            request,
+          );
+          if (!result.ok) {
+            return {
+              ok: false,
+              error: result.error.message,
+              code: result.error.code,
+              diagnostics: result.error.diagnostics,
+            };
+          }
+          return {
+            ok: true,
+            result: result.result,
+            meta: result.meta,
+          };
+        } catch (e) {
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "Failed to rank culinary candidates",
           };
         }
       },

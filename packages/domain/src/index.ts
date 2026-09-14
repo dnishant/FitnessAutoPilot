@@ -14,6 +14,8 @@ export * from "./nutrition/target";
 export * from "./recipes/nutrition";
 export * from "./recipes/generation";
 export * from "./recipes/culinary-discovery";
+export * from "./recipes/candidate-ranking";
+export * from "./recipes/candidate-ranking-fixtures";
 export * from "./planning/portioning";
 export * from "./planning/planner";
 export * from "./planning/weekly-strategy";

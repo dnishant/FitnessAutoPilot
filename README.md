@@ -85,6 +85,17 @@ Confirm `EXPO_PUBLIC_SUPABASE_URL` points at that same project. Gateway JWT stay
 
 Hosted Edge Functions allow only ~2s CPU / 256MB. Search-grounded Gemini payloads can exceed that (`WORKER_RESOURCE_LIMIT`). If the preview hits that error, use `pnpm discover:culinary:dev` locally after setting `GEMINI_API_KEY`.
 
+### Dev-only candidate ranking (PLAN-006)
+
+Deterministic ranking + culinary deduplication. No Gemini call.
+
+Hosted Candidate Ranking Preview: `/candidate-ranking-preview` (`Dev: Candidate Ranking` on Today). Local planner mode ranks in-process. Remote mode calls `rank-culinary-candidates`:
+
+```bash
+pnpm sync:edge
+npx supabase functions deploy rank-culinary-candidates --project-ref <project-ref>
+```
+
 ### Local Supabase
 
 ```bash

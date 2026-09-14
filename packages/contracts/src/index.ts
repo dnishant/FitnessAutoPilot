@@ -10,5 +10,6 @@ export * from "./recipe";
 export * from "./recipe-generation";
 export * from "./weekly-strategy";
 export * from "./culinary-discovery";
+export * from "./candidate-ranking";
 export * from "./plan";
 export * from "./api";
