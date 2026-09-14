@@ -18,10 +18,11 @@ Fitness Autopilot is a modular monolith.
    - food / recipe nutrition
    - AI recipe candidate generation (provider-independent; Gemini adapter in `packages/llm`)
    - search-grounded culinary discovery (provider-independent; Gemini + Google Search grounding in `packages/llm`)
+   - deterministic culinary candidate ranking + deduplication (`candidate-ranking-v1`; no LLM)
    - weekly meal strategy generation (provider-independent concepts; Gemini adapter in `packages/llm`)
    - portioning
    - one-day planner
-4. **Infrastructure** (`supabase`) — Postgres + RLS + Edge Functions that call domain logic and persist immutable prescriptions. LLM credentials stay server-side (`generate-recipe`, `culinary-discovery`, `generate-weekly-strategy`).
+4. **Infrastructure** (`supabase`) — Postgres + RLS + Edge Functions that call domain logic and persist immutable prescriptions. LLM credentials stay server-side (`generate-recipe`, `culinary-discovery`, `generate-weekly-strategy`). Ranking (`rank-culinary-candidates`) is deterministic and does not call Gemini.
 
 ## Trust boundary
 
@@ -39,4 +40,4 @@ Gateway JWT verification is off so browser `OPTIONS` preflight can reach the wor
 
 ## Rounding rules
 
-Documented in [nutrition-rounding.md](./nutrition-rounding.md), [rmr-v1.md](./rmr-v1.md), [tdee-v1.md](./tdee-v1.md), [weight-change-policy-v1.md](./weight-change-policy-v1.md), [macro-policy-v1.md](./macro-policy-v1.md), [meal-preferences-v1.md](./meal-preferences-v1.md), [cooking-preferences-v1.md](./cooking-preferences-v1.md), [recipe-generation-v1.md](./recipe-generation-v1.md), [culinary-discovery-v1.md](./culinary-discovery-v1.md), [weekly-strategy-v1.md](./weekly-strategy-v1.md), and [nutrition-target-v1.md](./nutrition-target-v1.md).
+Documented in [nutrition-rounding.md](./nutrition-rounding.md), [rmr-v1.md](./rmr-v1.md), [tdee-v1.md](./tdee-v1.md), [weight-change-policy-v1.md](./weight-change-policy-v1.md), [macro-policy-v1.md](./macro-policy-v1.md), [meal-preferences-v1.md](./meal-preferences-v1.md), [cooking-preferences-v1.md](./cooking-preferences-v1.md), [recipe-generation-v1.md](./recipe-generation-v1.md), [culinary-discovery-v1.md](./culinary-discovery-v1.md), [candidate-ranking-v1.md](./candidate-ranking-v1.md), [weekly-strategy-v1.md](./weekly-strategy-v1.md), and [nutrition-target-v1.md](./nutrition-target-v1.md).

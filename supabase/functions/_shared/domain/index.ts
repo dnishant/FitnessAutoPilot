@@ -14,6 +14,8 @@ export * from "./nutrition/target.ts";
 export * from "./recipes/nutrition.ts";
 export * from "./recipes/generation.ts";
 export * from "./recipes/culinary-discovery.ts";
+export * from "./recipes/candidate-ranking.ts";
+export * from "./recipes/candidate-ranking-fixtures.ts";
 export * from "./planning/portioning.ts";
 export * from "./planning/planner.ts";
 export * from "./planning/weekly-strategy.ts";

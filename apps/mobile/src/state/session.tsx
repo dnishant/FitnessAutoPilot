@@ -8,6 +8,8 @@ import {
 } from "react";
 import type {
   CalorieTarget,
+  CandidateRankingRequest,
+  CandidateRankingResult,
   CompleteOnboardingRequest,
   CreateGoalRequest,
   CulinaryDiscoveryRequest,
@@ -67,6 +69,10 @@ import {
   invokeCulinaryDiscovery,
   type CulinaryDiscoveryGenerationMeta,
 } from "../lib/culinary-discovery-preview";
+import {
+  rankCulinaryCandidatesLocally,
+  type CandidateRankingGenerationMeta,
+} from "../lib/candidate-ranking-preview";
 
 type SessionUser = { id: string; email: string };
 
@@ -141,6 +147,16 @@ type SessionValue = {
         ok: true;
         result: CulinaryDiscoveryResult;
         meta?: CulinaryDiscoveryGenerationMeta;
+      }
+    | { ok: false; error: string; code?: string; diagnostics?: string }
+  >;
+  rankCulinaryCandidates: (
+    request: CandidateRankingRequest,
+  ) => Promise<
+    | {
+        ok: true;
+        result: CandidateRankingResult;
+        meta?: CandidateRankingGenerationMeta;
       }
     | { ok: false; error: string; code?: string; diagnostics?: string }
   >;
@@ -816,6 +832,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return {
             ok: false,
             error: e instanceof Error ? e.message : "Failed to discover culinary candidates",
+          };
+        }
+      },
+      async rankCulinaryCandidates(request) {
+        try {
+          // Ranking is deterministic domain logic (no Gemini, no secrets).
+          // Always run in-process so the preview does not depend on a hosted
+          // Edge Function / CORS preflight. Discover-then-rank still uses
+          // culinary-discovery remotely when Gemini is required.
+          const ranked = rankCulinaryCandidatesLocally(request);
+          if (!ranked.ok) {
+            return {
+              ok: false,
+              error: ranked.error.message,
+              code: ranked.error.code,
+              diagnostics: ranked.error.diagnostics,
+            };
+          }
+          return {
+            ok: true,
+            result: ranked.result,
+            meta: ranked.meta,
+          };
+        } catch (e) {
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "Failed to rank culinary candidates",
           };
         }
       },
