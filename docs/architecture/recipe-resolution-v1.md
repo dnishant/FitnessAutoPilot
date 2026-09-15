@@ -19,7 +19,7 @@ PLAN-005 Discovery → PLAN-006 Ranking → PLAN-007/007.1 Strategy → PLAN-008
 
 14 weekly lunch+dinner slots with a compact repertoire (e.g. 6 unique dishes) produce **6** resolver calls, not 14.
 
-Default concurrency: `3` (`DEFAULT_RECIPE_RESOLUTION_CONCURRENCY`).
+Default concurrency: `2` (`DEFAULT_RECIPE_RESOLUTION_CONCURRENCY`). Transient Gemini 503/rate-limit failures get one serial retry pass.
 
 ## Key types
 

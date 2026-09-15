@@ -134,7 +134,7 @@ function sampleResolvedRecipe(overrides: Record<string, unknown> = {}) {
 describe("recipe-resolution contracts", () => {
   it("exports recipe-resolution-v1 prompt version and default concurrency", () => {
     expect(RECIPE_RESOLUTION_PROMPT_VERSION).toBe("recipe-resolution-v1");
-    expect(DEFAULT_RECIPE_RESOLUTION_CONCURRENCY).toBe(3);
+    expect(DEFAULT_RECIPE_RESOLUTION_CONCURRENCY).toBe(2);
   });
 
   it("accepts a valid resolution request and resolved recipe", () => {

@@ -319,9 +319,98 @@ export async function mapWithConcurrency<T, R>(
   return results;
 }
 
+type CandidateResolveOutcome =
+  | { ok: true; recipe: ResolvedRecipe }
+  | { ok: false; failure: RecipeResolutionFailure };
+
+function isTransientResolutionFailure(failure: RecipeResolutionFailure): boolean {
+  if (failure.code === "RATE_LIMITED") return true;
+  if (failure.code !== "LLM_PROVIDER_ERROR") return false;
+  return /\b(503|UNAVAILABLE|high demand|temporarily unavailable|try again later|WORKER_RESOURCE_LIMIT)\b/i.test(
+    failure.failureReason,
+  );
+}
+
+async function resolveOneCandidate(input: {
+  candidate: CulinaryDiscoveryCandidate;
+  resolver: RecipeResolver;
+  preferredPrepIntents?: ResolvedRecipe["supportedPrepModes"][number]["mode"][];
+}): Promise<CandidateResolveOutcome> {
+  try {
+    const recipe = await input.resolver.resolve({
+      candidate: input.candidate,
+      preferredPrepIntents: input.preferredPrepIntents,
+    });
+    const validated = validateResolvedRecipe(recipe, { candidate: input.candidate });
+    if (!validated.ok) {
+      return {
+        ok: false,
+        failure: {
+          candidateId: input.candidate.candidateId,
+          candidateName: input.candidate.name,
+          failureReason: validated.error.message,
+          code: validated.error.code,
+        },
+      };
+    }
+    return { ok: true, recipe: validated.value };
+  } catch (error) {
+    const mapped = asRecipeResolutionError(error, input.candidate);
+    return {
+      ok: false,
+      failure: {
+        candidateId: input.candidate.candidateId,
+        candidateName: input.candidate.name,
+        failureReason: mapped.message,
+        code: mapped.code,
+      },
+    };
+  }
+}
+
+async function retryTransientFailures(input: {
+  failures: RecipeResolutionFailure[];
+  recipesByCandidateId: Record<string, ResolvedRecipe>;
+  lookup: ReadonlyMap<string, CulinaryDiscoveryCandidate>;
+  resolver: RecipeResolver;
+  preferredPrepIntentsByCandidateId?: Record<string, ResolvedRecipe["supportedPrepModes"][number]["mode"][]>;
+  sleep?: (ms: number) => Promise<void>;
+}): Promise<{ failures: RecipeResolutionFailure[]; extraResolverCalls: number }> {
+  const sleep =
+    input.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
+  const remaining: RecipeResolutionFailure[] = [];
+  let extraResolverCalls = 0;
+  for (const failure of input.failures) {
+    if (!isTransientResolutionFailure(failure)) {
+      remaining.push(failure);
+      continue;
+    }
+    const candidate = input.lookup.get(failure.candidateId);
+    if (!candidate) {
+      remaining.push(failure);
+      continue;
+    }
+    await sleep(1500);
+    extraResolverCalls += 1;
+    const outcome = await resolveOneCandidate({
+      candidate,
+      resolver: input.resolver,
+      preferredPrepIntents: input.preferredPrepIntentsByCandidateId?.[candidate.candidateId],
+    });
+    if (outcome.ok) {
+      input.recipesByCandidateId[outcome.recipe.candidateId] = outcome.recipe;
+    } else {
+      remaining.push(outcome.failure);
+    }
+  }
+  return { failures: remaining, extraResolverCalls };
+}
+
 export type ResolveWeeklyStrategyRecipesOptions = {
   concurrency?: number;
   preferredPrepIntentsByCandidateId?: Record<string, ResolvedRecipe["supportedPrepModes"][number]["mode"][]>;
+  /** Test seam for serial transient-retry delay. */
+  sleep?: (ms: number) => Promise<void>;
 };
 
 export type WeeklyRecipeResolutionSuccess = WeeklyRecipeResolutionResult & {
@@ -344,7 +433,8 @@ export async function resolveWeeklyStrategyRecipes(input: {
     input.options?.concurrency ?? DEFAULT_RECIPE_RESOLUTION_CONCURRENCY;
 
   const recipesByCandidateId: Record<string, ResolvedRecipe> = {};
-  const failures: RecipeResolutionFailure[] = [];
+  let failures: RecipeResolutionFailure[] = [];
+  let resolverCallCount = uniqueCandidateIds.length;
 
   const outcomes = await mapWithConcurrency(uniqueCandidateIds, concurrency, async (candidateId) => {
     const candidate = input.candidatesById.get(candidateId);
@@ -359,37 +449,11 @@ export async function resolveWeeklyStrategyRecipes(input: {
         },
       };
     }
-
-    try {
-      const recipe = await input.resolver.resolve({
-        candidate,
-        preferredPrepIntents: input.options?.preferredPrepIntentsByCandidateId?.[candidateId],
-      });
-      const validated = validateResolvedRecipe(recipe, { candidate });
-      if (!validated.ok) {
-        return {
-          ok: false as const,
-          failure: {
-            candidateId: candidate.candidateId,
-            candidateName: candidate.name,
-            failureReason: validated.error.message,
-            code: validated.error.code,
-          },
-        };
-      }
-      return { ok: true as const, recipe: validated.value };
-    } catch (error) {
-      const mapped = asRecipeResolutionError(error, candidate);
-      return {
-        ok: false as const,
-        failure: {
-          candidateId: candidate.candidateId,
-          candidateName: candidate.name,
-          failureReason: mapped.message,
-          code: mapped.code,
-        },
-      };
-    }
+    return resolveOneCandidate({
+      candidate,
+      resolver: input.resolver,
+      preferredPrepIntents: input.options?.preferredPrepIntentsByCandidateId?.[candidateId],
+    });
   });
 
   for (const outcome of outcomes) {
@@ -398,6 +462,19 @@ export async function resolveWeeklyStrategyRecipes(input: {
     } else {
       failures.push(outcome.failure);
     }
+  }
+
+  if (failures.some(isTransientResolutionFailure)) {
+    const retried = await retryTransientFailures({
+      failures,
+      recipesByCandidateId,
+      lookup: input.candidatesById,
+      resolver: input.resolver,
+      preferredPrepIntentsByCandidateId: input.options?.preferredPrepIntentsByCandidateId,
+      sleep: input.options?.sleep,
+    });
+    failures = retried.failures;
+    resolverCallCount += retried.extraResolverCalls;
   }
 
   if (failures.length > 0) {
@@ -415,7 +492,7 @@ export async function resolveWeeklyStrategyRecipes(input: {
     uniqueCandidateIds,
     resolvedCount: Object.keys(recipesByCandidateId).length,
     slotCount,
-    resolverCallCount: uniqueCandidateIds.length,
+    resolverCallCount,
     failures,
   });
 }
@@ -428,6 +505,7 @@ export async function resolveUniqueCandidates(input: {
   uniqueCandidateIds?: readonly string[];
   resolver: RecipeResolver;
   concurrency?: number;
+  sleep?: (ms: number) => Promise<void>;
 }): Promise<Result<WeeklyRecipeResolutionSuccess, RecipeResolutionError>> {
   const lookup = buildCandidateLookup(input.candidates);
   const ids =
@@ -435,25 +513,10 @@ export async function resolveUniqueCandidates(input: {
       ? [...new Set(input.uniqueCandidateIds)]
       : [...lookup.keys()];
 
-  const syntheticStrategy = {
-    days: [],
-    uniqueCandidateIds: ids,
-    strategySummary: {
-      varietyApproach: "n/a",
-      prepApproach: "n/a",
-      ingredientReuseApproach: "n/a",
-    },
-    metadata: {
-      provider: "local",
-      model: "n/a",
-      promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
-    },
-  } as unknown as RankedWeeklyStrategy;
-
-  // Prefer direct path without requiring 7 days for preview/batch.
   const concurrency = input.concurrency ?? DEFAULT_RECIPE_RESOLUTION_CONCURRENCY;
   const recipesByCandidateId: Record<string, ResolvedRecipe> = {};
-  const failures: RecipeResolutionFailure[] = [];
+  let failures: RecipeResolutionFailure[] = [];
+  let resolverCallCount = ids.length;
 
   const outcomes = await mapWithConcurrency(ids, concurrency, async (candidateId) => {
     const candidate = lookup.get(candidateId);
@@ -468,33 +531,10 @@ export async function resolveUniqueCandidates(input: {
         },
       };
     }
-    try {
-      const recipe = await input.resolver.resolve({ candidate });
-      const validated = validateResolvedRecipe(recipe, { candidate });
-      if (!validated.ok) {
-        return {
-          ok: false as const,
-          failure: {
-            candidateId: candidate.candidateId,
-            candidateName: candidate.name,
-            failureReason: validated.error.message,
-            code: validated.error.code,
-          },
-        };
-      }
-      return { ok: true as const, recipe: validated.value };
-    } catch (error) {
-      const mapped = asRecipeResolutionError(error, candidate);
-      return {
-        ok: false as const,
-        failure: {
-          candidateId: candidate.candidateId,
-          candidateName: candidate.name,
-          failureReason: mapped.message,
-          code: mapped.code,
-        },
-      };
-    }
+    return resolveOneCandidate({
+      candidate,
+      resolver: input.resolver,
+    });
   });
 
   for (const outcome of outcomes) {
@@ -503,6 +543,18 @@ export async function resolveUniqueCandidates(input: {
     } else {
       failures.push(outcome.failure);
     }
+  }
+
+  if (failures.some(isTransientResolutionFailure)) {
+    const retried = await retryTransientFailures({
+      failures,
+      recipesByCandidateId,
+      lookup,
+      resolver: input.resolver,
+      sleep: input.sleep,
+    });
+    failures = retried.failures;
+    resolverCallCount += retried.extraResolverCalls;
   }
 
   if (failures.length > 0) {
@@ -515,16 +567,16 @@ export async function resolveUniqueCandidates(input: {
     });
   }
 
-  void syntheticStrategy;
   return ok({
     recipesByCandidateId,
     uniqueCandidateIds: ids,
     resolvedCount: Object.keys(recipesByCandidateId).length,
     slotCount: ids.length,
-    resolverCallCount: ids.length,
+    resolverCallCount,
     failures,
   });
 }
+
 
 function asRecipeResolutionError(
   error: unknown,

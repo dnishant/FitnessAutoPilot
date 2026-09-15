@@ -11,7 +11,7 @@ import { PrepIntentSchema } from "./weekly-strategy";
 export const RECIPE_RESOLUTION_PROMPT_VERSION = "recipe-resolution-v1" as const;
 
 /** Default bounded concurrency for unique-candidate weekly resolution. */
-export const DEFAULT_RECIPE_RESOLUTION_CONCURRENCY = 3;
+export const DEFAULT_RECIPE_RESOLUTION_CONCURRENCY = 2;
 
 export const IngredientScalingBehaviorSchema = z.enum([
   "primary_scalable",

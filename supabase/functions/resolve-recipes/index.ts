@@ -108,6 +108,7 @@ serveWithCors(async (req) => {
           }),
         );
       },
+      maxAttempts: 6,
     });
 
     const result = await resolveUniqueCandidates({

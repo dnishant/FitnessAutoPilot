@@ -24,7 +24,7 @@ import { CHICKEN_TIKKA } from "./candidate-ranking-fixtures";
 describe("PLAN-008 recipe resolution domain", () => {
   it("exports prompt version recipe-resolution-v1", () => {
     expect(RECIPE_RESOLUTION_PROMPT_VERSION).toBe("recipe-resolution-v1");
-    expect(DEFAULT_RECIPE_RESOLUTION_CONCURRENCY).toBe(3);
+    expect(DEFAULT_RECIPE_RESOLUTION_CONCURRENCY).toBe(2);
   });
 
   it("extracts 6 unique candidates from the 14-slot Simple strategy", () => {
@@ -210,6 +210,37 @@ describe("PLAN-008 recipe resolution domain", () => {
         .recipesByCandidateId;
       expect(recipes["tikka-chicken"]).toBeDefined();
       expect(recipes["kerala-beef-fry"]).toBeUndefined();
+    }
+  });
+
+  it("serially retries RATE_LIMITED candidates and recovers", async () => {
+    const strategy = plan008SimpleWeeklyStrategy();
+    const lookup = plan008SimpleCandidateLookup();
+    const attempts = new Map<string, number>();
+    const resolver: RecipeResolver = {
+      async resolve(request) {
+        const id = request.candidate.candidateId;
+        const n = (attempts.get(id) ?? 0) + 1;
+        attempts.set(id, n);
+        if (id === "tikka-chicken" && n === 1) {
+          throw { code: "RATE_LIMITED", message: "503 UNAVAILABLE high demand" };
+        }
+        return makeResolvedRecipeFixture(request.candidate);
+      },
+    };
+
+    const result = await resolveWeeklyStrategyRecipes({
+      strategy,
+      candidatesById: lookup,
+      resolver,
+      options: { sleep: async () => undefined },
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.resolvedCount).toBe(6);
+      expect(result.value.resolverCallCount).toBe(7);
+      expect(attempts.get("tikka-chicken")).toBe(2);
     }
   });
 
