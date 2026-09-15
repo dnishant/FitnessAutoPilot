@@ -21,6 +21,10 @@ export const DEFAULT_PREP_FREQUENCY: PrepFrequency = "once_weekly";
 export const DEFAULT_MAX_PREP_SESSION_MINUTES: MaxPrepSessionMinutes = 90;
 export const DEFAULT_COOKING_STYLE: WeeklyCookingStyle = "ready_lunch_fresh_dinner";
 export const DEFAULT_MAX_FINISH_MINUTES: FreshFinishMinutes = 10;
+/**
+ * @deprecated PLAN-008: not a user preference. Persisted only for DB compatibility.
+ * Fresh styles store true; mostly_ready stores false (DB check). Planner ignores it.
+ */
 export const DEFAULT_USE_DINNER_PREP_FOR_NEXT_LUNCH = true;
 
 export type CookingPreferenceError = {
@@ -40,15 +44,14 @@ export type CookingPreferenceField =
   | "prepFrequency"
   | "maxPrepSessionMinutes"
   | "cookingStyle"
-  | "maxFinishMinutes"
-  | "useDinnerPrepForNextLunch";
+  | "maxFinishMinutes";
 
-const COOKING_FIELD_MESSAGES: Record<CookingPreferenceField, string> = {
+const COOKING_FIELD_MESSAGES: Record<CookingPreferenceField | "useDinnerPrepForNextLunch", string> = {
   prepFrequency: "Choose one main prep session, two smaller sessions, or cook as you go.",
   maxPrepSessionMinutes: "Choose 45 minutes, 60 minutes, 90 minutes, 2 hours, or Flexible.",
   cookingStyle: "Choose mostly ready, ready lunches with fresh dinners, or more fresh cooking.",
   maxFinishMinutes: "Choose 5, 10, 15, or 20 minutes to finish a meal.",
-  useDinnerPrepForNextLunch: "Choose whether dinner prep can help tomorrow's lunch.",
+  useDinnerPrepForNextLunch: "Dinner/lunch prep reuse is handled automatically by the planner.",
 };
 
 export function isFreshEnabledCookingStyle(
@@ -61,8 +64,11 @@ export function showsFinishTimeQuestion(cookingStyle: WeeklyCookingStyle): boole
   return isFreshEnabledCookingStyle(cookingStyle);
 }
 
-export function showsDinnerPrepQuestion(cookingStyle: WeeklyCookingStyle): boolean {
-  return isFreshEnabledCookingStyle(cookingStyle);
+/**
+ * @deprecated PLAN-008: dinner-prep-for-lunch is no longer a user-facing question.
+ */
+export function showsDinnerPrepQuestion(_cookingStyle: WeeklyCookingStyle): boolean {
+  return false;
 }
 
 export function visibleCookingPreferenceFields(
@@ -76,9 +82,6 @@ export function visibleCookingPreferenceFields(
   if (showsFinishTimeQuestion(cookingStyle)) {
     fields.push("maxFinishMinutes");
   }
-  if (showsDinnerPrepQuestion(cookingStyle)) {
-    fields.push("useDinnerPrepForNextLunch");
-  }
   return fields;
 }
 
@@ -86,12 +89,21 @@ export function isFreshFinishMinutes(value: unknown): value is FreshFinishMinute
   return FreshFinishMinutesSchema.safeParse(value).success;
 }
 
+/**
+ * Deprecated flag value for storage compatibility only.
+ * Fresh styles → true; mostly_ready → false (matches DB check). Ignored by planner.
+ */
+export function deprecatedDinnerPrepStorageValue(
+  cookingStyle: WeeklyCookingStyle,
+): boolean {
+  return cookingStyle !== "mostly_ready";
+}
+
 export function applyCookingPreferenceDefaults(
   input: Partial<CookingPreferencesDraft> = {},
 ): CookingPreferencesDraft {
   const cookingStyle = input.cookingStyle ?? DEFAULT_COOKING_STYLE;
   const omittedFinish = input.maxFinishMinutes === undefined;
-  const omittedDinner = input.useDinnerPrepForNextLunch === undefined;
   return {
     prepFrequency: input.prepFrequency ?? DEFAULT_PREP_FREQUENCY,
     maxPrepSessionMinutes:
@@ -104,24 +116,18 @@ export function applyCookingPreferenceDefaults(
         ? 0
         : DEFAULT_MAX_FINISH_MINUTES
       : input.maxFinishMinutes ?? DEFAULT_MAX_FINISH_MINUTES,
-    useDinnerPrepForNextLunch: omittedDinner
-      ? cookingStyle === "mostly_ready"
-        ? false
-        : DEFAULT_USE_DINNER_PREP_FOR_NEXT_LUNCH
-      : Boolean(input.useDinnerPrepForNextLunch),
+    // Always overwrite with storage-compat value; never trust user-supplied planning permission.
+    useDinnerPrepForNextLunch: deprecatedDinnerPrepStorageValue(cookingStyle),
   };
 }
 
 export function normalizeCookingPreferences(
   input: CookingPreferencesDraft,
 ): CookingPreferencesDraft {
-  if (input.cookingStyle !== "mostly_ready") {
-    return input;
-  }
   return {
     ...input,
-    maxFinishMinutes: 0,
-    useDinnerPrepForNextLunch: false,
+    maxFinishMinutes: input.cookingStyle === "mostly_ready" ? 0 : input.maxFinishMinutes,
+    useDinnerPrepForNextLunch: deprecatedDinnerPrepStorageValue(input.cookingStyle),
   };
 }
 
@@ -169,10 +175,7 @@ export function applyCookingStyleChange(input: {
       ...input.current,
       cookingStyle: input.nextStyle,
       maxFinishMinutes: remembered,
-      useDinnerPrepForNextLunch:
-        input.current.cookingStyle === "mostly_ready"
-          ? DEFAULT_USE_DINNER_PREP_FOR_NEXT_LUNCH
-          : input.current.useDinnerPrepForNextLunch,
+      useDinnerPrepForNextLunch: deprecatedDinnerPrepStorageValue(input.nextStyle),
     },
     rememberedMaxFinishMinutes: remembered,
   };

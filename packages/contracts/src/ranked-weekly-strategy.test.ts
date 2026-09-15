@@ -9,7 +9,7 @@ import { MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK } from "./cooking-preferences";
 
 describe("ranked weekly strategy contracts", () => {
   it("versions the PLAN-007.1 prompt, leftover policy, and complexity bands", () => {
-    expect(RANKED_WEEKLY_STRATEGY_PROMPT_VERSION).toBe("weekly-strategy-ranked-v1.1.1");
+    expect(RANKED_WEEKLY_STRATEGY_PROMPT_VERSION).toBe("weekly-strategy-ranked-v1.2.0");
     expect(MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK).toBe(1);
     expect(WEEKLY_VARIETY_COMPLEXITY_POLICY.simple).toMatchObject({
       minPreferredUniqueCandidates: 5,

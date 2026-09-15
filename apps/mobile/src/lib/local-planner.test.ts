@@ -292,7 +292,8 @@ describe("local RMR persistence", () => {
       asOf,
     );
     expect(store.cookingPreferences).toEqual(first);
-    expect(first.useDinnerPrepForNextLunch).toBe(false);
+    // PLAN-008: user-supplied false is overwritten for fresh styles (storage compat / ignored by planner).
+    expect(first.useDinnerPrepForNextLunch).toBe(true);
 
     const second = localSaveCookingPreferences(
       store.userId,

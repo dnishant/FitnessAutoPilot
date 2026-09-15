@@ -438,7 +438,9 @@ describe("weekly strategy preview rendering model", () => {
     expect(context.find((row) => row.label === "Prep frequency")?.value).toContain(
       "One main prep session",
     );
-    expect(context.find((row) => row.label === "Dinner prep → next lunch")?.value).toBe("Yes");
+    expect(context.find((row) => row.label === "Shared prep optimization")?.value).toBe(
+      "Automatic (planner-owned)",
+    );
 
     const summary = buildStrategySummaryRows(sampleStrategy());
     expect(summary.find((row) => row.label === "Variety")?.value).toContain("Balanced");

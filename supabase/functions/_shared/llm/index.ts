@@ -18,6 +18,10 @@ export {
   createCulinaryDiscoveryProvider,
   type CreateCulinaryDiscoveryProviderOptions,
 } from "./create-culinary-discovery-provider.ts";
+export {
+  createRecipeResolver,
+  type CreateRecipeResolverOptions,
+} from "./create-recipe-resolver.ts";
 export type {
   GeminiContentClient,
   GeminiGenerateContentParams,
@@ -39,6 +43,21 @@ export {
   type GeminiRecipeGeneratorOptions,
   type RecipeGenerationLogEvent,
 } from "./gemini/recipe-generator.ts";
+export {
+  GeminiRecipeResolver,
+  coerceRecipePrepMode,
+  coerceResolvedRecipePayload,
+  type GeminiRecipeResolverOptions,
+  type RecipeResolutionLogEvent,
+} from "./gemini/recipe-resolver.ts";
+export {
+  classifyGeminiProviderError,
+  computeBackoffDelayMs,
+  parseRetryAfterMs,
+  withGeminiRetries,
+  type RateLimitInfo,
+  type RetryOptions,
+} from "./gemini/retry.ts";
 export {
   GeminiWeeklyStrategyGenerator,
   SHARED_INGREDIENT_INTENT_MAX_LENGTH,
@@ -64,6 +83,10 @@ export {
   GeminiRecipeCandidatePayloadSchema,
   geminiRecipeResponseJsonSchema,
 } from "./gemini/schema.ts";
+export {
+  GeminiResolvedRecipePayloadSchema,
+  geminiResolvedRecipeResponseJsonSchema,
+} from "./gemini/recipe-resolution-schema.ts";
 export {
   GeminiWeeklyMealStrategyPayloadSchema,
   geminiWeeklyStrategyResponseJsonSchema,

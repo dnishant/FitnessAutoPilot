@@ -191,7 +191,7 @@ describe("ranked weekly strategy preview", () => {
   it("rebuilds the PLAN-007.1 prompt locally without secrets", () => {
     const request = sampleRankedWeeklyStrategyRequest();
     const prompt = buildRankedPromptPreview(request);
-    expect(prompt.version).toBe("weekly-strategy-ranked-v1.1.1");
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1.2.0");
     expect(prompt.userPrompt).toContain("andhra-green-chilli-chicken");
     expect(prompt.systemInstruction).toContain("Variety is a constraint to prevent boredom");
     expect(prompt.systemInstruction).toContain("WEEKLY REPERTOIRE FIRST");

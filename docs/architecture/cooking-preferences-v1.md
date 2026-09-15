@@ -10,7 +10,7 @@ PLAN-002 captures cooking and meal-prep **intent** after PLAN-001 food preferenc
 | `max_prep_session_minutes` | Per-session limit: `45`, `60`, `90`, `120`, or `null` (Flexible). For two weekly sessions this is per session, not a weekly total. |
 | `cooking_style` | `mostly_ready` / `ready_lunch_fresh_dinner` / `fresh_focused`. Preferences, not rigid rules. |
 | `max_finish_minutes` | Fresh finish: `5` / `10` / `15` / `20`. Persisted as `0` when `cooking_style` is `mostly_ready`. |
-| `use_dinner_prep_for_next_lunch` | Dinner time may help a *different* next-day lunch. Default `true` for fresh styles. Forced `false` for `mostly_ready`. |
+| `use_dinner_prep_for_next_lunch` | **Deprecated (PLAN-008).** Ignored by planning. Retained for DB compatibility. Fresh styles persist `true`; `mostly_ready` persists `false`. |
 
 Empty or omitted fields receive domain defaults before validation. Option values live in `@fitness-autopilot/contracts`.
 
@@ -20,9 +20,9 @@ Empty or omitted fields receive domain defaults before validation. Option values
 
 One current record per user on `user_profiles`. Completion is `cooking_preferences_completed_at IS NOT NULL`. Cooking columns are not defaulted in the database so incomplete users are not skipped.
 
-## Planner semantics (PLAN-007)
+## Planner semantics (PLAN-007 / PLAN-008)
 
-PLAN-007 implements lunch preparation strategy on weekly lunch slots:
+PLAN-007 implements lunch preparation strategy on weekly lunch slots as an **output decision**, not a user preference:
 
 ```ts
 type LunchPreparationStrategy =
@@ -33,11 +33,11 @@ type LunchPreparationStrategy =
 const MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK = 1;
 ```
 
-- `independent_meal_prep`: lunch made during the main prep session.
-- `piggyback_prep`: a different lunch prepared partly while dinner is being made.
-- `direct_leftover`: essentially the same dinner eaten as next-day lunch.
+- `independent_meal_prep`: lunch made during the main prep session (default).
+- `piggyback_prep`: a different lunch prepared partly while another meal is being made — only with strong shared-prep evidence.
+- `direct_leftover`: essentially the same dinner eaten as a later lunch (rare).
 
-Dinner prep helping lunch does **not** mean dinner automatically becomes tomorrow's lunch. A later planner may assemble a different lunch, prepare components for another cuisine, use idle oven or stove time, reuse grains or chopped vegetables, or occasionally use direct leftovers.
+Shared prep reuse across the week is always an automatic optimization opportunity. Users are not asked whether dinner prep may help lunch.
 
 ### Flavor principle
 
@@ -51,9 +51,9 @@ A later planner may consider cuisine family, sauce/flavor family, seasoning prof
 
 ### Combined future inputs
 
-A later planner may combine nutrition targets + food preferences + variety + prep frequency + prep time + cooking style + finish time + `useDinnerPrepForNextLunch`. Example for Balanced + one 90-minute prep + ready lunches + 10-minute finish + dinner prep helping lunch:
+A later planner may combine nutrition targets + food preferences + variety + prep frequency + prep time + cooking style + finish time + automatic shared-prep opportunities. Example for Balanced + one 90-minute prep + ready lunches + 10-minute finish:
 
 - some lunches fully prepared
 - some dinners partially prepped then finished fresh
-- some different next-day lunches made via piggyback prep
+- some different lunches made via piggyback / shared component prep
 - at most one direct leftover lunch per week

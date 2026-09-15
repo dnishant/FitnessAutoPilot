@@ -17,7 +17,7 @@ import {
 const userId = "11111111-1111-1111-1111-111111111111";
 
 describe("cooking preference drafts", () => {
-  it("defaults to once weekly, 90 minutes, ready lunches + fresh dinners, 10 minutes, and dinner prep for lunch", () => {
+  it("defaults to once weekly, 90 minutes, ready lunches + fresh dinners, 10 minutes", () => {
     const draft = createCookingPreferencesDraft();
     expect(draft.prepFrequency).toBe(DEFAULT_PREP_FREQUENCY);
     expect(draft.prepFrequency).toBe("once_weekly");
@@ -27,6 +27,7 @@ describe("cooking preference drafts", () => {
     expect(draft.cookingStyle).toBe("ready_lunch_fresh_dinner");
     expect(draft.maxFinishMinutes).toBe(DEFAULT_MAX_FINISH_MINUTES);
     expect(draft.maxFinishMinutes).toBe(10);
+    // Deprecated storage flag — always true for fresh styles; ignored by planner.
     expect(draft.useDinnerPrepForNextLunch).toBe(DEFAULT_USE_DINNER_PREP_FOR_NEXT_LUNCH);
     expect(draft.useDinnerPrepForNextLunch).toBe(true);
     expect(validateCookingPreferences(draft).ok).toBe(true);
@@ -79,7 +80,7 @@ describe("cooking preference drafts", () => {
     expect(validated.ok).toBe(false);
   });
 
-  it("normalizes mostly_ready to a 0-minute finish time and no dinner-prep help", () => {
+  it("normalizes mostly_ready to a 0-minute finish time and storage-compat dinner-prep=false", () => {
     const validated = validateCookingPreferences({
       cookingStyle: "mostly_ready",
       maxFinishMinutes: 10,
@@ -126,25 +127,19 @@ describe("cooking preference drafts", () => {
     ).toBe(false);
   });
 
-  it("persists the dinner-prep-for-lunch preference on fresh styles", () => {
-    const enabled = validateCookingPreferences(
-      createCookingPreferencesDraft({
-        cookingStyle: "ready_lunch_fresh_dinner",
-        useDinnerPrepForNextLunch: true,
-      }),
-    );
-    const disabled = validateCookingPreferences(
+  it("ignores user-supplied dinner-prep flag and always stores planner-compat value", () => {
+    const disabledAttempt = validateCookingPreferences(
       createCookingPreferencesDraft({
         cookingStyle: "fresh_focused",
         useDinnerPrepForNextLunch: false,
       }),
     );
-    expect(enabled.ok && disabled.ok).toBe(true);
-    if (!enabled.ok || !disabled.ok) {
+    expect(disabledAttempt.ok).toBe(true);
+    if (!disabledAttempt.ok) {
       return;
     }
-    expect(enabled.value.useDinnerPrepForNextLunch).toBe(true);
-    expect(disabled.value.useDinnerPrepForNextLunch).toBe(false);
+    // PLAN-008: old persisted false no longer controls planning; storage writes true for fresh.
+    expect(disabledAttempt.value.useDinnerPrepForNextLunch).toBe(true);
   });
 
   it("loads and edits the current cooking-preference profile without creating a second one", () => {
@@ -164,7 +159,7 @@ describe("cooking preference drafts", () => {
     if (!first.ok) {
       return;
     }
-    expect(first.value.useDinnerPrepForNextLunch).toBe(false);
+    expect(first.value.useDinnerPrepForNextLunch).toBe(true);
     const edited = upsertCurrentCookingPreferences({
       userId,
       current: first.value,
@@ -174,7 +169,7 @@ describe("cooking preference drafts", () => {
         maxPrepSessionMinutes: 90,
         cookingStyle: "ready_lunch_fresh_dinner",
         maxFinishMinutes: 10,
-        useDinnerPrepForNextLunch: true,
+        useDinnerPrepForNextLunch: false,
       },
       asOf: new Date("2026-09-10T01:00:00.000Z"),
     });
@@ -189,7 +184,7 @@ describe("cooking preference drafts", () => {
     expect(edited.value.userId).toBe(userId);
   });
 
-  it("hides finish-time and dinner-prep questions for mostly_ready and shows them for fresh styles", () => {
+  it("never asks dinner-prep; shows finish-time only for fresh styles", () => {
     expect(showsFinishTimeQuestion("mostly_ready")).toBe(false);
     expect(showsDinnerPrepQuestion("mostly_ready")).toBe(false);
     expect(visibleCookingPreferenceFields("mostly_ready")).toEqual([
@@ -198,13 +193,12 @@ describe("cooking preference drafts", () => {
       "cookingStyle",
     ]);
     expect(showsFinishTimeQuestion("ready_lunch_fresh_dinner")).toBe(true);
-    expect(showsDinnerPrepQuestion("fresh_focused")).toBe(true);
+    expect(showsDinnerPrepQuestion("fresh_focused")).toBe(false);
     expect(visibleCookingPreferenceFields("fresh_focused")).toEqual([
       "prepFrequency",
       "maxPrepSessionMinutes",
       "cookingStyle",
       "maxFinishMinutes",
-      "useDinnerPrepForNextLunch",
     ]);
   });
 

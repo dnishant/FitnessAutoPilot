@@ -216,7 +216,8 @@ describe("GeminiWeeklyStrategyGenerator", () => {
     expect(userPrompt).toContain("prepFrequency: once_weekly");
     expect(userPrompt).toContain("cookingStyle: ready_lunch_fresh_dinner");
     expect(userPrompt).toContain("maxFinishMinutes: 10");
-    expect(userPrompt).toContain("useDinnerPrepForNextLunch: true");
+    expect(userPrompt).toContain("shared-prep guidance:");
+    expect(userPrompt).not.toContain("useDinnerPrepForNextLunch: true");
     expect(userPrompt).toContain("targetCaloriesPerDay: 2200");
     expect(userPrompt).toContain("targetProteinGramsPerDay: 160");
     expect(userPrompt).toContain("allergies (hard exclude): Peanuts");

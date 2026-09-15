@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   chooseOnboardingCookingStyle,
   continueFromCookingStyle,
+  continueFromFinishTime,
   createOnboardingView,
   showsDinnerPrepQuestion,
   showsFinishTimeQuestion,
@@ -10,18 +11,19 @@ import {
 } from "@fitness-autopilot/domain";
 
 describe("cooking preference conditional UI", () => {
-  it("hides finish-time and dinner-prep fields for mostly_ready and shows them for fresh styles", () => {
+  it("hides finish-time for mostly_ready and never asks dinner-prep", () => {
     let view = startCookingPreferencesOnboarding(createOnboardingView());
     expect(visibleCookingPreferenceFields(view.draft.cookingStyle)).toContain("maxFinishMinutes");
     expect(showsFinishTimeQuestion(view.draft.cookingStyle)).toBe(true);
+    expect(showsDinnerPrepQuestion(view.draft.cookingStyle)).toBe(false);
+    expect(visibleCookingPreferenceFields(view.draft.cookingStyle)).not.toContain(
+      "useDinnerPrepForNextLunch",
+    );
 
     view = chooseOnboardingCookingStyle(view, "mostly_ready");
     expect(showsFinishTimeQuestion(view.draft.cookingStyle)).toBe(false);
     expect(showsDinnerPrepQuestion(view.draft.cookingStyle)).toBe(false);
     expect(visibleCookingPreferenceFields(view.draft.cookingStyle)).not.toContain("maxFinishMinutes");
-    expect(visibleCookingPreferenceFields(view.draft.cookingStyle)).not.toContain(
-      "useDinnerPrepForNextLunch",
-    );
 
     const completed = continueFromCookingStyle(view);
     expect(completed.cookingPreferences?.maxFinishMinutes).toBe(0);
@@ -32,6 +34,10 @@ describe("cooking preference conditional UI", () => {
     const fresh = continueFromCookingStyle(view);
     expect(fresh.step).toBe("finish_time");
     expect(showsFinishTimeQuestion(fresh.draft.cookingStyle)).toBe(true);
-    expect(showsDinnerPrepQuestion(fresh.draft.cookingStyle)).toBe(true);
+    expect(showsDinnerPrepQuestion(fresh.draft.cookingStyle)).toBe(false);
+
+    const finished = continueFromFinishTime(fresh);
+    expect(finished.cookingPreferences).toBeTruthy();
+    expect(finished.step).not.toBe("dinner_prep");
   });
 });

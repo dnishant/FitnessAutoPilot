@@ -114,7 +114,11 @@ export const WeeklyStrategyCookingPreferencesSchema = z.object({
   maxPrepSessionMinutes: MaxPrepSessionMinutesSchema,
   cookingStyle: WeeklyCookingStyleSchema,
   maxFinishMinutes: MaxFinishMinutesSchema,
-  useDinnerPrepForNextLunch: z.boolean(),
+  /**
+   * @deprecated PLAN-008: ignored. Shared prep reuse is always an automatic
+   * planning opportunity. Optional for backwards-compatible request payloads.
+   */
+  useDinnerPrepForNextLunch: z.boolean().optional(),
 });
 
 export const WeeklyStrategyRequestSchema = z.object({

@@ -20,7 +20,7 @@ import {
  * prevents boredom without maximizing independent prep workflows.
  */
 
-export const RANKED_WEEKLY_STRATEGY_PROMPT_VERSION = "weekly-strategy-ranked-v1.1.1" as const;
+export const RANKED_WEEKLY_STRATEGY_PROMPT_VERSION = "weekly-strategy-ranked-v1.2.0" as const;
 
 export const MIN_RANKED_CANDIDATES_PER_MEAL_TYPE = 1;
 

@@ -86,6 +86,24 @@ Confirm `EXPO_PUBLIC_SUPABASE_URL` points at that same project. Gateway JWT stay
 
 Hosted Edge Functions allow only ~2s CPU / 256MB. Search-grounded Gemini payloads can exceed that (`WORKER_RESOURCE_LIMIT`). If the preview hits that error, use `pnpm discover:culinary:dev` locally after setting `GEMINI_API_KEY`.
 
+### Dev-only recipe resolution (PLAN-008)
+
+Source-grounded unique-candidate recipe resolution (Gemini + Search). Same server-side Gemini key:
+
+```bash
+set -a && source supabase/.env && set +a
+pnpm resolve:recipes:dev
+```
+
+Hosted Recipe Resolution Preview (`/recipe-resolution-preview`) calls `resolve-recipes`:
+
+```bash
+pnpm sync:edge
+npx supabase functions deploy resolve-recipes --project-ref <project-ref>
+```
+
+Gateway JWT stays off (`verify_jwt = false`). Partial failures surface per-candidate reasons in the preview; prep-mode aliases like `fully_cooked_meal_prep` are coerced to canonical PrepIntent values.
+
 ### Dev-only candidate ranking (PLAN-006)
 
 Deterministic ranking + culinary deduplication. No Gemini call.

@@ -352,7 +352,8 @@ describe("weekly strategy domain", () => {
     expect(prompt.userPrompt).toContain("maxPrepSessionMinutes: 90");
     expect(prompt.userPrompt).toContain("cookingStyle: ready_lunch_fresh_dinner");
     expect(prompt.userPrompt).toContain("maxFinishMinutes: 10");
-    expect(prompt.userPrompt).toContain("useDinnerPrepForNextLunch: true");
+    expect(prompt.userPrompt).not.toContain("useDinnerPrepForNextLunch: true");
+    expect(prompt.userPrompt).toContain("shared-prep guidance:");
     expect(prompt.userPrompt).toContain("targetCaloriesPerDay: 2200");
     expect(prompt.userPrompt).toContain("targetProteinGramsPerDay: 160");
     expect(prompt.userPrompt).toContain("targetCarbsGramsPerDay: 220");

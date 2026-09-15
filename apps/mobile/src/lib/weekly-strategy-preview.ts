@@ -222,8 +222,8 @@ export function buildPlanningContextRows(
       value: `${request.cookingPreferences.maxFinishMinutes} min`,
     },
     {
-      label: "Dinner prep → next lunch",
-      value: request.cookingPreferences.useDinnerPrepForNextLunch ? "Yes" : "No",
+      label: "Shared prep optimization",
+      value: "Automatic (planner-owned)",
     },
     {
       label: "Allergies",
