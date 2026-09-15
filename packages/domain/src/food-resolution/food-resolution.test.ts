@@ -627,7 +627,7 @@ describe("recipe nutrition service", () => {
 });
 
 describe("provider errors", () => {
-  it("surfaces rate-limit errors from the provider", async () => {
+  it("surfaces rate-limit as not_found rather than aborting the batch", async () => {
     const provider = mockProvider({
       async searchFoods() {
         throw new FoodDataProviderException({
@@ -641,16 +641,18 @@ describe("provider errors", () => {
       provider,
       enableSemanticDisambiguation: false,
     });
-    await expect(
-      resolver.resolve(
-        makeIngredient({
-          ingredientId: "x",
-          name: "chicken",
-          quantity: 100,
-          unit: "g",
-          role: "protein",
-        }),
-      ),
-    ).rejects.toMatchObject({ code: "FOOD_PROVIDER_RATE_LIMITED" });
+    const result = await resolver.resolve(
+      makeIngredient({
+        ingredientId: "x",
+        name: "chicken",
+        quantity: 100,
+        unit: "g",
+        role: "protein",
+      }),
+    );
+    expect(result.status).toBe("not_found");
+    if (result.status === "not_found") {
+      expect(result.reason).toMatch(/rate-limited/i);
+    }
   });
 });
