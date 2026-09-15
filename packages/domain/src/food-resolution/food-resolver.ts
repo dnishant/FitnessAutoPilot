@@ -323,9 +323,19 @@ export class DefaultFoodResolver implements FoodResolver {
       };
     } catch (error) {
       if (error instanceof FoodDataProviderException) {
-        if (error.code === "FOOD_PROVIDER_NOT_FOUND") {
+        if (
+          error.code === "FOOD_PROVIDER_NOT_FOUND" ||
+          error.code === "FOOD_PROVIDER_INVALID_RESPONSE"
+        ) {
           this.diagnostics.notFoundCount += 1;
           return { status: "not_found", reason: error.message };
+        }
+        if (error.code === "FOOD_PROVIDER_RATE_LIMITED") {
+          this.diagnostics.notFoundCount += 1;
+          return {
+            status: "not_found",
+            reason: `Provider rate-limited while resolving ingredient: ${error.message}`,
+          };
         }
         throw error;
       }

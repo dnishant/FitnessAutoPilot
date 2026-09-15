@@ -117,11 +117,17 @@ export class UsdaFoodDataProvider implements FoodDataProvider {
         }
 
         if (res.status === 429 || res.status === 503) {
-          const retryAfterMs = parseRetryAfterMs(res) ?? 500 * attempt;
+          const headerRetry = parseRetryAfterMs(res);
+          // Cap sleep so a DEMO_KEY / long Retry-After cannot stall for ~hours.
+          const retryAfterMs = Math.min(
+            headerRetry ?? 500 * attempt,
+            this.config.timeoutMs * 2,
+            10_000,
+          );
           lastError = new FoodDataProviderException({
             code: "FOOD_PROVIDER_RATE_LIMITED",
             message: `USDA rate-limited or unavailable (HTTP ${res.status}).`,
-            retryAfterMs,
+            retryAfterMs: headerRetry ?? retryAfterMs,
           });
           this.onLog?.({
             provider: "usda",
@@ -129,6 +135,7 @@ export class UsdaFoodDataProvider implements FoodDataProvider {
             attempt,
             status: res.status,
             retryAfterMs,
+            headerRetryAfterMs: headerRetry,
             path,
           });
           if (attempt < maxAttempts) {
