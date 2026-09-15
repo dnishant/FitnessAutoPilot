@@ -49,11 +49,13 @@ function CollapsibleSection(props: {
   );
 }
 
-function KeyValueRows(props: { rows: Array<{ label: string; value: string }> }) {
+function KeyValueRows(props: {
+  rows: Array<{ label: string; value: string; key?: string }>;
+}) {
   return (
     <View style={styles.kvList}>
-      {props.rows.map((row) => (
-        <View key={row.label} style={styles.kvRow}>
+      {props.rows.map((row, index) => (
+        <View key={row.key ?? `${row.label}:${index}`} style={styles.kvRow}>
           <Text style={styles.kvLabel}>{row.label}</Text>
           <Text style={styles.kvValue}>{row.value}</Text>
         </View>
@@ -183,7 +185,30 @@ export default function WeeklyStrategyPreviewScreen() {
           state.dinnerCandidates,
         )
       : [];
-  const statsRows = state.stats ? buildRankedQualityStatRows(state.stats) : [];
+  const statsRows = state.stats
+    ? buildRankedQualityStatRows(state.stats, {
+        varietyLevel: state.request?.foodPreferences.varietyLevel ?? varietyLevel,
+        prepFrequency: state.request?.cookingPreferences.prepFrequency,
+        cookingStyle: state.request?.cookingPreferences.cookingStyle,
+        providerCallCount:
+          state.meta?.providerCallCount ??
+          state.meta?.complexityRetry?.providerCallCount ??
+          state.strategy?.metadata.complexityRetry?.providerCallCount,
+        complexityRetry: (() => {
+          const retry =
+            state.meta?.complexityRetry ?? state.strategy?.metadata.complexityRetry;
+          if (!retry) {
+            return undefined;
+          }
+          return {
+            occurred: retry.occurred,
+            providerCallCount: retry.providerCallCount,
+            firstAttemptUniqueCandidates: retry.firstAttemptUniqueCandidates,
+            finalAttemptUniqueCandidates: retry.finalAttemptUniqueCandidates,
+          };
+        })(),
+      })
+    : [];
   const usageRows = state.stats ? buildRankedCandidateUsageRows(state.stats) : [];
   const promptPreview = draftRequest ? buildRankedPromptPreview(draftRequest) : null;
 
@@ -191,9 +216,10 @@ export default function WeeklyStrategyPreviewScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{WEEKLY_STRATEGY_PREVIEW_TITLE}</Text>
       <Text style={styles.help}>
-        PLAN-007 ranked weekly strategy. Load PLAN-001/002 preferences, supply ranked lunch
-        and dinner pools, then generate one 7-day lunch+dinner week from candidate IDs.
-        Concepts only — no recipe resolution or meal nutrition.
+        PLAN-007.1 ranked weekly strategy with practicality guardrails. Load PLAN-001/002
+        preferences, supply ranked lunch and dinner pools, then generate one 7-day
+        lunch+dinner week from candidate IDs. Concepts only — no recipe resolution or meal
+        nutrition.
       </Text>
 
       {useLocalMode ? (

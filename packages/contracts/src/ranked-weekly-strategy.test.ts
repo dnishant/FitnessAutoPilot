@@ -1,15 +1,31 @@
 import { describe, expect, it } from "vitest";
 import {
   RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+  WEEKLY_VARIETY_COMPLEXITY_POLICY,
   RankedWeeklyStrategyRequestSchema,
   RankedWeeklyStrategySchema,
 } from "./ranked-weekly-strategy";
 import { MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK } from "./cooking-preferences";
 
 describe("ranked weekly strategy contracts", () => {
-  it("versions the PLAN-007 prompt and leftover policy", () => {
-    expect(RANKED_WEEKLY_STRATEGY_PROMPT_VERSION).toBe("weekly-strategy-ranked-v1");
+  it("versions the PLAN-007.1 prompt, leftover policy, and complexity bands", () => {
+    expect(RANKED_WEEKLY_STRATEGY_PROMPT_VERSION).toBe("weekly-strategy-ranked-v1.1.1");
     expect(MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK).toBe(1);
+    expect(WEEKLY_VARIETY_COMPLEXITY_POLICY.simple).toMatchObject({
+      minPreferredUniqueCandidates: 5,
+      maxPreferredUniqueCandidates: 7,
+      maxHardUniqueCandidates: 8,
+    });
+    expect(WEEKLY_VARIETY_COMPLEXITY_POLICY.balanced).toMatchObject({
+      minPreferredUniqueCandidates: 7,
+      maxPreferredUniqueCandidates: 9,
+      maxHardUniqueCandidates: 10,
+    });
+    expect(WEEKLY_VARIETY_COMPLEXITY_POLICY.high).toMatchObject({
+      minPreferredUniqueCandidates: 9,
+      maxPreferredUniqueCandidates: 12,
+      maxHardUniqueCandidates: 13,
+    });
   });
 
   it("accepts a ranked weekly strategy request with lunch and dinner pools", () => {

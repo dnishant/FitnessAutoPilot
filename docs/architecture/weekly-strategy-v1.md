@@ -30,11 +30,13 @@ It does **not** resolve recipes, calculate authoritative nutrition, or invent un
 
 - Input: `RankedWeeklyStrategyRequest` (`packages/contracts`)
 - Output: `RankedWeeklyStrategy` (candidate IDs + prep metadata) + deterministic `RankedWeeklyStrategyQualityStats`
-- Prompt version: `weekly-strategy-ranked-v1`
-- One Gemini call per week
-- `uniqueCandidateIds` and quality stats are calculated in code
+- Prompt version: `weekly-strategy-ranked-v1.1.1` (PLAN-007.1 practicality guardrails + repertoire-first hardening)
+- One Gemini call per week normally; at most one corrective retry when unique candidates exceed the variety-level hard max
+- `uniqueCandidateIds`, quality stats, and complexity status are calculated in code
 - Names are hydrated from the supplied candidate pools — Gemini cannot silently rename a dish
 - No per-meal calories/macros
+- Variety is a boredom constraint; weekly prep practicality outranks maximizing culinary variety
+- Central policy: `WEEKLY_VARIETY_COMPLEXITY_POLICY` (Simple 5–7 / hard 8, Balanced 7–9 / hard 10, High 9–12 / hard 13)
 
 ### Pools and repetition
 

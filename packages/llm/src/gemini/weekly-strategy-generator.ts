@@ -9,7 +9,10 @@ import {
   WEEKLY_STRATEGY_PROMPT_VERSION,
   assertSufficientRankedCandidates,
   buildRankedWeeklyStrategyPrompt,
+  buildRankedWeeklyStrategyRetryPrompt,
   buildWeeklyStrategyPrompt,
+  evaluateWeeklyComplexity,
+  exceedsHardUniqueCandidateLimit,
   parseRankedWeeklyStrategyRequest,
   parseWeeklyStrategyRequest,
   rankedWeeklyStrategyError,
@@ -40,6 +43,8 @@ export type WeeklyStrategyLogEvent = {
   };
   varietyLevel?: string;
   cookingStyle?: string;
+  complexityRetryOccurred?: boolean;
+  uniqueCandidateCount?: number;
 };
 
 export type GeminiWeeklyStrategyGeneratorOptions = {
@@ -299,20 +304,189 @@ export class GeminiWeeklyStrategyGenerator
       throw sufficient.error;
     }
 
-    const prompt = buildRankedWeeklyStrategyPrompt(parsed.value);
-    const metadata = {
+    const baseMetadata = {
       provider: "gemini" as const,
       model: this.model,
       promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
     };
 
+    const firstPrompt = buildRankedWeeklyStrategyPrompt(parsed.value);
+    const firstAttempt = await this.invokeRankedGeminiCall({
+      requestId,
+      started,
+      request: parsed.value,
+      prompt: firstPrompt,
+    });
+
+    const firstValidated = validateRankedWeeklyStrategy(
+      firstAttempt.sanitized,
+      parsed.value,
+      baseMetadata,
+    );
+    if (!firstValidated.ok) {
+      this.log({
+        provider: "gemini",
+        model: this.model,
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+        requestId,
+        durationMs: this.now() - started,
+        success: false,
+        errorCode: firstValidated.error.code,
+        usageMetadata: firstAttempt.usageMetadata,
+        varietyLevel: parsed.value.foodPreferences.varietyLevel,
+        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+        complexityRetryOccurred: false,
+      });
+      throw firstValidated.error;
+    }
+
+    const firstComplexity = evaluateWeeklyComplexity(firstValidated.value, parsed.value);
+    const firstExceedsHard = exceedsHardUniqueCandidateLimit(
+      firstComplexity.uniqueCandidateCount,
+      firstComplexity.policy,
+    );
+    if (!firstExceedsHard) {
+      const strategy: RankedWeeklyStrategy = {
+        ...firstValidated.value,
+        metadata: {
+          ...baseMetadata,
+          complexityRetry: {
+            occurred: false,
+            providerCallCount: 1,
+            finalAttemptUniqueCandidates: firstComplexity.uniqueCandidateCount,
+          },
+        },
+      };
+      this.log({
+        provider: "gemini",
+        model: this.model,
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+        requestId,
+        durationMs: this.now() - started,
+        success: true,
+        usageMetadata: firstAttempt.usageMetadata,
+        varietyLevel: parsed.value.foodPreferences.varietyLevel,
+        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+        complexityRetryOccurred: false,
+        uniqueCandidateCount: firstComplexity.uniqueCandidateCount,
+      });
+      return strategy;
+    }
+
+    const retryPrompt = buildRankedWeeklyStrategyRetryPrompt(parsed.value, firstComplexity);
+
+    const retryAttempt = await this.invokeRankedGeminiCall({
+      requestId,
+      started,
+      request: parsed.value,
+      prompt: retryPrompt,
+    });
+
+    const retryValidated = validateRankedWeeklyStrategy(
+      retryAttempt.sanitized,
+      parsed.value,
+      baseMetadata,
+    );
+    if (!retryValidated.ok) {
+      this.log({
+        provider: "gemini",
+        model: this.model,
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+        requestId,
+        durationMs: this.now() - started,
+        success: false,
+        errorCode: retryValidated.error.code,
+        usageMetadata: retryAttempt.usageMetadata,
+        varietyLevel: parsed.value.foodPreferences.varietyLevel,
+        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+        complexityRetryOccurred: true,
+        uniqueCandidateCount: firstComplexity.uniqueCandidateCount,
+      });
+      throw retryValidated.error;
+    }
+
+    const retryComplexity = evaluateWeeklyComplexity(retryValidated.value, parsed.value);
+    if (
+      exceedsHardUniqueCandidateLimit(
+        retryComplexity.uniqueCandidateCount,
+        retryComplexity.policy,
+      )
+    ) {
+      const mapped = rankedWeeklyStrategyError(
+        "EXCESSIVE_WEEKLY_COMPLEXITY",
+        `Weekly plan still used ${retryComplexity.uniqueCandidateCount} unique candidates after a corrective retry (hard max ${retryComplexity.policy.maxHardUniqueCandidates} for ${retryComplexity.varietyLevel}).`,
+        {
+          varietyLevel: retryComplexity.varietyLevel,
+          preferredUniqueRange: [
+            retryComplexity.policy.minPreferredUniqueCandidates,
+            retryComplexity.policy.maxPreferredUniqueCandidates,
+          ],
+          hardMaxUniqueCandidates: retryComplexity.policy.maxHardUniqueCandidates,
+          firstAttemptUniqueCandidateCount: firstComplexity.uniqueCandidateCount,
+          finalAttemptUniqueCandidateCount: retryComplexity.uniqueCandidateCount,
+        },
+      );
+      this.log({
+        provider: "gemini",
+        model: this.model,
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+        requestId,
+        durationMs: this.now() - started,
+        success: false,
+        errorCode: mapped.code,
+        usageMetadata: retryAttempt.usageMetadata,
+        varietyLevel: parsed.value.foodPreferences.varietyLevel,
+        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+        complexityRetryOccurred: true,
+        uniqueCandidateCount: retryComplexity.uniqueCandidateCount,
+      });
+      throw mapped;
+    }
+
+    const strategy: RankedWeeklyStrategy = {
+      ...retryValidated.value,
+      metadata: {
+        ...baseMetadata,
+        complexityRetry: {
+          occurred: true,
+          providerCallCount: 2,
+          firstAttemptUniqueCandidates: firstComplexity.uniqueCandidateCount,
+          finalAttemptUniqueCandidates: retryComplexity.uniqueCandidateCount,
+        },
+      },
+    };
+    this.log({
+      provider: "gemini",
+      model: this.model,
+      promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+      requestId,
+      durationMs: this.now() - started,
+      success: true,
+      usageMetadata: retryAttempt.usageMetadata,
+      varietyLevel: parsed.value.foodPreferences.varietyLevel,
+      cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+      complexityRetryOccurred: true,
+      uniqueCandidateCount: retryComplexity.uniqueCandidateCount,
+    });
+    return strategy;
+  }
+
+  private async invokeRankedGeminiCall(input: {
+    requestId: string;
+    started: number;
+    request: RankedWeeklyStrategyRequest;
+    prompt: { systemInstruction: string; userPrompt: string };
+  }): Promise<{
+    sanitized: unknown;
+    usageMetadata: WeeklyStrategyLogEvent["usageMetadata"];
+  }> {
     let rawText: string;
     let usageMetadata: WeeklyStrategyLogEvent["usageMetadata"];
     try {
       const result = await this.client.generateContent({
         model: this.model,
-        contents: prompt.userPrompt,
-        systemInstruction: prompt.systemInstruction,
+        contents: input.prompt.userPrompt,
+        systemInstruction: input.prompt.systemInstruction,
         responseMimeType: "application/json",
         responseJsonSchema: geminiRankedWeeklyStrategyResponseJsonSchema(),
       });
@@ -324,19 +498,22 @@ export class GeminiWeeklyStrategyGenerator
         provider: "gemini",
         model: this.model,
         promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
-        requestId,
-        durationMs: this.now() - started,
+        requestId: input.requestId,
+        durationMs: this.now() - input.started,
         success: false,
         errorCode: mapped.code,
-        varietyLevel: parsed.value.foodPreferences.varietyLevel,
-        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+        varietyLevel: input.request.foodPreferences.varietyLevel,
+        cookingStyle: input.request.cookingPreferences.cookingStyle,
       });
       throw mapped;
     }
 
-    let jsonValue: unknown;
     try {
-      jsonValue = JSON.parse(rawText);
+      const jsonValue = JSON.parse(rawText);
+      return {
+        sanitized: coerceWeeklyStrategyPayload(jsonValue),
+        usageMetadata,
+      };
     } catch (error) {
       const mapped = rankedWeeklyStrategyError(
         "LLM_INVALID_STRUCTURED_OUTPUT",
@@ -347,48 +524,16 @@ export class GeminiWeeklyStrategyGenerator
         provider: "gemini",
         model: this.model,
         promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
-        requestId,
-        durationMs: this.now() - started,
+        requestId: input.requestId,
+        durationMs: this.now() - input.started,
         success: false,
         errorCode: mapped.code,
         usageMetadata,
-        varietyLevel: parsed.value.foodPreferences.varietyLevel,
-        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
+        varietyLevel: input.request.foodPreferences.varietyLevel,
+        cookingStyle: input.request.cookingPreferences.cookingStyle,
       });
       throw mapped;
     }
-
-    const sanitized = coerceWeeklyStrategyPayload(jsonValue);
-    const validated = validateRankedWeeklyStrategy(sanitized, parsed.value, metadata);
-    if (!validated.ok) {
-      this.log({
-        provider: "gemini",
-        model: this.model,
-        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
-        requestId,
-        durationMs: this.now() - started,
-        success: false,
-        errorCode: validated.error.code,
-        usageMetadata,
-        varietyLevel: parsed.value.foodPreferences.varietyLevel,
-        cookingStyle: parsed.value.cookingPreferences.cookingStyle,
-      });
-      throw validated.error;
-    }
-
-    this.log({
-      provider: "gemini",
-      model: this.model,
-      promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
-      requestId,
-      durationMs: this.now() - started,
-      success: true,
-      usageMetadata,
-      varietyLevel: parsed.value.foodPreferences.varietyLevel,
-      cookingStyle: parsed.value.cookingPreferences.cookingStyle,
-    });
-
-    return validated.value;
   }
 
   private log(event: WeeklyStrategyLogEvent): void {

@@ -8,8 +8,11 @@ import {
 import {
   RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
   calculateRankedWeeklyStrategyQualityStats,
+  exceedsHardUniqueCandidateLimit,
+  getWeeklyVarietyComplexityPolicy,
   looksLikeRankedWeeklyStrategyRequest,
   parseRankedWeeklyStrategyRequest,
+  rankedWeeklyStrategyError,
   type RankedWeeklyStrategyError,
 } from "../_shared/domain/planning/ranked-weekly-strategy.ts";
 import { createWeeklyStrategyGenerator } from "../_shared/llm/create-weekly-strategy-generator.ts";
@@ -23,6 +26,7 @@ function statusFor(error: WeeklyStrategyError | RankedWeeklyStrategyError): numb
     case "INSUFFICIENT_CANDIDATES":
     case "INVALID_CANDIDATE_REFERENCE":
     case "INVALID_WEEK_STRUCTURE":
+    case "EXCESSIVE_WEEKLY_COMPLEXITY":
       return 422;
     case "LLM_CONFIGURATION_ERROR":
       return 500;
@@ -116,6 +120,26 @@ serveWithCors(async (req) => {
 
       const strategy = await generator.generateRankedWeeklyStrategy(parsed.value);
       const stats = calculateRankedWeeklyStrategyQualityStats(strategy, parsed.value);
+      const policy = getWeeklyVarietyComplexityPolicy(parsed.value.foodPreferences.varietyLevel);
+      if (exceedsHardUniqueCandidateLimit(stats.uniqueCandidateCount, policy)) {
+        const error = rankedWeeklyStrategyError(
+          "EXCESSIVE_WEEKLY_COMPLEXITY",
+          `Weekly plan used ${stats.uniqueCandidateCount} unique candidates which exceeds the hard maximum of ${policy.maxHardUniqueCandidates} for ${parsed.value.foodPreferences.varietyLevel}.`,
+          {
+            varietyLevel: parsed.value.foodPreferences.varietyLevel,
+            preferredUniqueRange: [
+              policy.minPreferredUniqueCandidates,
+              policy.maxPreferredUniqueCandidates,
+            ],
+            hardMaxUniqueCandidates: policy.maxHardUniqueCandidates,
+            firstAttemptUniqueCandidateCount:
+              strategy.metadata.complexityRetry?.firstAttemptUniqueCandidates,
+            finalAttemptUniqueCandidateCount: stats.uniqueCandidateCount,
+          },
+        );
+        return json({ error }, statusFor(error));
+      }
+      const complexityRetry = strategy.metadata.complexityRetry;
       return json({
         strategy,
         stats,
@@ -125,6 +149,11 @@ serveWithCors(async (req) => {
           provider: config.value.provider,
           model: config.value.gemini.model,
           durationMs: Date.now() - started,
+          providerCallCount: complexityRetry?.providerCallCount ?? 1,
+          firstAttemptUniqueCandidates: complexityRetry?.firstAttemptUniqueCandidates,
+          finalUniqueCandidates:
+            complexityRetry?.finalAttemptUniqueCandidates ?? stats.uniqueCandidateCount,
+          ...(complexityRetry ? { complexityRetry } : {}),
         },
       });
     } catch (error) {
