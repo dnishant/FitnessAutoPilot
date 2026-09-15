@@ -48,12 +48,30 @@ export const ResolvedRecipeSourceSchema = CulinaryDiscoverySourceSchema.extend({
   url: CulinaryDiscoverySourceSchema.shape.url.nullable().optional(),
 });
 
+/**
+ * How the culinary quantity was measured (PLAN-009).
+ * Distinct from PLAN-003 RecipeIngredientCandidate measurementState (as_packaged).
+ * Optional for backward compatibility with PLAN-008 payloads.
+ */
+export const CulinaryMeasurementStateSchema = z.enum([
+  "raw",
+  "cooked",
+  "as_purchased",
+  "prepared",
+  "unknown",
+]);
+
 export const ResolvedRecipeIngredientSchema = z.object({
   ingredientId: z.string().trim().min(1).max(80),
   name: z.string().trim().min(1).max(200),
   quantity: z.number().finite().positive(),
   unit: z.string().trim().min(1).max(40),
   preparation: z.string().trim().min(1).max(200).nullable().optional(),
+  /**
+   * Measurement state for the stated quantity (raw vs cooked, etc.).
+   * Do not silently invent when absent — food resolution treats missing as unknown.
+   */
+  measurementState: CulinaryMeasurementStateSchema.optional(),
   role: IngredientRoleSchema,
   scalingBehavior: IngredientScalingBehaviorSchema,
   /** When scalingBehavior is ratio_bound, optionally name the anchor ingredient. */
@@ -198,6 +216,7 @@ export type MealComponentRelationship = z.infer<typeof MealComponentRelationship
 export type MoistureLevel = z.infer<typeof MoistureLevelSchema>;
 export type FlavorIntensity = z.infer<typeof FlavorIntensitySchema>;
 export type MealPrepQuality = z.infer<typeof MealPrepQualitySchema>;
+export type CulinaryMeasurementState = z.infer<typeof CulinaryMeasurementStateSchema>;
 export type ResolvedRecipeSource = z.infer<typeof ResolvedRecipeSourceSchema>;
 export type ResolvedRecipeIngredient = z.infer<typeof ResolvedRecipeIngredientSchema>;
 export type RecipeInstruction = z.infer<typeof RecipeInstructionSchema>;

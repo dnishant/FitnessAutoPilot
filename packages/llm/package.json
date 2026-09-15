@@ -17,7 +17,8 @@
     "generate:weekly-strategy:dev": "tsx scripts/generate-weekly-strategy-dev.ts",
     "generate:ranked-weekly-strategy:dev": "tsx scripts/generate-ranked-weekly-strategy-dev.ts",
     "discover:culinary:dev": "tsx scripts/discover-culinary-dev.ts",
-    "resolve:recipes:dev": "tsx scripts/resolve-recipes-dev.ts"
+    "resolve:recipes:dev": "tsx scripts/resolve-recipes-dev.ts",
+    "resolve:recipe-nutrition:dev": "tsx scripts/resolve-recipe-nutrition-dev.ts"
   },
   "dependencies": {
     "@fitness-autopilot/contracts": "workspace:*",

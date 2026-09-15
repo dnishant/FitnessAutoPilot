@@ -39,6 +39,10 @@ export default function RootLayout() {
           name="recipe-resolution-preview"
           options={{ title: "Recipe Resolution" }}
         />
+        <Stack.Screen
+          name="food-resolution-preview"
+          options={{ title: "Food Resolution" }}
+        />
       </Stack>
     </SessionProvider>
   );

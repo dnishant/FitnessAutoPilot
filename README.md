@@ -104,6 +104,23 @@ npx supabase functions deploy resolve-recipes --project-ref <project-ref>
 
 Gateway JWT stays off (`verify_jwt = false`). Partial failures surface per-candidate reasons in the preview; prep-mode aliases like `fully_cooked_meal_prep` are coerced to canonical PrepIntent values.
 
+### Dev-only food resolution / nutrition (PLAN-009)
+
+Canonical USDA food matching + deterministic base-recipe nutrition (never LLM macros). Requires server-side `USDA_API_KEY`:
+
+```bash
+export USDA_API_KEY=...
+pnpm resolve:recipe-nutrition:dev
+```
+
+Hosted Food Resolution Preview (`/food-resolution-preview`) calls `resolve-recipe-nutrition`:
+
+```bash
+pnpm sync:edge
+npx supabase functions deploy resolve-recipe-nutrition --project-ref <project-ref>
+# set USDA_API_KEY (and optional GEMINI_API_KEY for semantic disambiguation) as function secrets
+```
+
 ### Dev-only candidate ranking (PLAN-006)
 
 Deterministic ranking + culinary deduplication. No Gemini call.
