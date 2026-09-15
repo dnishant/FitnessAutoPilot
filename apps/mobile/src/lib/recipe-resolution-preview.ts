@@ -87,15 +87,68 @@ export function humanizeRecipeResolutionError(error: {
     return "Gemini rate-limited recipe resolution. Try again shortly.";
   }
   if (error.code === "PARTIAL_WEEKLY_RESOLUTION_FAILURE") {
-    return error.message;
+    return `${error.message} Open Failures below for per-candidate reasons; successful recipes still appear when available.`;
+  }
+  if (error.message === "Failed to send a request to the Edge Function") {
+    return "Could not reach resolve-recipes. Deploy it with CORS enabled (`npx supabase functions deploy resolve-recipes`) and confirm EXPO_PUBLIC_SUPABASE_URL points at that project.";
+  }
+  if (error.message === "Edge Function returned a non-2xx status code") {
+    return "Recipe resolution failed in the Edge Function (non-2xx). Check that resolve-recipes is deployed and GEMINI_API_KEY is set.";
   }
   return error.message;
+}
+
+export function formatRecipeResolutionFailureLine(failure: RecipeResolutionFailure): string {
+  return `${failure.candidateName} (${failure.candidateId}): ${failure.code} — ${failure.failureReason}`;
 }
 
 type InvokeClient = (
   functionName: string,
   options: { body: Record<string, unknown> },
 ) => Promise<{ data: unknown; error: { message: string; context?: unknown } | null }>;
+
+function extractPartialResolutionPayload(parsedBody: unknown): {
+  result?: WeeklyRecipeResolutionResult;
+  failures: RecipeResolutionFailure[];
+  meta?: RecipeResolutionGenerationMeta;
+} {
+  if (!parsedBody || typeof parsedBody !== "object") {
+    return { failures: [] };
+  }
+  const body = parsedBody as {
+    result?: WeeklyRecipeResolutionResult;
+    failures?: RecipeResolutionFailure[];
+    meta?: RecipeResolutionGenerationMeta;
+    error?: {
+      details?: {
+        failures?: RecipeResolutionFailure[];
+        recipesByCandidateId?: WeeklyRecipeResolutionResult["recipesByCandidateId"];
+      };
+    };
+  };
+  const failures =
+    body.failures ??
+    body.error?.details?.failures ??
+    [];
+  const recipesByCandidateId =
+    body.result?.recipesByCandidateId ?? body.error?.details?.recipesByCandidateId;
+  if (!recipesByCandidateId) {
+    return { failures, meta: body.meta };
+  }
+  const uniqueCandidateIds =
+    body.result?.uniqueCandidateIds ?? Object.keys(recipesByCandidateId);
+  return {
+    result: {
+      recipesByCandidateId,
+      uniqueCandidateIds,
+      resolvedCount: body.result?.resolvedCount ?? Object.keys(recipesByCandidateId).length,
+      slotCount: body.result?.slotCount ?? uniqueCandidateIds.length,
+      resolverCallCount: body.result?.resolverCallCount ?? uniqueCandidateIds.length,
+    },
+    failures,
+    meta: body.meta,
+  };
+}
 
 export async function invokeResolveRecipes(
   invoke: InvokeClient,
@@ -111,7 +164,13 @@ export async function invokeResolveRecipes(
       failures: RecipeResolutionFailure[];
       meta?: RecipeResolutionGenerationMeta;
     }
-  | { ok: false; error: { message: string; code?: string; diagnostics?: string } }
+  | {
+      ok: false;
+      error: { message: string; code?: string; diagnostics?: string };
+      result?: WeeklyRecipeResolutionResult;
+      failures?: RecipeResolutionFailure[];
+      meta?: RecipeResolutionGenerationMeta;
+    }
 > {
   const invoked = await invoke(RESOLVE_RECIPES_FUNCTION_NAME, {
     body: {
@@ -127,6 +186,7 @@ export async function invokeResolveRecipes(
       parsedBody && typeof parsedBody === "object" && "error" in parsedBody
         ? (parsedBody as { error: { message?: string; code?: string } }).error
         : null;
+    const partial = extractPartialResolutionPayload(parsedBody);
     return {
       ok: false,
       error: {
@@ -134,6 +194,9 @@ export async function invokeResolveRecipes(
         code: errorPayload?.code,
         diagnostics: parsedBody ? JSON.stringify(parsedBody).slice(0, 2000) : undefined,
       },
+      result: partial.result,
+      failures: partial.failures,
+      meta: partial.meta,
     };
   }
 

@@ -111,7 +111,95 @@ function coerceMealComponentRelationship(value: unknown, required: unknown): str
   return required === false ? "optional" : "recommended_side";
 }
 
-function coerceResolvedRecipePayload(value: unknown): unknown {
+/** Map Gemini prep-mode aliases onto canonical PrepIntent values. */
+export function coerceRecipePrepMode(value: unknown): string {
+  if (typeof value !== "string" || value.trim() === "") {
+    return "fresh";
+  }
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases: Record<string, string> = {
+    fully_prepped: "fully_prepped",
+    fully_cooked: "fully_prepped",
+    fully_cooked_meal_prep: "fully_prepped",
+    fully_prepped_meal: "fully_prepped",
+    meal_prep: "fully_prepped",
+    mealprep: "fully_prepped",
+    batch_cooked: "fully_prepped",
+    reheated: "fully_prepped",
+    leftover: "fully_prepped",
+    leftovers: "fully_prepped",
+    component_prepped: "component_prepped",
+    component_prep: "component_prepped",
+    components_prepped: "component_prepped",
+    prep_components: "component_prepped",
+    prepped_components: "component_prepped",
+    mise_en_place: "component_prepped",
+    quick_fresh_finish: "quick_fresh_finish",
+    quick_fresh: "quick_fresh_finish",
+    quick_finish: "quick_fresh_finish",
+    fresh_finish: "quick_fresh_finish",
+    assemble_finish: "quick_fresh_finish",
+    fresh: "fresh",
+    fresh_only: "fresh",
+    cook_fresh: "fresh",
+    from_scratch: "fresh",
+    made_to_order: "fresh",
+  };
+  return aliases[normalized] ?? "fresh";
+}
+
+function coerceIngredientRole(value: unknown): string {
+  if (typeof value !== "string") return "other";
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases: Record<string, string> = {
+    protein: "protein",
+    carbohydrate: "carb",
+    carbohydrates: "carb",
+    carb: "carb",
+    carbs: "carb",
+    starch: "carb",
+    grain: "carb",
+    fat: "fat",
+    oil: "fat",
+    vegetable: "vegetable",
+    veg: "vegetable",
+    veggies: "vegetable",
+    sauce: "sauce",
+    seasoning: "seasoning",
+    spice: "seasoning",
+    spices: "seasoning",
+    aromatic: "aromatic",
+    aromatics: "aromatic",
+    acid: "acid",
+    acidity: "acid",
+    garnish: "garnish",
+    other: "other",
+  };
+  return aliases[normalized] ?? "other";
+}
+
+function coerceScalingBehavior(value: unknown): string {
+  if (typeof value !== "string") return "fixed";
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases: Record<string, string> = {
+    primary_scalable: "primary_scalable",
+    primary: "primary_scalable",
+    scalable: "primary_scalable",
+    scale: "primary_scalable",
+    secondary_scalable: "secondary_scalable",
+    secondary: "secondary_scalable",
+    ratio_bound: "ratio_bound",
+    ratio: "ratio_bound",
+    proportional: "ratio_bound",
+    bound: "ratio_bound",
+    fixed: "fixed",
+    constant: "fixed",
+    none: "fixed",
+  };
+  return aliases[normalized] ?? "fixed";
+}
+
+export function coerceResolvedRecipePayload(value: unknown): unknown {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return value;
   }
@@ -126,9 +214,8 @@ function coerceResolvedRecipePayload(value: unknown): unknown {
       if (ingredient.preparation === undefined) {
         ingredient.preparation = null;
       }
-      if (ingredient.role === "carbohydrate") {
-        ingredient.role = "carb";
-      }
+      ingredient.role = coerceIngredientRole(ingredient.role);
+      ingredient.scalingBehavior = coerceScalingBehavior(ingredient.scalingBehavior);
       return ingredient;
     });
   }
@@ -150,10 +237,24 @@ function coerceResolvedRecipePayload(value: unknown): unknown {
       if (item === null || typeof item !== "object") return item;
       const mode = { ...(item as Record<string, unknown>) };
       if (!Array.isArray(mode.advanceTasks)) mode.advanceTasks = [];
-      if (!Array.isArray(mode.finishTasks)) mode.finishTasks = ["Finish and serve"];
-      if (mode.mode === "fresh_only") mode.mode = "fresh";
+      if (!Array.isArray(mode.finishTasks) || mode.finishTasks.length === 0) {
+        mode.finishTasks = ["Finish and serve"];
+      }
+      mode.mode = coerceRecipePrepMode(mode.mode);
+      if (typeof mode.finishTimeMinutes !== "number" || !Number.isFinite(mode.finishTimeMinutes)) {
+        mode.finishTimeMinutes = 15;
+      }
       return mode;
     });
+  } else {
+    record.supportedPrepModes = [
+      {
+        mode: "fresh",
+        advanceTasks: [],
+        finishTasks: ["Cook and serve"],
+        finishTimeMinutes: 30,
+      },
+    ];
   }
   if (Array.isArray(record.mealComponents)) {
     record.mealComponents = record.mealComponents.map((item, index) => {
@@ -358,149 +459,163 @@ export class GeminiRecipeResolver implements RecipeResolver {
       typeof parsed.value.candidate.source.url === "string" &&
       parsed.value.candidate.source.url.trim() !== "";
 
-    let rawText: string;
+    const maxSchemaAttempts = 2;
     let usageMetadata: RecipeResolutionLogEvent["usageMetadata"];
     let searchGrounded = false;
+    let lastStructuredError: RecipeResolutionError | null = null;
 
-    try {
-      const result = await withGeminiRetries(
-        async () => {
-          if (useSearch) {
-            // Structured-output schema suppresses Search grounding on Gemini 3.x.
-            // Follow culinary-discovery pattern: Search + Zod after parse.
+    for (let schemaAttempt = 1; schemaAttempt <= maxSchemaAttempts; schemaAttempt += 1) {
+      const correctiveNudge =
+        schemaAttempt === 1 || !lastStructuredError
+          ? ""
+          : [
+              "",
+              "CORRECTIVE RETRY: Previous JSON failed structured validation.",
+              `Validation error: ${lastStructuredError.message}`,
+              "supportedPrepModes[].mode MUST be exactly one of: fully_prepped, component_prepped, quick_fresh_finish, fresh.",
+              "Do not invent aliases like fully_cooked_meal_prep or meal_prep.",
+              "Return a single corrected JSON object only.",
+            ].join("\n");
+
+      let rawText: string;
+      try {
+        const result = await withGeminiRetries(
+          async () => {
+            if (useSearch) {
+              // Structured-output schema suppresses Search grounding on Gemini 3.x.
+              // Follow culinary-discovery pattern: Search + Zod after parse.
+              return this.client.generateContent({
+                model: this.model,
+                contents: [
+                  prompt.userPrompt,
+                  "",
+                  "After using Google Search to verify this dish's culinary identity,",
+                  "return a single JSON object (optionally in a ```json fence) with the structured recipe.",
+                  correctiveNudge,
+                ]
+                  .filter(Boolean)
+                  .join("\n"),
+                systemInstruction: prompt.systemInstruction,
+                tools: [{ googleSearch: {} }],
+                thinkingConfig: { thinkingLevel: "minimal" },
+              });
+            }
             return this.client.generateContent({
               model: this.model,
-              contents: [
-                prompt.userPrompt,
-                "",
-                "After using Google Search to verify this dish's culinary identity,",
-                "return a single JSON object (optionally in a ```json fence) with the structured recipe.",
-              ].join("\n"),
+              contents: `${prompt.userPrompt}${correctiveNudge}`,
               systemInstruction: prompt.systemInstruction,
-              tools: [{ googleSearch: {} }],
-              thinkingConfig: { thinkingLevel: "minimal" },
+              responseMimeType: "application/json",
+              responseJsonSchema: geminiResolvedRecipeResponseJsonSchema(),
             });
-          }
-          return this.client.generateContent({
-            model: this.model,
-            contents: prompt.userPrompt,
-            systemInstruction: prompt.systemInstruction,
-            responseMimeType: "application/json",
-            responseJsonSchema: geminiResolvedRecipeResponseJsonSchema(),
-          });
+          },
+          {
+            maxAttempts: this.maxAttempts,
+            sleep: this.sleep,
+            shouldRetry: (error) => classifyGeminiProviderError(error).isRateLimited,
+          },
+        );
+        rawText = result.text;
+        usageMetadata = result.usageMetadata;
+        searchGrounded = Boolean(result.groundingMetadata?.webSearchQueries?.length) || useSearch;
+      } catch (error) {
+        const mapped = mapProviderError(error);
+        this.log({
+          provider: "gemini",
+          model: this.model,
+          promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
+          requestId,
+          durationMs: this.now() - started,
+          success: false,
+          errorCode: mapped.code,
+          errorMessage: sanitizeLogMessage(mapped.message),
+          candidateId: parsed.value.candidate.candidateId,
+          candidateName: parsed.value.candidate.name,
+          searchGrounded: useSearch,
+        });
+        throw mapped;
+      }
+
+      let jsonValue: unknown;
+      try {
+        const jsonText = useSearch ? extractJsonObjectFromModelText(rawText) : rawText;
+        jsonValue = JSON.parse(jsonText);
+      } catch (error) {
+        lastStructuredError = recipeResolutionError(
+          "LLM_INVALID_STRUCTURED_OUTPUT",
+          "Gemini returned non-JSON structured output for recipe resolution.",
+          { cause: error instanceof Error ? error.message : String(error) },
+        );
+        continue;
+      }
+
+      const coerced = coerceResolvedRecipePayload(stripResolvedRecipeNutrition(jsonValue));
+      const stamped = {
+        ...(coerced as Record<string, unknown>),
+        candidateId: parsed.value.candidate.candidateId,
+        name:
+          typeof (coerced as { name?: unknown }).name === "string" &&
+          (coerced as { name: string }).name.trim() !== ""
+            ? (coerced as { name: string }).name
+            : parsed.value.candidate.name,
+        source: {
+          name: parsed.value.candidate.source.name,
+          url: parsed.value.candidate.source.url,
+          author: parsed.value.candidate.source.author ?? null,
         },
-        {
-          maxAttempts: this.maxAttempts,
-          sleep: this.sleep,
-          shouldRetry: (error) => classifyGeminiProviderError(error).isRateLimited,
+        flavorProfile: mergeFlavorProfileFromCandidate(coerced, parsed.value.candidate),
+        resolutionMetadata: {
+          provider: "gemini",
+          model: this.model,
+          promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
+          requestId,
+          durationMs: this.now() - started,
+          searchGrounded,
         },
-      );
-      rawText = result.text;
-      usageMetadata = result.usageMetadata;
-      searchGrounded = Boolean(result.groundingMetadata?.webSearchQueries?.length) || useSearch;
-    } catch (error) {
-      const mapped = mapProviderError(error);
+      };
+
+      const validated = validateResolvedRecipe(stamped, parsed.value);
+      if (!validated.ok) {
+        lastStructuredError = validated.error;
+        continue;
+      }
+
       this.log({
         provider: "gemini",
         model: this.model,
         promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
         requestId,
         durationMs: this.now() - started,
-        success: false,
-        errorCode: mapped.code,
-        errorMessage: sanitizeLogMessage(mapped.message),
+        success: true,
+        usageMetadata,
         candidateId: parsed.value.candidate.candidateId,
         candidateName: parsed.value.candidate.name,
-        searchGrounded: useSearch,
+        searchGrounded,
       });
-      throw mapped;
+
+      return validated.value;
     }
 
-    let jsonValue: unknown;
-    try {
-      const jsonText = useSearch ? extractJsonObjectFromModelText(rawText) : rawText;
-      jsonValue = JSON.parse(jsonText);
-    } catch (error) {
-      const mapped = recipeResolutionError(
+    const failure =
+      lastStructuredError ??
+      recipeResolutionError(
         "LLM_INVALID_STRUCTURED_OUTPUT",
-        "Gemini returned non-JSON structured output for recipe resolution.",
-        { cause: error instanceof Error ? error.message : String(error) },
+        "Gemini failed recipe resolution structured validation.",
       );
-      this.log({
-        provider: "gemini",
-        model: this.model,
-        promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
-        requestId,
-        durationMs: this.now() - started,
-        success: false,
-        errorCode: mapped.code,
-        errorMessage: sanitizeLogMessage(mapped.message),
-        usageMetadata,
-        candidateId: parsed.value.candidate.candidateId,
-        candidateName: parsed.value.candidate.name,
-        searchGrounded,
-      });
-      throw mapped;
-    }
-
-    const coerced = coerceResolvedRecipePayload(stripResolvedRecipeNutrition(jsonValue));
-    const stamped = {
-      ...(coerced as Record<string, unknown>),
-      candidateId: parsed.value.candidate.candidateId,
-      name:
-        typeof (coerced as { name?: unknown }).name === "string" &&
-        (coerced as { name: string }).name.trim() !== ""
-          ? (coerced as { name: string }).name
-          : parsed.value.candidate.name,
-      source: {
-        name: parsed.value.candidate.source.name,
-        url: parsed.value.candidate.source.url,
-        author: parsed.value.candidate.source.author ?? null,
-      },
-      flavorProfile: mergeFlavorProfileFromCandidate(coerced, parsed.value.candidate),
-      resolutionMetadata: {
-        provider: "gemini",
-        model: this.model,
-        promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
-        requestId,
-        durationMs: this.now() - started,
-        searchGrounded,
-      },
-    };
-
-    const validated = validateResolvedRecipe(stamped, parsed.value);
-    if (!validated.ok) {
-      this.log({
-        provider: "gemini",
-        model: this.model,
-        promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
-        requestId,
-        durationMs: this.now() - started,
-        success: false,
-        errorCode: validated.error.code,
-        errorMessage: sanitizeLogMessage(validated.error.message),
-        usageMetadata,
-        candidateId: parsed.value.candidate.candidateId,
-        candidateName: parsed.value.candidate.name,
-        searchGrounded,
-      });
-      throw validated.error;
-    }
-
     this.log({
       provider: "gemini",
       model: this.model,
       promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
       requestId,
       durationMs: this.now() - started,
-      success: true,
+      success: false,
+      errorCode: failure.code,
+      errorMessage: sanitizeLogMessage(failure.message),
       usageMetadata,
       candidateId: parsed.value.candidate.candidateId,
       candidateName: parsed.value.candidate.name,
       searchGrounded,
     });
-
-    return validated.value;
+    throw failure;
   }
 
   private log(event: RecipeResolutionLogEvent): void {

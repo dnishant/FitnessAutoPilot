@@ -15,6 +15,7 @@ import {
   buildRecipeResolutionPromptPreview,
   createRecipeResolutionPreviewUiState,
   dedupeProofRows,
+  formatRecipeResolutionFailureLine,
   humanizeRecipeResolutionError,
   recipeCardSummaryRows,
   slotUsageCountForCandidate,
@@ -156,7 +157,7 @@ export default function RecipeResolutionPreviewScreen() {
   }, [state.result, state.uniqueCandidateIds]);
 
   async function onResolve() {
-    setState((prev) => ({ ...prev, busy: true, error: null }));
+    setState((prev) => ({ ...prev, busy: true, error: null, failures: [], result: null }));
     const response = await resolveWeeklyRecipes({
       candidates: state.candidates,
       uniqueCandidateIds: state.uniqueCandidateIds,
@@ -173,6 +174,11 @@ export default function RecipeResolutionPreviewScreen() {
           code: response.code,
           diagnostics: response.diagnostics,
         },
+        result: response.result ?? null,
+        failures: response.failures ?? [],
+        meta: response.meta,
+        selectedCandidateId:
+          response.result?.uniqueCandidateIds[0] ?? prev.selectedCandidateId,
       }));
       return;
     }
@@ -237,6 +243,17 @@ export default function RecipeResolutionPreviewScreen() {
         </Text>
       ) : null}
 
+      {state.failures.length > 0 ? (
+        <View style={styles.failureBox}>
+          <Text style={styles.subhead}>Failures ({state.failures.length})</Text>
+          {state.failures.map((failure) => (
+            <Text key={failure.candidateId} style={styles.failureItem}>
+              • {formatRecipeResolutionFailureLine(failure)}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
       {state.meta ? (
         <Text style={styles.muted}>
           {state.meta.provider}/{state.meta.model} · {state.meta.promptVersion} ·{" "}
@@ -294,6 +311,15 @@ const styles = StyleSheet.create({
   help: { color: "#3D5A4C" },
   warn: { color: "#8A4B08", backgroundColor: "#FFF4E5", padding: 10, borderRadius: 8 },
   error: { color: "#9B1C1C" },
+  failureBox: {
+    backgroundColor: "#FFF1F0",
+    borderWidth: 1,
+    borderColor: "#F3C0BC",
+    borderRadius: 8,
+    padding: 10,
+    gap: 4,
+  },
+  failureItem: { color: "#9B1C1C", fontSize: 13, lineHeight: 18 },
   muted: { color: "#3D5A4C", fontSize: 13 },
   subhead: { marginTop: 8, fontWeight: "800", color: "#0B1F17" },
   body: { color: "#0B1F17", lineHeight: 20 },

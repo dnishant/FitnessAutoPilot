@@ -244,6 +244,7 @@ export function buildRecipeResolutionPrompt(
     "- instructions[]: { stepNumber, text } executable steps",
     "- prepTimeMinutes, cookTimeMinutes",
     "- supportedPrepModes[]: for each mode include mode, advanceTasks, finishTasks, finishTimeMinutes, optional storageInstructions",
+    "  mode MUST be exactly one of: fully_prepped | component_prepped | quick_fresh_finish | fresh (no aliases)",
     `  Prefer modes compatible with: ${preferredModes}`,
     "- storageInstructions, reheatingInstructions when meal-prep relevant",
     "- mealComponents[]: main + culturally appropriate sides/condiments with type, required, purpose, relationship (intrinsic|recommended_side|optional)",

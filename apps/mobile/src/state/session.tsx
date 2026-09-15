@@ -193,7 +193,15 @@ type SessionValue = {
         failures?: RecipeResolutionFailure[];
         meta?: NonNullable<ResolveRecipesResponse["meta"]>;
       }
-    | { ok: false; error: string; code?: string; diagnostics?: string }
+    | {
+        ok: false;
+        error: string;
+        code?: string;
+        diagnostics?: string;
+        result?: WeeklyRecipeResolutionResult;
+        failures?: RecipeResolutionFailure[];
+        meta?: NonNullable<ResolveRecipesResponse["meta"]>;
+      }
   >;
 };
 
@@ -1003,6 +1011,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               error: result.error.message,
               code: result.error.code,
               diagnostics: result.error.diagnostics,
+              result: result.result,
+              failures: result.failures,
+              meta: result.meta,
             };
           }
           return {

@@ -45,6 +45,8 @@ export {
 } from "./gemini/recipe-generator";
 export {
   GeminiRecipeResolver,
+  coerceRecipePrepMode,
+  coerceResolvedRecipePayload,
   type GeminiRecipeResolverOptions,
   type RecipeResolutionLogEvent,
 } from "./gemini/recipe-resolver";

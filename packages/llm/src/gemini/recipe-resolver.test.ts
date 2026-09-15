@@ -2,7 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { CHICKEN_TIKKA } from "@fitness-autopilot/domain";
 import { makeResolvedRecipeFixture } from "@fitness-autopilot/domain";
 import type { GeminiContentClient } from "./client";
-import { GeminiRecipeResolver } from "./recipe-resolver";
+import {
+  GeminiRecipeResolver,
+  coerceRecipePrepMode,
+  coerceResolvedRecipePayload,
+} from "./recipe-resolver";
 import { classifyGeminiProviderError, computeBackoffDelayMs, withGeminiRetries } from "./retry";
 
 function fixturePayload() {
@@ -69,6 +73,32 @@ describe("Gemini retry helpers", () => {
   });
 });
 
+describe("coerceRecipePrepMode", () => {
+  it("maps Gemini aliases onto canonical PrepIntent values", () => {
+    expect(coerceRecipePrepMode("fully_cooked_meal_prep")).toBe("fully_prepped");
+    expect(coerceRecipePrepMode("meal_prep")).toBe("fully_prepped");
+    expect(coerceRecipePrepMode("component_prep")).toBe("component_prepped");
+    expect(coerceRecipePrepMode("quick_finish")).toBe("quick_fresh_finish");
+    expect(coerceRecipePrepMode("fresh_only")).toBe("fresh");
+    expect(coerceRecipePrepMode("totally_invented")).toBe("fresh");
+  });
+
+  it("coerces unsupported prep mode aliases inside payloads", () => {
+    const coerced = coerceResolvedRecipePayload({
+      ...fixturePayload(),
+      supportedPrepModes: [
+        {
+          mode: "fully_cooked_meal_prep",
+          advanceTasks: ["Cook chicken"],
+          finishTasks: ["Reheat"],
+          finishTimeMinutes: 8,
+        },
+      ],
+    }) as { supportedPrepModes: Array<{ mode: string }> };
+    expect(coerced.supportedPrepModes[0]?.mode).toBe("fully_prepped");
+  });
+});
+
 describe("GeminiRecipeResolver", () => {
   it("resolves a source-backed candidate with Search grounding path", async () => {
     const payload = fixturePayload();
@@ -112,6 +142,55 @@ describe("GeminiRecipeResolver", () => {
     });
     const recipe = await resolver.resolve({ candidate: CHICKEN_TIKKA });
     expect(recipe.candidateId).toBe("tikka-chicken");
+  });
+
+  it("coerces invalid prep-mode aliases without a second Gemini call", async () => {
+    const payload = {
+      ...fixturePayload(),
+      supportedPrepModes: [
+        {
+          mode: "fully_cooked_meal_prep",
+          advanceTasks: ["Marinate and grill"],
+          finishTasks: ["Reheat gently"],
+          finishTimeMinutes: 10,
+        },
+      ],
+    };
+    let calls = 0;
+    const client: GeminiContentClient = {
+      async generateContent() {
+        calls += 1;
+        return { text: JSON.stringify(payload) };
+      },
+    };
+    const resolver = new GeminiRecipeResolver({
+      model: "gemini-test",
+      client,
+      enableSearchGrounding: false,
+    });
+    const recipe = await resolver.resolve({ candidate: CHICKEN_TIKKA });
+    expect(calls).toBe(1);
+    expect(recipe.supportedPrepModes[0]?.mode).toBe("fully_prepped");
+  });
+
+  it("retries once when structured output fails schema validation", async () => {
+    const good = fixturePayload();
+    const bad = { ...good, baseServings: 0 };
+    let calls = 0;
+    const client: GeminiContentClient = {
+      async generateContent() {
+        calls += 1;
+        return { text: JSON.stringify(calls === 1 ? bad : good) };
+      },
+    };
+    const resolver = new GeminiRecipeResolver({
+      model: "gemini-test",
+      client,
+      enableSearchGrounding: false,
+    });
+    const recipe = await resolver.resolve({ candidate: CHICKEN_TIKKA });
+    expect(calls).toBe(2);
+    expect(recipe.baseServings).toBeGreaterThan(0);
   });
 
   it("rejects invalid structured output", async () => {
