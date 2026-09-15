@@ -150,6 +150,28 @@ describe("candidate scoring", () => {
     });
     expect(scored[0]!.externalId).toBe(MOCK_CHICKEN_RAW.source.externalId);
   });
+
+  it("prefers raw garlic over garlic sauce for a simple staple query", () => {
+    const scored = scoreFoodCandidates({
+      query: "garlic",
+      measurementState: "raw",
+      role: "aromatic",
+      candidates: [
+        {
+          externalId: "sauce",
+          description: "Garlic sauce",
+          dataType: "Foundation",
+          brandName: null,
+        },
+        toSearchResult(MOCK_GARLIC),
+      ],
+    });
+    const selection = selectFoodCandidate(scored, { preferGeneric: true });
+    expect(selection.kind).toBe("resolved");
+    if (selection.kind === "resolved") {
+      expect(selection.candidate.externalId).toBe(MOCK_GARLIC.source.externalId);
+    }
+  });
 });
 
 describe("quantity normalization", () => {

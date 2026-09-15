@@ -149,6 +149,19 @@ export function scoreFoodCandidates(input: ScoreFoodCandidatesInput): ScoredFood
       reasons.push("flavored oil/dressing penalty");
     }
 
+    // Penalize compound products when the query is a simple staple noun.
+    const queryLower = input.query.toLowerCase();
+    const descLower = candidate.description.toLowerCase();
+    const simpleStaple = /^(garlic|onion|salt|sugar|butter|milk|water|lime juice|lemon juice)$/i.test(
+      queryLower.trim(),
+    );
+    if (simpleStaple) {
+      if (/\b(sauce|dressing|bread|soup|seasoning mix|spread|butter)\b/.test(descLower)) {
+        score -= 45;
+        reasons.push("compound-product penalty for simple staple");
+      }
+    }
+
     return {
       ...candidate,
       score,
