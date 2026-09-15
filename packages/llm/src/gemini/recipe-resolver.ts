@@ -56,6 +56,61 @@ function sanitizeLogMessage(message: string): string {
     .slice(0, 500);
 }
 
+function coerceMealComponentType(value: unknown): string {
+  if (typeof value !== "string") return "other";
+  const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const aliases: Record<string, string> = {
+    main: "main",
+    protein: "main",
+    dish: "main",
+    entree: "main",
+    entrée: "main",
+    carb_side: "carb_side",
+    carb: "carb_side",
+    carbohydrate: "carb_side",
+    grain: "carb_side",
+    rice: "carb_side",
+    bread: "carb_side",
+    tortilla: "carb_side",
+    noodles: "carb_side",
+    vegetable_side: "vegetable_side",
+    vegetable: "vegetable_side",
+    veg: "vegetable_side",
+    salad: "vegetable_side",
+    side: "vegetable_side",
+    sides: "vegetable_side",
+    sauce: "sauce",
+    condiment: "condiment",
+    chutney: "condiment",
+    salsa: "condiment",
+    crema: "condiment",
+    garnish: "garnish",
+    other: "other",
+  };
+  return aliases[normalized] ?? "other";
+}
+
+function coerceMealComponentRelationship(value: unknown, required: unknown): string {
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    if (normalized === "intrinsic" || normalized === "core" || normalized === "essential") {
+      return "intrinsic";
+    }
+    if (
+      normalized === "recommended_side" ||
+      normalized === "recommended" ||
+      normalized === "side" ||
+      normalized === "meal_completion"
+    ) {
+      return "recommended_side";
+    }
+    if (normalized === "optional") {
+      return "optional";
+    }
+  }
+  return required === false ? "optional" : "recommended_side";
+}
+
 function coerceResolvedRecipePayload(value: unknown): unknown {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return value;
@@ -70,6 +125,9 @@ function coerceResolvedRecipePayload(value: unknown): unknown {
       }
       if (ingredient.preparation === undefined) {
         ingredient.preparation = null;
+      }
+      if (ingredient.role === "carbohydrate") {
+        ingredient.role = "carb";
       }
       return ingredient;
     });
@@ -93,20 +151,165 @@ function coerceResolvedRecipePayload(value: unknown): unknown {
       const mode = { ...(item as Record<string, unknown>) };
       if (!Array.isArray(mode.advanceTasks)) mode.advanceTasks = [];
       if (!Array.isArray(mode.finishTasks)) mode.finishTasks = ["Finish and serve"];
+      if (mode.mode === "fresh_only") mode.mode = "fresh";
       return mode;
+    });
+  }
+  if (Array.isArray(record.mealComponents)) {
+    record.mealComponents = record.mealComponents.map((item, index) => {
+      if (item === null || typeof item !== "object") return item;
+      const component = { ...(item as Record<string, unknown>) };
+      if (typeof component.componentId !== "string" || component.componentId.trim() === "") {
+        component.componentId = `component_${index + 1}`;
+      }
+      component.type = coerceMealComponentType(component.type);
+      component.relationship = coerceMealComponentRelationship(
+        component.relationship,
+        component.required,
+      );
+      if (typeof component.required !== "boolean") {
+        component.required = component.relationship === "intrinsic";
+      }
+      if (typeof component.purpose !== "string" || component.purpose.trim() === "") {
+        component.purpose = "Completes the meal.";
+      }
+      const rawName = typeof component.name === "string" ? component.name.trim() : "";
+      if (!rawName || /^component[_\s-]?\d+$/i.test(rawName)) {
+        // Prefer a short culinary label derived from purpose when the model omits a name.
+        const purpose = String(component.purpose);
+        component.name = purpose.split(/[.—,:]/)[0]?.trim().slice(0, 80) || `Component ${index + 1}`;
+      } else {
+        component.name = rawName;
+      }
+      return component;
     });
   }
   if (record.flavorProfile && typeof record.flavorProfile === "object") {
     const profile = { ...(record.flavorProfile as Record<string, unknown>) };
     if (!Array.isArray(profile.textureProfile)) profile.textureProfile = [];
+    if (!Array.isArray(profile.flavorFamilies) || profile.flavorFamilies.length === 0) {
+      profile.flavorFamilies = ["savory"];
+    }
+    if (!Array.isArray(profile.cookingTechniques) || profile.cookingTechniques.length === 0) {
+      profile.cookingTechniques = ["cook"];
+    }
+    if (typeof profile.cuisineFamily !== "string" || profile.cuisineFamily.trim() === "") {
+      profile.cuisineFamily = "unspecified";
+    }
     record.flavorProfile = profile;
   }
   if (record.experienceProfile && typeof record.experienceProfile === "object") {
     const profile = { ...(record.experienceProfile as Record<string, unknown>) };
     if (!Array.isArray(profile.textureTags)) profile.textureTags = [];
+    const moistureAliases: Record<string, string> = {
+      dry: "dry",
+      moderate: "moderate",
+      medium: "moderate",
+      moist: "moderate",
+      juicy: "moderate",
+      saucy: "saucy",
+      wet: "saucy",
+      gravy: "saucy",
+      brothy: "saucy",
+    };
+    if (typeof profile.moistureLevel === "string") {
+      const key = profile.moistureLevel.trim().toLowerCase();
+      profile.moistureLevel = moistureAliases[key] ?? "moderate";
+    } else {
+      profile.moistureLevel = "moderate";
+    }
+    const intensityAliases: Record<string, string> = {
+      mild: "mild",
+      medium: "medium",
+      moderate: "medium",
+      bold: "bold",
+      strong: "bold",
+      spicy: "bold",
+    };
+    if (typeof profile.flavorIntensity === "string") {
+      const key = profile.flavorIntensity.trim().toLowerCase();
+      profile.flavorIntensity = intensityAliases[key] ?? "medium";
+    } else {
+      profile.flavorIntensity = "medium";
+    }
+    const prepAliases: Record<string, string> = {
+      poor: "poor",
+      bad: "poor",
+      fair: "good",
+      moderate: "good",
+      okay: "good",
+      good: "good",
+      excellent: "excellent",
+      great: "excellent",
+    };
+    if (typeof profile.mealPrepQuality === "string") {
+      const key = profile.mealPrepQuality.trim().toLowerCase();
+      profile.mealPrepQuality = prepAliases[key] ?? "good";
+    } else {
+      profile.mealPrepQuality = "good";
+    }
     record.experienceProfile = profile;
   }
+  if (typeof record.description !== "string" || record.description.trim() === "") {
+    record.description = typeof record.name === "string" ? record.name : "Resolved recipe";
+  }
+  if (typeof record.recipeId !== "string" || record.recipeId.trim() === "") {
+    record.recipeId = `rr_${Date.now().toString(36)}`;
+  }
   return record;
+}
+
+function mergeFlavorProfileFromCandidate(
+  coerced: unknown,
+  candidate: RecipeResolutionRequest["candidate"],
+): Record<string, unknown> {
+  const fromModel =
+    coerced !== null &&
+    typeof coerced === "object" &&
+    !Array.isArray(coerced) &&
+    (coerced as { flavorProfile?: unknown }).flavorProfile !== null &&
+    typeof (coerced as { flavorProfile?: unknown }).flavorProfile === "object"
+      ? ({ ...((coerced as { flavorProfile: Record<string, unknown> }).flavorProfile) } as Record<
+          string,
+          unknown
+        >)
+      : {};
+
+  const cuisineFamily =
+    typeof fromModel.cuisineFamily === "string" &&
+    fromModel.cuisineFamily.trim() !== "" &&
+    fromModel.cuisineFamily !== "unspecified"
+      ? fromModel.cuisineFamily
+      : candidate.cuisineFamily;
+  const flavorFamilies =
+    Array.isArray(fromModel.flavorFamilies) &&
+    fromModel.flavorFamilies.length > 0 &&
+    !(fromModel.flavorFamilies.length === 1 && fromModel.flavorFamilies[0] === "savory")
+      ? fromModel.flavorFamilies
+      : candidate.flavorFamilies;
+  const cookingTechniques =
+    Array.isArray(fromModel.cookingTechniques) &&
+    fromModel.cookingTechniques.length > 0 &&
+    fromModel.cookingTechniques[0] !== "cook"
+      ? fromModel.cookingTechniques
+      : candidate.cookingTechniques;
+  const textureProfile =
+    Array.isArray(fromModel.textureProfile) && fromModel.textureProfile.length > 0
+      ? fromModel.textureProfile
+      : candidate.textureTags;
+
+  return {
+    ...fromModel,
+    cuisineFamily,
+    regionalStyle:
+      fromModel.regionalStyle === undefined
+        ? (candidate.regionalStyle ?? null)
+        : fromModel.regionalStyle,
+    flavorFamilies,
+    cookingTechniques,
+    textureProfile,
+    primarySauce: fromModel.primarySauce === undefined ? null : fromModel.primarySauce,
+  };
 }
 
 export class GeminiRecipeResolver implements RecipeResolver {
@@ -127,7 +330,7 @@ export class GeminiRecipeResolver implements RecipeResolver {
     this.now = options.now ?? (() => Date.now());
     this.onLog = options.onLog;
     this.enableSearchGrounding = options.enableSearchGrounding ?? true;
-    this.maxAttempts = options.maxAttempts ?? 3;
+    this.maxAttempts = options.maxAttempts ?? 4;
     this.sleep = options.sleep;
   }
 
@@ -244,11 +447,17 @@ export class GeminiRecipeResolver implements RecipeResolver {
     const stamped = {
       ...(coerced as Record<string, unknown>),
       candidateId: parsed.value.candidate.candidateId,
+      name:
+        typeof (coerced as { name?: unknown }).name === "string" &&
+        (coerced as { name: string }).name.trim() !== ""
+          ? (coerced as { name: string }).name
+          : parsed.value.candidate.name,
       source: {
         name: parsed.value.candidate.source.name,
         url: parsed.value.candidate.source.url,
         author: parsed.value.candidate.source.author ?? null,
       },
+      flavorProfile: mergeFlavorProfileFromCandidate(coerced, parsed.value.candidate),
       resolutionMetadata: {
         provider: "gemini",
         model: this.model,

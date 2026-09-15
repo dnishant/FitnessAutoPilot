@@ -11,6 +11,8 @@ export type RateLimitInfo = {
 
 const RATE_LIMIT_RE =
   /\b(429|rate[\s_-]?limit|quota|resource[_ ]?exhausted|too many requests)\b/i;
+const TRANSIENT_RE =
+  /\b(503|UNAVAILABLE|high demand|temporarily unavailable|try again later)\b/i;
 
 export function classifyGeminiProviderError(error: unknown): RateLimitInfo {
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -18,7 +20,11 @@ export function classifyGeminiProviderError(error: unknown): RateLimitInfo {
     error && typeof error === "object" && "status" in error
       ? Number((error as { status?: unknown }).status)
       : NaN;
-  const isRateLimited = status === 429 || RATE_LIMIT_RE.test(message);
+  const isRateLimited =
+    status === 429 ||
+    status === 503 ||
+    RATE_LIMIT_RE.test(message) ||
+    TRANSIENT_RE.test(message);
   if (!isRateLimited) {
     return { isRateLimited: false };
   }
@@ -78,9 +84,9 @@ export async function withGeminiRetries<T>(
   operation: () => Promise<T>,
   options: RetryOptions = {},
 ): Promise<T> {
-  const maxAttempts = Math.max(1, options.maxAttempts ?? 3);
-  const baseDelayMs = options.baseDelayMs ?? 500;
-  const maxDelayMs = options.maxDelayMs ?? 8_000;
+  const maxAttempts = Math.max(1, options.maxAttempts ?? 4);
+  const baseDelayMs = options.baseDelayMs ?? 800;
+  const maxDelayMs = options.maxDelayMs ?? 12_000;
   const sleep =
     options.sleep ??
     ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));

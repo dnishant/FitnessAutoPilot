@@ -247,6 +247,8 @@ export function buildRecipeResolutionPrompt(
     `  Prefer modes compatible with: ${preferredModes}`,
     "- storageInstructions, reheatingInstructions when meal-prep relevant",
     "- mealComponents[]: main + culturally appropriate sides/condiments with type, required, purpose, relationship (intrinsic|recommended_side|optional)",
+    "  mealComponent.type MUST be one of: main | carb_side | vegetable_side | sauce | condiment | garnish | other",
+    "  Do NOT use type values like protein or side.",
     "- flavorProfile, experienceProfile (moistureLevel, flavorIntensity, textureTags, mealPrepQuality)",
     "",
     "SCALING GUIDANCE:",

@@ -54,6 +54,7 @@ async function main() {
   const resolver = createRecipeResolver({
     config: config.value,
     geminiClient: countingClient,
+    maxAttempts: 5,
     onLog: (event) => {
       console.error(
         JSON.stringify({
@@ -72,7 +73,7 @@ async function main() {
     strategy,
     candidatesById: plan008SimpleCandidateLookup(),
     resolver,
-    options: { concurrency: 3 },
+    options: { concurrency: Number(process.env.RESOLVE_CONCURRENCY ?? 2) },
   });
 
   if (!result.ok) {

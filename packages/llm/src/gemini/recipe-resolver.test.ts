@@ -15,6 +15,9 @@ describe("Gemini retry helpers", () => {
   it("classifies 429 / rate limit errors", () => {
     expect(classifyGeminiProviderError(new Error("429 quota exceeded")).isRateLimited).toBe(true);
     expect(classifyGeminiProviderError(new Error("rate limit hit")).isRateLimited).toBe(true);
+    expect(classifyGeminiProviderError(new Error("Gemini HTTP 503: high demand")).isRateLimited).toBe(
+      true,
+    );
     expect(classifyGeminiProviderError(new Error("network down")).isRateLimited).toBe(false);
   });
 
