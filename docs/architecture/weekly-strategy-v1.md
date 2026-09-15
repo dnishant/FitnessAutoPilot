@@ -30,7 +30,7 @@ It does **not** resolve recipes, calculate authoritative nutrition, or invent un
 
 - Input: `RankedWeeklyStrategyRequest` (`packages/contracts`)
 - Output: `RankedWeeklyStrategy` (candidate IDs + prep metadata) + deterministic `RankedWeeklyStrategyQualityStats`
-- Prompt version: `weekly-strategy-ranked-v1.1.1` (PLAN-007.1 practicality guardrails + repertoire-first hardening)
+- Prompt version: `weekly-strategy-ranked-v1.2.0` (PLAN-007.1 practicality + PLAN-008 automatic shared-prep semantics)
 - One Gemini call per week normally; at most one corrective retry when unique candidates exceed the variety-level hard max
 - `uniqueCandidateIds`, quality stats, and complexity status are calculated in code
 - Names are hydrated from the supplied candidate pools — Gemini cannot silently rename a dish
@@ -50,7 +50,7 @@ Lunch slots choose from `lunchCandidates`. Dinner slots choose from `dinnerCandi
 | Minimum candidates per meal type | `1` |
 | Adjacent high-similarity threshold | PLAN-006 `SIMILARITY_PENALTY_THRESHOLD` |
 
-`useDinnerPrepForNextLunch = false` forbids `piggyback_prep` and `direct_leftover`.
+Shared prep / `piggyback_prep` is always permitted when metadata evidence supports it (PLAN-008). Default remains `independent_meal_prep`. `useDinnerPrepForNextLunch` is deprecated and ignored.
 
 ### Server config
 

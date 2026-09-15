@@ -35,6 +35,10 @@ export default function RootLayout() {
           name="candidate-ranking-preview"
           options={{ title: "Candidate Ranking" }}
         />
+        <Stack.Screen
+          name="recipe-resolution-preview"
+          options={{ title: "Recipe Resolution" }}
+        />
       </Stack>
     </SessionProvider>
   );

@@ -5,10 +5,15 @@ export const MealTypeSchema = z.enum(["breakfast", "lunch", "snack", "dinner"]);
 export const IngredientRoleSchema = z.enum([
   "protein",
   "carbohydrate",
+  /** PLAN-008 culinary alias for carbohydrate. */
+  "carb",
   "fat",
   "vegetable",
   "sauce",
   "seasoning",
+  "aromatic",
+  "acid",
+  "garnish",
   "other",
 ]);
 

@@ -99,10 +99,10 @@ describe("ranked weekly strategy request parsing", () => {
 });
 
 describe("ranked weekly strategy prompt", () => {
-  it("is versioned weekly-strategy-ranked-v1.1.1 and prioritizes repertoire-first practicality", () => {
+  it("is versioned weekly-strategy-ranked-v1.2.0 and prioritizes repertoire-first practicality", () => {
     const prompt = buildRankedWeeklyStrategyPrompt(sampleRankedWeeklyStrategyRequest());
-    expect(prompt.version).toBe("weekly-strategy-ranked-v1.1.1");
-    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1.1.1");
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1.2.0");
+    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1.2.0");
     expect(prompt.systemInstruction).toContain("Do NOT invent");
     expect(prompt.systemInstruction).toContain("NO original_concept");
     expect(prompt.systemInstruction).toContain("Do NOT rename, healthify");
@@ -147,9 +147,10 @@ describe("ranked weekly strategy prompt", () => {
     expect(prompt.userPrompt).toContain("prepFrequency: once_weekly");
     expect(prompt.userPrompt).toContain("cookingStyle: ready_lunch_fresh_dinner");
     expect(prompt.userPrompt).toContain("maxFinishMinutes: 10");
-    expect(prompt.userPrompt).toContain("useDinnerPrepForNextLunch: true");
+    expect(prompt.userPrompt).not.toContain("useDinnerPrepForNextLunch:");
     expect(prompt.userPrompt).toContain("targetCaloriesPerDay: 2200");
     expect(prompt.systemInstruction).toContain("Use piggyback_prep ONLY when candidate metadata");
+    expect(prompt.systemInstruction).toContain("AUTOMATIC optimization opportunity");
     expect(JSON.stringify(compactRankedCandidateForPrompt(PLAN007_LUNCH_POOL[1]!))).toContain(
       "andhra-green-chilli-chicken",
     );
@@ -306,7 +307,7 @@ describe("ranked weekly strategy validation", () => {
     }
   });
 
-  it("rejects piggyback and leftover planning when the preference is disabled", () => {
+  it("still allows piggyback and leftover when the deprecated dinner-prep flag is false", () => {
     const request = sampleRankedWeeklyStrategyRequest({
       cookingPreferences: {
         ...sampleRankedWeeklyStrategyRequest().cookingPreferences,
@@ -314,10 +315,12 @@ describe("ranked weekly strategy validation", () => {
       },
     });
     const result = validateRankedWeeklyStrategy(clonePayload(), request, metadata);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.code).toBe("INVALID_WEEK_STRUCTURE");
-      expect(result.error.message).toMatch(/useDinnerPrepForNextLunch is false/i);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const piggyback = result.value.days.find(
+        (day) => day.lunch.lunchPreparationStrategy === "piggyback_prep",
+      );
+      expect(piggyback).toBeTruthy();
     }
   });
 

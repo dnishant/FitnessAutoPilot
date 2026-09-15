@@ -99,8 +99,8 @@ export const FINISH_TIME_OPTIONS = [
 }>;
 
 /**
- * Lunch preparation strategies used by PLAN-007.
- * Not a user-facing PLAN-002 setting.
+ * Lunch preparation strategies used by PLAN-007+.
+ * Output planning decision — not a user-facing preference.
  */
 export const LunchPreparationStrategySchema = z.enum([
   "independent_meal_prep",
@@ -117,6 +117,10 @@ const CookingPreferenceFieldsSchema = z.object({
   maxPrepSessionMinutes: MaxPrepSessionMinutesSchema,
   cookingStyle: WeeklyCookingStyleSchema,
   maxFinishMinutes: MaxFinishMinutesSchema,
+  /**
+   * @deprecated PLAN-008: ignored by planning. Shared/dinner→lunch prep reuse is an
+   * automatic optimizer opportunity, not a user preference. Retained for DB compat.
+   */
   useDinnerPrepForNextLunch: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -137,11 +141,12 @@ function refineCookingPreferenceRules<
         message: "Mostly ready meals persist a 0-minute finish time.",
       });
     }
+    // DB consistency check still expects false for mostly_ready; planner ignores the flag.
     if (value.useDinnerPrepForNextLunch !== false) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["useDinnerPrepForNextLunch"],
-        message: "Mostly ready meals do not use dinner prep for tomorrow's lunch.",
+        message: "Mostly ready meals persist useDinnerPrepForNextLunch=false for storage compatibility.",
       });
     }
     return;

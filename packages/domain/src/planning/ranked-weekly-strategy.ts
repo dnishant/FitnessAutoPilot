@@ -311,22 +311,20 @@ export function buildRankedWeeklyStrategyPrompt(
       ? "Prefer mostly-ready / reheatable preparation (0-minute finish)."
       : `When using prepIntent=fresh or quick_fresh_finish, estimatedFinishMinutesAfterPrep must stay within ${cookingPreferences.maxFinishMinutes} minutes.`;
 
-  const dinnerPrepNote = cookingPreferences.useDinnerPrepForNextLunch
-    ? [
-        "Use piggyback_prep ONLY when candidate metadata provides a concrete and plausible shared prep dependency.",
-        "Strong evidence: same batch-cooked protein, same grain/base, same roasted vegetable batch, same sauce or marinade base,",
-        "clearly shared chopped aromatics/herbs in meaningful quantity, or a meaningful shared cooking process that actually removes prep work.",
-        "Weak evidence is NOT sufficient: both use herbs/chili/onions/a knife/a skillet, prep can happen 'at the same time', or generic shared kitchen equipment.",
-        "When uncertain, use independent_meal_prep. Do NOT invent prep dependencies.",
-        "Do not maximize piggyback usage. For a Balanced once-weekly-prep week, expect roughly 0–3 genuine piggyback lunches.",
-        "A plan with zero piggyback lunches can still be excellent.",
-        leftoverPolicy,
-      ].join(" ")
-    : [
-        "useDinnerPrepForNextLunch is false.",
-        "Do not use lunchPreparationStrategy piggyback_prep or direct_leftover.",
-        "Every lunch must be independent_meal_prep.",
-      ].join(" ");
+  const dinnerPrepNote = [
+    "Shared prep across the weekly schedule is an AUTOMATIC optimization opportunity — not a user permission flag.",
+    "The planner may use independent prep, shared component prep, piggyback prep, batch prep, direct leftovers, or fresh finish",
+    "across any meals in the week when beneficial (not only previous-dinner → next-lunch).",
+    "Use piggyback_prep ONLY when candidate metadata provides a concrete and plausible shared prep dependency.",
+    "Strong evidence: same batch-cooked protein, same grain/base, same roasted vegetable batch, same sauce or marinade base,",
+    "clearly shared chopped aromatics/herbs in meaningful quantity, or a meaningful shared cooking process that actually removes prep work.",
+    "Weak evidence is NOT sufficient: both use herbs/chili/onions/a knife/a skillet, prep can happen 'at the same time', or generic shared kitchen equipment.",
+    "Default to independent_meal_prep unless there is a real efficiency opportunity.",
+    "When uncertain, use independent_meal_prep. Do NOT invent prep dependencies.",
+    "Do not maximize piggyback usage. For a Balanced once-weekly-prep week, expect roughly 0–3 genuine piggyback lunches.",
+    "A plan with zero piggyback lunches can still be excellent.",
+    leftoverPolicy,
+  ].join(" ");
 
   const lunchDinnerSplitNote =
     cookingPreferences.cookingStyle === "ready_lunch_fresh_dinner"
@@ -490,11 +488,11 @@ export function buildRankedWeeklyStrategyPrompt(
     "- Keep weekday effort realistic. Do not invent an exact prep-session timeline.",
     "",
     "Lunch preparation strategy (lunch slots only):",
-    `- useDinnerPrepForNextLunch=${cookingPreferences.useDinnerPrepForNextLunch}.`,
+    "- Shared prep reuse is always allowed as an automatic optimization when evidence supports it.",
     `- ${dinnerPrepNote}`,
-    "- independent_meal_prep: lunch is prepared separately during dedicated prep.",
-    "- piggyback_prep: tomorrow's lunch is a DIFFERENT dish; some work is done while making dinner — only with strong metadata evidence.",
-    "- direct_leftover: dinner itself becomes tomorrow's lunch. Use sparingly. The lunch candidateId MUST equal the previous day's dinner candidateId.",
+    "- independent_meal_prep: lunch is prepared separately during dedicated prep (default).",
+    "- piggyback_prep: a DIFFERENT lunch dish; some work is done while making another meal — only with strong metadata evidence.",
+    "- direct_leftover: dinner itself becomes a later lunch. Use sparingly. The lunch candidateId MUST equal the previous day's dinner candidateId.",
     "- Monday lunch has no previous dinner in this week — use independent_meal_prep.",
     "- Dinner slots must omit lunchPreparationStrategy.",
     "- Because exact ingredient lists are not resolved yet, default to independent_meal_prep unless a shared prep dependency is very obvious from structured candidate metadata.",
@@ -557,7 +555,6 @@ export function buildRankedWeeklyStrategyPrompt(
     `lunch/dinner uniqueness guidance: ${lunchDinnerSplitNote}`,
     `maxFinishMinutes: ${cookingPreferences.maxFinishMinutes}`,
     `finish-time guidance: ${finishNote}`,
-    `useDinnerPrepForNextLunch: ${cookingPreferences.useDinnerPrepForNextLunch}`,
     `dinner-prep guidance: ${dinnerPrepNote}`,
     "",
     `Recent meal concepts: ${recent}`,
@@ -1209,15 +1206,6 @@ function validateHydratedWeek(
     const lunchPrep = day.lunch.lunchPreparationStrategy ?? "independent_meal_prep";
     if (lunchPrep === "direct_leftover") {
       directLeftovers += 1;
-    }
-
-    if (!request.cookingPreferences.useDinnerPrepForNextLunch) {
-      if (lunchPrep === "piggyback_prep" || lunchPrep === "direct_leftover") {
-        return rankedWeeklyStrategyError(
-          "INVALID_WEEK_STRUCTURE",
-          "piggyback_prep and direct_leftover are not allowed when useDinnerPrepForNextLunch is false.",
-        );
-      }
     }
 
     const previous = previousDay(day.day);

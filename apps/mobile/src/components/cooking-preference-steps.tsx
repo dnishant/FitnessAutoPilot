@@ -11,16 +11,13 @@ import {
 } from "@fitness-autopilot/contracts";
 import {
   chooseOnboardingCookingStyle,
-  chooseOnboardingDinnerPrep,
   chooseOnboardingFinishTime,
   chooseOnboardingPrepFrequency,
   chooseOnboardingPrepSessionTime,
   continueFromCookingStyle,
-  continueFromDinnerPrep,
   continueFromFinishTime,
   continueFromPrepFrequency,
   continueFromPrepSessionTime,
-  showsDinnerPrepQuestion,
   showsFinishTimeQuestion,
   type OnboardingView,
 } from "@fitness-autopilot/domain";
@@ -42,8 +39,8 @@ export function CookingPreferenceSteps(props: {
     }
   }
 
-  function finishFromDinner() {
-    const next = continueFromDinnerPrep(view);
+  function finishFromFinishTime() {
+    const next = continueFromFinishTime(view);
     onChange(next);
     if (!next.error && next.cookingPreferences) {
       onComplete(next);
@@ -179,35 +176,9 @@ export function CookingPreferenceSteps(props: {
               </Pressable>
             ))}
           </View>
-          {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable style={styles.primary} onPress={() => onChange(continueFromFinishTime(view))}>
-            <Text style={styles.primaryText}>Continue</Text>
-          </Pressable>
-        </>
-      ) : null}
-
-      {view.step === "dinner_prep" && showsDinnerPrepQuestion(view.draft.cookingStyle) ? (
-        <>
-          <Text style={styles.title}>Use dinner prep to help with tomorrow's lunch?</Text>
-          <Text style={styles.help}>
-            We'll reuse prep work, ingredients, or cooking time to make the next day's lunch easier
-            while keeping meals varied. This does not mean dinner becomes tomorrow's lunch.
-          </Text>
-          <Pressable
-            style={[styles.option, view.draft.useDinnerPrepForNextLunch && styles.optionSelected]}
-            onPress={() => onChange(chooseOnboardingDinnerPrep(view, true))}
-          >
-            <Text style={styles.optionLabel}>Yes, use dinner prep to help lunch</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.option, !view.draft.useDinnerPrepForNextLunch && styles.optionSelected]}
-            onPress={() => onChange(chooseOnboardingDinnerPrep(view, false))}
-          >
-            <Text style={styles.optionLabel}>No, keep dinner and lunch separate</Text>
-          </Pressable>
           {persistError ? <Text style={styles.error}>{persistError}</Text> : null}
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable style={styles.primary} disabled={busy} onPress={finishFromDinner}>
+          <Pressable style={styles.primary} disabled={busy} onPress={finishFromFinishTime}>
             {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Continue</Text>}
           </Pressable>
         </>

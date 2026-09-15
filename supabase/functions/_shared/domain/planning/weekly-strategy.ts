@@ -139,13 +139,12 @@ export function buildWeeklyStrategyPrompt(
       ? "Prefer mostly-ready / reheatable preparation (0-minute finish)."
       : `Fresh finishes should generally stay within about ${cookingPreferences.maxFinishMinutes} minutes when using prepIntent=fresh.`;
 
-  const dinnerPrepNote = cookingPreferences.useDinnerPrepForNextLunch
-    ? [
-        "Dinner prep can help tomorrow's lunch without forcing the same finished meal.",
-        "Prefer reuse of preparation effort over exact dinner→lunch leftovers.",
-        "Direct dinner leftovers as next-day lunch should be rare, not the primary strategy.",
-      ].join(" ")
-    : "Do not plan around dinner prep helping the next lunch.";
+  const dinnerPrepNote = [
+    "Shared prep across the weekly schedule is an automatic optimization opportunity — not a user preference.",
+    "Prefer reuse of preparation effort when beneficial; do not force same finished meals.",
+    "Direct leftovers should remain rare, not the primary strategy.",
+    "Default to independent meal prep unless there is a real efficiency opportunity.",
+  ].join(" ");
 
   const systemInstruction = [
     "You are Fitness Autopilot's weekly meal strategy planner.",
@@ -192,8 +191,7 @@ export function buildWeeklyStrategyPrompt(
     `- prepFrequency=${cookingPreferences.prepFrequency}; maxPrepSessionMinutes=${formatPrepSessionMinutes(cookingPreferences.maxPrepSessionMinutes)}.`,
     "- Choose a week that appears plausibly compatible with these prep constraints. Do not invent an exact prep timeline.",
     "",
-    "Dinner → next lunch:",
-    `- useDinnerPrepForNextLunch=${cookingPreferences.useDinnerPrepForNextLunch}.`,
+    "Shared prep optimization:",
     `- ${dinnerPrepNote}`,
     "",
     "Nutrition:",
@@ -241,8 +239,7 @@ export function buildWeeklyStrategyPrompt(
     `cookingStyle guidance: ${cookingNote}`,
     `maxFinishMinutes: ${cookingPreferences.maxFinishMinutes}`,
     `finish-time guidance: ${finishNote}`,
-    `useDinnerPrepForNextLunch: ${cookingPreferences.useDinnerPrepForNextLunch}`,
-    `dinner-prep guidance: ${dinnerPrepNote}`,
+    `shared-prep guidance: ${dinnerPrepNote}`,
     "",
     "Return exactly one WeeklyMealStrategy with seven distinct days.",
     "Meal concepts only — no detailed recipes, ingredients, instructions, or nutrition fields.",

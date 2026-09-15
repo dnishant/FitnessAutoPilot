@@ -32,6 +32,10 @@ import type {
   RankedWeeklyStrategy,
   RankedWeeklyStrategyQualityStats,
   RankedWeeklyStrategyRequest,
+  CulinaryDiscoveryCandidate,
+  RecipeResolutionFailure,
+  ResolveRecipesResponse,
+  WeeklyRecipeResolutionResult,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { completeOnboarding as completeOnboardingDomain } from "@fitness-autopilot/domain";
@@ -79,6 +83,7 @@ import {
   rankCulinaryCandidatesLocally,
   type CandidateRankingGenerationMeta,
 } from "../lib/candidate-ranking-preview";
+import { invokeResolveRecipes } from "../lib/recipe-resolution-preview";
 
 type SessionUser = { id: string; email: string };
 
@@ -174,6 +179,19 @@ type SessionValue = {
         ok: true;
         result: CandidateRankingResult;
         meta?: CandidateRankingGenerationMeta;
+      }
+    | { ok: false; error: string; code?: string; diagnostics?: string }
+  >;
+  resolveWeeklyRecipes: (input: {
+    candidates: CulinaryDiscoveryCandidate[];
+    uniqueCandidateIds?: string[];
+    concurrency?: number;
+  }) => Promise<
+    | {
+        ok: true;
+        result: WeeklyRecipeResolutionResult;
+        failures?: RecipeResolutionFailure[];
+        meta?: NonNullable<ResolveRecipesResponse["meta"]>;
       }
     | { ok: false; error: string; code?: string; diagnostics?: string }
   >;
@@ -937,6 +955,66 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return {
             ok: false,
             error: e instanceof Error ? e.message : "Failed to rank culinary candidates",
+          };
+        }
+      },
+      async resolveWeeklyRecipes(input) {
+        try {
+          if (useLocalPlanner) {
+            return {
+              ok: false,
+              error:
+                "Recipe resolution requires Supabase remote mode with server-side GEMINI_API_KEY. Local planner mode cannot call Gemini.",
+              code: "LLM_CONFIGURATION_ERROR",
+            };
+          }
+          if (!supabase) {
+            return {
+              ok: false,
+              error: "Supabase is not configured.",
+              code: "LLM_CONFIGURATION_ERROR",
+            };
+          }
+          if (!user) {
+            return { ok: false, error: "Not signed in" };
+          }
+          const client = supabase;
+          const result = await invokeResolveRecipes(
+            async (functionName, options) => {
+              const invoked = await client.functions.invoke(functionName, options);
+              return {
+                data: invoked.data,
+                error: invoked.error
+                  ? {
+                      message: invoked.error.message,
+                      context:
+                        "context" in invoked.error
+                          ? (invoked.error as { context?: unknown }).context
+                          : undefined,
+                    }
+                  : null,
+              };
+            },
+            input,
+          );
+          if (!result.ok) {
+            return {
+              ok: false,
+              error: result.error.message,
+              code: result.error.code,
+              diagnostics: result.error.diagnostics,
+            };
+          }
+          return {
+            ok: true,
+            result: result.result,
+            failures: result.failures,
+            meta: result.meta,
+          };
+        } catch (e) {
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "Failed to resolve recipes",
           };
         }
       },

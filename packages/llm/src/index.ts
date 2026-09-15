@@ -18,6 +18,10 @@ export {
   createCulinaryDiscoveryProvider,
   type CreateCulinaryDiscoveryProviderOptions,
 } from "./create-culinary-discovery-provider";
+export {
+  createRecipeResolver,
+  type CreateRecipeResolverOptions,
+} from "./create-recipe-resolver";
 export type {
   GeminiContentClient,
   GeminiGenerateContentParams,
@@ -39,6 +43,19 @@ export {
   type GeminiRecipeGeneratorOptions,
   type RecipeGenerationLogEvent,
 } from "./gemini/recipe-generator";
+export {
+  GeminiRecipeResolver,
+  type GeminiRecipeResolverOptions,
+  type RecipeResolutionLogEvent,
+} from "./gemini/recipe-resolver";
+export {
+  classifyGeminiProviderError,
+  computeBackoffDelayMs,
+  parseRetryAfterMs,
+  withGeminiRetries,
+  type RateLimitInfo,
+  type RetryOptions,
+} from "./gemini/retry";
 export {
   GeminiWeeklyStrategyGenerator,
   SHARED_INGREDIENT_INTENT_MAX_LENGTH,
@@ -64,6 +81,10 @@ export {
   GeminiRecipeCandidatePayloadSchema,
   geminiRecipeResponseJsonSchema,
 } from "./gemini/schema";
+export {
+  GeminiResolvedRecipePayloadSchema,
+  geminiResolvedRecipeResponseJsonSchema,
+} from "./gemini/recipe-resolution-schema";
 export {
   GeminiWeeklyMealStrategyPayloadSchema,
   geminiWeeklyStrategyResponseJsonSchema,

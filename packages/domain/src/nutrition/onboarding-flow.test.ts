@@ -13,13 +13,11 @@ import {
   continueFromNutritionTarget,
   continueFromProteins,
   continueFromCookingStyle,
-  continueFromDinnerPrep,
   continueFromFinishTime,
   continueFromPrepFrequency,
   continueFromPrepSessionTime,
   continueFromVariety,
   chooseOnboardingCookingStyle,
-  chooseOnboardingDinnerPrep,
   chooseOnboardingFinishTime,
   chooseOnboardingPrepFrequency,
   chooseOnboardingPrepSessionTime,
@@ -501,7 +499,7 @@ describe("cooking preference onboarding", () => {
     });
   });
 
-  it("shows finish time and dinner-prep questions for fresh styles", () => {
+  it("shows finish time for fresh styles and completes without dinner-prep", () => {
     let view = continueFromVariety(reachVariety());
     view = continueFromPrepFrequency(view);
     view = continueFromPrepSessionTime(view);
@@ -510,11 +508,10 @@ describe("cooking preference onboarding", () => {
     expect(view.step).toBe("finish_time");
     view = chooseOnboardingFinishTime(view, 20);
     view = continueFromFinishTime(view);
-    expect(view.step).toBe("dinner_prep");
-    view = chooseOnboardingDinnerPrep(view, false);
-    view = continueFromDinnerPrep(view);
+    expect(view.step).not.toBe("dinner_prep");
     expect(view.cookingPreferences?.maxFinishMinutes).toBe(20);
-    expect(view.cookingPreferences?.useDinnerPrepForNextLunch).toBe(false);
+    // Deprecated storage flag — always true for fresh styles; ignored by planner.
+    expect(view.cookingPreferences?.useDinnerPrepForNextLunch).toBe(true);
   });
 
   it("restores existing cooking selections when editing later", () => {
@@ -530,7 +527,8 @@ describe("cooking preference onboarding", () => {
     expect(view.draft.maxPrepSessionMinutes).toBeNull();
     expect(view.draft.cookingStyle).toBe("fresh_focused");
     expect(view.draft.maxFinishMinutes).toBe(15);
-    expect(view.draft.useDinnerPrepForNextLunch).toBe(false);
+    // Old persisted false is overwritten by storage-compat normalize.
+    expect(view.draft.useDinnerPrepForNextLunch).toBe(true);
     expect(view.draft.rememberedMaxFinishMinutes).toBe(15);
   });
 });

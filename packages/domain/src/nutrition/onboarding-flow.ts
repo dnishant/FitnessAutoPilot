@@ -979,24 +979,27 @@ export function continueFromFinishTime(view: OnboardingView): OnboardingView {
   }
   return {
     ...withCookingDraft(view, validated.value),
-    step: "dinner_prep",
+    cookingPreferences: validated.value,
   };
 }
 
+/**
+ * @deprecated PLAN-008: dinner-prep is no longer collected. Prefer continueFromFinishTime.
+ */
 export function chooseOnboardingDinnerPrep(
   view: OnboardingView,
-  useDinnerPrepForNextLunch: boolean,
+  _useDinnerPrepForNextLunch: boolean,
 ): OnboardingView {
-  const validated = validateCookingPreferences({
-    ...cookingPreferencesFromDraft(view.draft),
-    useDinnerPrepForNextLunch,
-  });
+  const validated = validateCookingPreferences(cookingPreferencesFromDraft(view.draft));
   if (!validated.ok) {
     return withError(view, validated.error);
   }
   return withCookingDraft(view, validated.value);
 }
 
+/**
+ * @deprecated PLAN-008: dinner-prep step removed; completes cooking prefs if still invoked.
+ */
 export function continueFromDinnerPrep(view: OnboardingView): OnboardingView {
   const validated = validateCookingPreferences(cookingPreferencesFromDraft(view.draft));
   if (!validated.ok) {
