@@ -530,10 +530,23 @@ export async function invokeGenerateRankedWeeklyStrategy(
   const varietyLevel = request.foodPreferences.varietyLevel;
   const policy = getWeeklyVarietyComplexityPolicy(varietyLevel);
   if (exceedsHardUniqueCandidateLimit(payload.stats.uniqueCandidateCount, policy)) {
+    const providerCallCount =
+      payload.meta?.providerCallCount ??
+      payload.meta?.complexityRetry?.providerCallCount;
+    const firstAttemptUniqueCandidateCount =
+      payload.meta?.complexityRetry?.firstAttemptUniqueCandidates ??
+      payload.meta?.firstAttemptUniqueCandidates;
+    const complexityRetryOccurred = payload.meta?.complexityRetry?.occurred === true;
+    // A success payload above hard max without retry metadata usually means a stale
+    // Edge Function that never ran corrective regeneration.
+    const message =
+      complexityRetryOccurred || providerCallCount === 2
+        ? `Weekly plan used ${payload.stats.uniqueCandidateCount} unique candidates which exceeds the hard maximum of ${policy.maxHardUniqueCandidates} for ${varietyLevel}.`
+        : `Weekly plan used ${payload.stats.uniqueCandidateCount} unique candidates which exceeds the hard maximum of ${policy.maxHardUniqueCandidates} for ${varietyLevel}, and the server did not run a corrective complexity retry. Redeploy the generate-weekly-strategy Edge Function, then try again.`;
     return {
       ok: false,
       error: {
-        message: `Weekly plan used ${payload.stats.uniqueCandidateCount} unique candidates which exceeds the hard maximum of ${policy.maxHardUniqueCandidates} for ${varietyLevel}.`,
+        message,
         code: "EXCESSIVE_WEEKLY_COMPLEXITY",
         diagnostics: JSON.stringify({
           varietyLevel,
@@ -542,13 +555,11 @@ export async function invokeGenerateRankedWeeklyStrategy(
             policy.maxPreferredUniqueCandidates,
           ],
           hardMaxUniqueCandidates: policy.maxHardUniqueCandidates,
-          firstAttemptUniqueCandidateCount:
-            payload.meta?.complexityRetry?.firstAttemptUniqueCandidates ??
-            payload.meta?.firstAttemptUniqueCandidates,
+          firstAttemptUniqueCandidateCount,
           finalAttemptUniqueCandidateCount: payload.stats.uniqueCandidateCount,
-          providerCallCount:
-            payload.meta?.providerCallCount ??
-            payload.meta?.complexityRetry?.providerCallCount,
+          providerCallCount,
+          complexityRetryOccurred,
+          likelyStaleEdge: !(complexityRetryOccurred || providerCallCount === 2),
         }),
       },
     };
@@ -569,6 +580,9 @@ export function humanizeRankedWeeklyStrategyError(message: string, code?: string
     return `${message} Gemini selected an ID that was not in the matching meal-type pool.`;
   }
   if (code === "EXCESSIVE_WEEKLY_COMPLEXITY") {
+    if (/did not run a corrective complexity retry/i.test(message)) {
+      return message;
+    }
     return `${message} The corrective complexity retry still exceeded the hard unique-candidate limit.`;
   }
   return humanizeWeeklyStrategyError(message, code);

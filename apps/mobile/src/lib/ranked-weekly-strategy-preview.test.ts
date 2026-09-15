@@ -22,6 +22,7 @@ import {
   buildRankedWeeklyStrategyRequestFromPreview,
   canStartRankedWeeklyGeneration,
   createRankedWeeklyStrategyPreviewUiState,
+  humanizeRankedWeeklyStrategyError,
   invokeGenerateRankedWeeklyStrategy,
   lunchPreparationStrategyLabel,
   rankedWeeklyPreviewContainsSecrets,
@@ -226,6 +227,12 @@ describe("ranked weekly strategy preview", () => {
           providerCallCount: 2,
           firstAttemptUniqueCandidates: 13,
           finalUniqueCandidates: 13,
+          complexityRetry: {
+            occurred: true,
+            providerCallCount: 2,
+            firstAttemptUniqueCandidates: 13,
+            finalAttemptUniqueCandidates: 13,
+          },
         },
       },
       error: null,
@@ -235,8 +242,52 @@ describe("ranked weekly strategy preview", () => {
       return;
     }
     expect(result.error.code).toBe("EXCESSIVE_WEEKLY_COMPLEXITY");
+    expect(result.error.message).not.toMatch(/did not run a corrective complexity retry/i);
     expect(result.error.diagnostics).toContain('"hardMaxUniqueCandidates":10');
     expect(result.error.diagnostics).toContain('"finalAttemptUniqueCandidateCount":13');
+    expect(result.error.diagnostics).toContain('"likelyStaleEdge":false');
+  });
+
+  it("flags a stale Edge response that returns 13 unique without a complexity retry", async () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    const strategy = validateRankedWeeklyStrategy(
+      sampleRankedWeekPayloadWithUniqueCount(13),
+      request,
+      {
+        provider: "test",
+        model: "test-model",
+        promptVersion: RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
+      },
+    );
+    expect(strategy.ok).toBe(true);
+    if (!strategy.ok) {
+      return;
+    }
+    const stats = calculateRankedWeeklyStrategyQualityStats(strategy.value, request);
+    const result = await invokeGenerateRankedWeeklyStrategy(async () => ({
+      data: {
+        strategy: strategy.value,
+        stats,
+        meta: {
+          requestId: "ws_stale",
+          promptVersion: "weekly-strategy-ranked-v1",
+          provider: "gemini",
+          model: "test-model",
+        },
+      },
+      error: null,
+    }), request);
+    expect(result.ok).toBe(false);
+    if (result.ok) {
+      return;
+    }
+    expect(result.error.code).toBe("EXCESSIVE_WEEKLY_COMPLEXITY");
+    expect(result.error.message).toMatch(/did not run a corrective complexity retry/i);
+    expect(result.error.message).toMatch(/Redeploy the generate-weekly-strategy Edge Function/i);
+    expect(result.error.diagnostics).toContain('"likelyStaleEdge":true');
+    expect(humanizeRankedWeeklyStrategyError(result.error.message, result.error.code)).toMatch(
+      /Redeploy the generate-weekly-strategy Edge Function/i,
+    );
   });
 
   it("accepts a guarded successful response through the preview invoke path", async () => {
