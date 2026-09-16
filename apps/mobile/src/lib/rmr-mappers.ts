@@ -202,12 +202,19 @@ export function mapNutritionTargetRow(row: Record<string, unknown>): NutritionTa
     fatMinG: Number(row.fat_min_g ?? row.fatMinG),
     fatMaxG: Number(row.fat_max_g ?? row.fatMaxG),
     carbohydrateG: Number(row.carbohydrate_g ?? row.carbohydrateG),
+    fiberG:
+      row.fiber_g != null || row.fiberG != null
+        ? Number(row.fiber_g ?? row.fiberG)
+        : undefined,
     desiredRateKgPerWeek: Number(row.desired_rate_kg_per_week ?? row.desiredRateKgPerWeek),
     algorithmName: "nutrition-target",
     algorithmVersion: String(row.algorithm_version ?? row.algorithmVersion),
     macroPolicyName: (row.macro_policy_name ?? row.macroPolicyName) as NutritionTarget["macroPolicyName"],
     macroPolicyVersion: (row.macro_policy_version ??
       row.macroPolicyVersion) as NutritionTarget["macroPolicyVersion"],
+    fiberPolicyName: (row.fiber_policy_name ?? row.fiberPolicyName) as NutritionTarget["fiberPolicyName"],
+    fiberPolicyVersion: (row.fiber_policy_version ??
+      row.fiberPolicyVersion) as NutritionTarget["fiberPolicyVersion"],
     inputSnapshot: (row.input_snapshot ?? row.inputSnapshot ?? {}) as NutritionTarget["inputSnapshot"],
     validFrom: String(row.valid_from ?? row.validFrom),
     createdAt: String(row.created_at ?? row.createdAt),

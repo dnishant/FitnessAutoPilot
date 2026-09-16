@@ -19,6 +19,7 @@ export * from "./recipes/candidate-ranking-fixtures";
 export * from "./recipes/recipe-resolution";
 export * from "./recipes/recipe-resolution-fixtures";
 export * from "./food-resolution/index";
+export * from "./meal-composition/index";
 export * from "./planning/portioning";
 export * from "./planning/planner";
 export * from "./planning/weekly-strategy";

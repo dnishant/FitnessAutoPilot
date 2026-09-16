@@ -17,6 +17,8 @@ describe("NutritionTargetSchema", () => {
       carbKcalPerGram: 4,
       fatKcalPerGram: 9,
       policyVersion: "macro-policy-v1",
+      fiberGramsPer1000Kcal: 14,
+      fiberPolicyVersion: "fiber-policy-v1",
     });
     const result = NutritionTargetSchema.safeParse({
       id: "11111111-1111-1111-1111-111111111117",
@@ -30,11 +32,14 @@ describe("NutritionTargetSchema", () => {
       fatMinG: 57.15263862,
       fatMaxG: 57.15263862,
       carbohydrateG: 253.906563105,
+      fiberG: 31.5,
       desiredRateKgPerWeek: -0.408233133,
       algorithmName: "nutrition-target",
       algorithmVersion: "macro-policy-v1",
       macroPolicyName: "macro-policy",
       macroPolicyVersion: "macro-policy-v1",
+      fiberPolicyName: "fiber-policy",
+      fiberPolicyVersion: "fiber-policy-v1",
       inputSnapshot: snapshot,
       validFrom: "2026-09-08T00:00:00.000Z",
       createdAt: "2026-09-08T00:00:00.000Z",

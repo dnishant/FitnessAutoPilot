@@ -121,6 +121,23 @@ npx supabase functions deploy resolve-recipe-nutrition --project-ref <project-re
 # set USDA_API_KEY (and optional GEMINI_API_KEY for semantic disambiguation) as function secrets
 ```
 
+### Dev-only meal composition (PLAN-009.5)
+
+Complete a resolved main into a culturally coherent plate (no personalized portions). Hosted Meal Composition Preview (`/meal-composition-preview`) calls `compose-meals`:
+
+```bash
+pnpm sync:edge
+npx supabase functions deploy compose-meals --project-ref <project-ref>
+```
+
+Confirm `EXPO_PUBLIC_SUPABASE_URL` points at that same project. Gateway JWT stays off (`verify_jwt = false`); CORS + `requireUser()` match the other LLM functions. Local planner mode uses a mock provider and does not call Edge.
+
+Offline fixture QA (no Gemini):
+
+```bash
+pnpm --filter @fitness-autopilot/llm plan0095:qa:fixture
+```
+
 ### Dev-only candidate ranking (PLAN-006)
 
 Deterministic ranking + culinary deduplication. No Gemini call.

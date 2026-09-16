@@ -10,6 +10,7 @@ export * from "./recipe";
 export * from "./recipe-generation";
 export * from "./recipe-resolution";
 export * from "./food-resolution";
+export * from "./meal-composition";
 export * from "./weekly-strategy";
 export * from "./culinary-discovery";
 export * from "./candidate-ranking";

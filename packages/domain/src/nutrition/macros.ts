@@ -7,9 +7,27 @@ import {
   FAT_KCAL_PER_GRAM,
   PROTEIN_KCAL_PER_GRAM,
 } from "./energy";
+import {
+  calculateFiberTarget,
+  FIBER_GRAMS_PER_1000_KCAL,
+  FIBER_POLICY_EXPLANATION,
+  FIBER_POLICY_NAME,
+  FIBER_POLICY_VERSION,
+} from "./fiber";
 
 export const MACRO_POLICY_NAME = "macro-policy" as const;
 export const MACRO_POLICY_VERSION = "macro-policy-v1" as const;
+
+export {
+  FIBER_GRAMS_PER_1000_KCAL,
+  FIBER_POLICY_EXPLANATION,
+  FIBER_POLICY_NAME,
+  FIBER_POLICY_VERSION,
+  calculateFiberTarget,
+  formatFiberGrams,
+  roundFiberForDisplay,
+} from "./fiber";
+export type { FiberTargetDraft, FiberTargetError } from "./fiber";
 
 /** V1 protein policy: 1 gram per pound of current body weight per day. */
 export const PROTEIN_GRAMS_PER_LB = 1.0;
@@ -41,11 +59,14 @@ export type MacroTargetDraft = {
   proteinGrams: number;
   fatGrams: number;
   carbohydrateGrams: number;
+  fiberGrams: number;
   proteinCalories: number;
   fatCalories: number;
   remainingCalories: number;
   macroPolicyName: typeof MACRO_POLICY_NAME;
   macroPolicyVersion: typeof MACRO_POLICY_VERSION;
+  fiberPolicyName: typeof FIBER_POLICY_NAME;
+  fiberPolicyVersion: typeof FIBER_POLICY_VERSION;
   inputSnapshot: MacroTargetInputSnapshot;
   createdAt: string;
 };
@@ -232,16 +253,31 @@ export function calculateMacroTargets(input: {
 
   const targetCalories = input.targetCalories as number;
   const asOf = input.asOf ?? new Date();
+  const fiber = calculateFiberTarget({ targetCalories });
+  if (!fiber.ok) {
+    return err({
+      code:
+        fiber.error.code === "missing_calorie_target"
+          ? "missing_calorie_target"
+          : fiber.error.code === "invalid_calorie_target"
+            ? "invalid_calorie_target"
+            : "invalid_macro_result",
+      message: fiber.error.message,
+    });
+  }
   return ok({
     targetCalories,
     proteinGrams: protein.value,
     fatGrams: fat.value,
     carbohydrateGrams: carbs.value.carbohydrateGrams,
+    fiberGrams: fiber.value.fiberGrams,
     proteinCalories: carbs.value.proteinCalories,
     fatCalories: carbs.value.fatCalories,
     remainingCalories: carbs.value.remainingCalories,
     macroPolicyName: MACRO_POLICY_NAME,
     macroPolicyVersion: MACRO_POLICY_VERSION,
+    fiberPolicyName: FIBER_POLICY_NAME,
+    fiberPolicyVersion: FIBER_POLICY_VERSION,
     inputSnapshot: {
       bodyWeightKg: weight.value.weightKg,
       bodyWeightLb: weight.value.weightLb,
@@ -253,6 +289,8 @@ export function calculateMacroTargets(input: {
       carbKcalPerGram: CARB_KCAL_PER_GRAM,
       fatKcalPerGram: FAT_KCAL_PER_GRAM,
       policyVersion: MACRO_POLICY_VERSION,
+      fiberGramsPer1000Kcal: FIBER_GRAMS_PER_1000_KCAL,
+      fiberPolicyVersion: FIBER_POLICY_VERSION,
     },
     createdAt: asOf.toISOString(),
   });
@@ -298,11 +336,14 @@ export function nutritionTargetPersistFields(input: {
   fatMinG: number;
   fatMaxG: number;
   carbohydrateG: number;
+  fiberG: number;
   desiredRateKgPerWeek: number;
   algorithmName: "nutrition-target";
   algorithmVersion: typeof MACRO_POLICY_VERSION;
   macroPolicyName: typeof MACRO_POLICY_NAME;
   macroPolicyVersion: typeof MACRO_POLICY_VERSION;
+  fiberPolicyName: typeof FIBER_POLICY_NAME;
+  fiberPolicyVersion: typeof FIBER_POLICY_VERSION;
   inputSnapshot: MacroTargetInputSnapshot;
 } {
   return {
@@ -313,11 +354,14 @@ export function nutritionTargetPersistFields(input: {
     fatMinG: input.macros.fatGrams,
     fatMaxG: input.macros.fatGrams,
     carbohydrateG: input.macros.carbohydrateGrams,
+    fiberG: input.macros.fiberGrams,
     desiredRateKgPerWeek: input.desiredRateKgPerWeek,
     algorithmName: "nutrition-target",
     algorithmVersion: MACRO_POLICY_VERSION,
     macroPolicyName: input.macros.macroPolicyName,
     macroPolicyVersion: input.macros.macroPolicyVersion,
+    fiberPolicyName: input.macros.fiberPolicyName,
+    fiberPolicyVersion: input.macros.fiberPolicyVersion,
     inputSnapshot: input.macros.inputSnapshot,
   };
 }
@@ -327,5 +371,6 @@ export function nutritionTargetExplanationRows(): Array<{ label: string; value: 
     { label: "Protein", value: MACRO_PROTEIN_EXPLANATION },
     { label: "Fat", value: MACRO_FAT_EXPLANATION },
     { label: "Carbohydrates", value: MACRO_CARB_EXPLANATION },
+    { label: "Fiber", value: FIBER_POLICY_EXPLANATION },
   ];
 }

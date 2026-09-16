@@ -64,7 +64,9 @@ for path in root.rglob("*.ts"):
             "reader: EnvReader = (key) => process.env[key]",
             "reader: EnvReader = (key) => Deno.env.get(key)",
         )
-    if path.as_posix().endswith("/llm/create-food-resolver.ts"):
+    if path.as_posix().endswith("/llm/create-food-resolver.ts") or path.as_posix().endswith(
+        "/llm/create-meal-composition-provider.ts"
+    ):
         text2 = text2.replace(
             "((key: string) => process.env[key])",
             "((key: string) => Deno.env.get(key))",

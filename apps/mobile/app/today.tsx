@@ -194,6 +194,12 @@ export default function TodayScreen() {
       >
         <Text style={styles.devButtonText}>Dev: Food Resolution</Text>
       </Pressable>
+      <Pressable
+        style={styles.devButton}
+        onPress={() => router.push("/meal-composition-preview")}
+      >
+        <Text style={styles.devButtonText}>Dev: Meal Composition</Text>
+      </Pressable>
 
       <Pressable
         style={styles.secondary}

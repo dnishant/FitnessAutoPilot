@@ -39,9 +39,15 @@ import type {
   ResolvedRecipe,
   WeeklyRecipeNutritionResult,
   ResolveRecipeNutritionResponse,
+  ComposeMealsResponse,
+  WeeklyMealCompositionResult,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { completeOnboarding as completeOnboardingDomain } from "@fitness-autopilot/domain";
+import {
+  completeOnboarding as completeOnboardingDomain,
+  composeWeeklyMeals,
+  MockMealCompositionProvider,
+} from "@fitness-autopilot/domain";
 import { supabase, useLocalPlanner } from "../lib/supabase";
 import {
   ensureLocalUser,
@@ -88,6 +94,7 @@ import {
 } from "../lib/candidate-ranking-preview";
 import { invokeResolveRecipes } from "../lib/recipe-resolution-preview";
 import { invokeResolveRecipeNutrition } from "../lib/food-resolution-preview";
+import { invokeComposeMeals } from "../lib/meal-composition-preview";
 
 type SessionUser = { id: string; email: string };
 
@@ -224,6 +231,29 @@ type SessionValue = {
         code?: string;
         diagnostics?: string;
         meta?: NonNullable<ResolveRecipeNutritionResponse["meta"]>;
+      }
+  >;
+  composeMeals: (input: {
+    recipes: ResolvedRecipe[];
+    uniqueCandidateIds?: string[];
+    concurrency?: number;
+    targetCalories?: number;
+    allergies?: string[];
+    dietaryRestrictions?: string[];
+    dislikes?: string[];
+    resolveAddedComponents?: boolean;
+  }) => Promise<
+    | {
+        ok: true;
+        result: WeeklyMealCompositionResult;
+        meta?: NonNullable<ComposeMealsResponse["meta"]>;
+      }
+    | {
+        ok: false;
+        error: string;
+        code?: string;
+        diagnostics?: string;
+        meta?: NonNullable<ComposeMealsResponse["meta"]>;
       }
   >;
 };
@@ -1111,6 +1141,94 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return {
             ok: false,
             error: e instanceof Error ? e.message : "Failed to resolve recipe nutrition",
+          };
+        }
+      },
+      async composeMeals(input) {
+        try {
+          if (useLocalPlanner) {
+            const provider = new MockMealCompositionProvider();
+            const { result, failures } = await composeWeeklyMeals({
+              recipes: input.recipes,
+              uniqueCandidateIds: input.uniqueCandidateIds,
+              concurrency: input.concurrency,
+              targetCalories: input.targetCalories,
+              allergies: input.allergies ?? [],
+              dietaryRestrictions: input.dietaryRestrictions ?? [],
+              dislikes: input.dislikes ?? [],
+              resolveAddedComponents: false,
+              provider,
+              providerMeta: { provider: "mock", model: "local-fixture" },
+              slotCount: input.recipes.length,
+            });
+            if (failures.length > 0 && result.mealCount === 0) {
+              return {
+                ok: false,
+                error: failures[0]?.message ?? "Meal composition failed.",
+                code: failures[0]?.code,
+              };
+            }
+            return {
+              ok: true,
+              result,
+              meta: {
+                requestId: `local_mc_${Date.now()}`,
+                promptVersion: "meal-composition-v1",
+                policyVersion: "meal-composition-v1",
+                provider: "mock",
+                model: "local-fixture",
+              },
+            };
+          }
+          if (!supabase) {
+            return {
+              ok: false,
+              error: "Supabase is not configured.",
+              code: "LLM_CONFIGURATION_ERROR",
+            };
+          }
+          if (!user) {
+            return { ok: false, error: "Not signed in" };
+          }
+          const client = supabase;
+          const result = await invokeComposeMeals(
+            async (functionName, options) => {
+              const invoked = await client.functions.invoke(functionName, {
+                body: options.body,
+              });
+              return {
+                data: invoked.data,
+                error: invoked.error
+                  ? {
+                      message: invoked.error.message,
+                      context:
+                        "context" in invoked.error
+                          ? (invoked.error as { context?: unknown }).context
+                          : undefined,
+                    }
+                  : null,
+              };
+            },
+            input,
+          );
+          if (!result.ok) {
+            return {
+              ok: false,
+              error: result.error.message,
+              code: result.error.code,
+              diagnostics: result.error.diagnostics,
+              meta: result.meta,
+            };
+          }
+          return {
+            ok: true,
+            result: result.result,
+            meta: result.meta,
+          };
+        } catch (e) {
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "Failed to compose meals",
           };
         }
       },

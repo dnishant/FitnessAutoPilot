@@ -19,7 +19,9 @@
     "discover:culinary:dev": "tsx scripts/discover-culinary-dev.ts",
     "resolve:recipes:dev": "tsx scripts/resolve-recipes-dev.ts",
     "resolve:recipe-nutrition:dev": "tsx scripts/resolve-recipe-nutrition-dev.ts",
-    "plan009:qa:fixture": "tsx scripts/plan009-qa-fixture.ts"
+    "compose:meals:dev": "tsx scripts/compose-meals-dev.ts",
+    "plan009:qa:fixture": "tsx scripts/plan009-qa-fixture.ts",
+    "plan0095:qa:fixture": "tsx scripts/plan0095-qa-fixture.ts"
   },
   "dependencies": {
     "@fitness-autopilot/contracts": "workspace:*",

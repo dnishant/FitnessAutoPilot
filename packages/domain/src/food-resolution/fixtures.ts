@@ -365,6 +365,19 @@ export function plan009SimpleResolvedRecipes(): ResolvedRecipe[] {
       recipeId: "recipe-kerala-beef",
       candidateId: "kerala-beef-fry",
       name: "Kerala Beef Fry",
+      flavorProfile: {
+        cuisineFamily: "Indian",
+        regionalStyle: "Kerala",
+        flavorFamilies: ["spicy", "coconut"],
+        cookingTechniques: ["frying"],
+        textureProfile: ["crisp"],
+      },
+      experienceProfile: {
+        moistureLevel: "dry",
+        flavorIntensity: "bold",
+        textureTags: ["crisp"],
+        mealPrepQuality: "excellent",
+      },
       ingredients: [
         makeIngredient({
           ingredientId: "beef",
@@ -419,6 +432,19 @@ export function plan009SimpleResolvedRecipes(): ResolvedRecipe[] {
       recipeId: "recipe-jerk",
       candidateId: "jamaican-jerk-chicken",
       name: "Jamaican Jerk Chicken",
+      flavorProfile: {
+        cuisineFamily: "Jamaican",
+        regionalStyle: "Jamaica",
+        flavorFamilies: ["smoky", "spicy"],
+        cookingTechniques: ["grilling"],
+        textureProfile: ["charred"],
+      },
+      experienceProfile: {
+        moistureLevel: "dry",
+        flavorIntensity: "bold",
+        textureTags: ["charred"],
+        mealPrepQuality: "good",
+      },
       ingredients: [
         makeIngredient({
           ingredientId: "chicken",
@@ -465,6 +491,20 @@ export function plan009SimpleResolvedRecipes(): ResolvedRecipe[] {
       recipeId: "recipe-thai-curry",
       candidateId: "thai-green-curry",
       name: "Thai Green Curry with Shrimp",
+      flavorProfile: {
+        cuisineFamily: "Thai",
+        regionalStyle: "Central Thai",
+        flavorFamilies: ["herby", "coconut"],
+        cookingTechniques: ["simmering"],
+        textureProfile: ["saucy"],
+        primarySauce: "green curry",
+      },
+      experienceProfile: {
+        moistureLevel: "saucy",
+        flavorIntensity: "bold",
+        textureTags: ["saucy"],
+        mealPrepQuality: "good",
+      },
       ingredients: [
         makeIngredient({
           ingredientId: "shrimp",
@@ -487,6 +527,13 @@ export function plan009SimpleResolvedRecipes(): ResolvedRecipe[] {
           quantity: 40,
           unit: "g",
           role: "seasoning",
+        }),
+        makeIngredient({
+          ingredientId: "eggplant",
+          name: "Thai eggplant",
+          quantity: 200,
+          unit: "g",
+          role: "vegetable",
         }),
         makeIngredient({
           ingredientId: "thai-basil",
@@ -519,6 +566,20 @@ export function plan009SimpleResolvedRecipes(): ResolvedRecipe[] {
       recipeId: "recipe-ca-kho",
       candidateId: "ca-kho-to",
       name: "Vietnamese Cá Kho Tộ",
+      flavorProfile: {
+        cuisineFamily: "Vietnamese",
+        regionalStyle: "Southern Vietnam",
+        flavorFamilies: ["savory", "caramel"],
+        cookingTechniques: ["braising"],
+        textureProfile: ["glossy"],
+        primarySauce: "caramel fish sauce",
+      },
+      experienceProfile: {
+        moistureLevel: "saucy",
+        flavorIntensity: "bold",
+        textureTags: ["glossy"],
+        mealPrepQuality: "excellent",
+      },
       ingredients: [
         makeIngredient({
           ingredientId: "catfish",
@@ -573,6 +634,20 @@ export function plan009SimpleResolvedRecipes(): ResolvedRecipe[] {
       recipeId: "recipe-shrimp-tacos",
       candidateId: "quick-fresh-dinner",
       name: "Chile-Lime Shrimp Tacos",
+      flavorProfile: {
+        cuisineFamily: "Mexican",
+        regionalStyle: "Baja",
+        flavorFamilies: ["citrus", "chili"],
+        cookingTechniques: ["saute"],
+        textureProfile: ["crisp"],
+        primarySauce: "salsa",
+      },
+      experienceProfile: {
+        moistureLevel: "moderate",
+        flavorIntensity: "bold",
+        textureTags: ["crisp"],
+        mealPrepQuality: "good",
+      },
       ingredients: [
         makeIngredient({
           ingredientId: "shrimp",
@@ -604,6 +679,13 @@ export function plan009SimpleResolvedRecipes(): ResolvedRecipe[] {
           role: "vegetable",
         }),
         makeIngredient({
+          ingredientId: "salsa",
+          name: "pico de gallo",
+          quantity: 80,
+          unit: "g",
+          role: "sauce",
+        }),
+        makeIngredient({
           ingredientId: "oil",
           name: "olive oil",
           quantity: 1,
@@ -618,6 +700,30 @@ export function plan009SimpleResolvedRecipes(): ResolvedRecipe[] {
           type: "main",
           required: true,
           purpose: "Main",
+          relationship: "intrinsic",
+        },
+        {
+          componentId: "tortillas",
+          name: "corn tortillas",
+          type: "carb_side",
+          required: true,
+          purpose: "Taco vessel",
+          relationship: "intrinsic",
+        },
+        {
+          componentId: "slaw",
+          name: "cabbage slaw",
+          type: "vegetable_side",
+          required: true,
+          purpose: "Crunch",
+          relationship: "intrinsic",
+        },
+        {
+          componentId: "salsa",
+          name: "salsa",
+          type: "condiment",
+          required: true,
+          purpose: "Brightness",
           relationship: "intrinsic",
         },
       ],
