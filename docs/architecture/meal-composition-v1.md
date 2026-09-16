@@ -42,8 +42,21 @@ It is **not** a per-meal quota. Composition only ensures sensible fiber *opportu
 ## Edge / preview
 
 - Edge Function: `compose-meals`
+- Uses the same CORS + in-function JWT pattern as `resolve-recipes` (`serveWithCors`, `verify_jwt = false` in `config.toml`)
+- Deploy before using the hosted preview — an undeployed function returns gateway `NOT_FOUND`, which browsers often surface as a CORS / “could not reach” error:
+
+```bash
+pnpm sync:edge
+npx supabase functions deploy compose-meals --project-ref <project-ref>
+# GEMINI_API_KEY must already be set on that project (same as resolve-recipes)
+```
+
+Confirm `EXPO_PUBLIC_SUPABASE_URL` points at that same project (`https://<project-ref>.supabase.co`).
+
 - Dev CLI: `pnpm compose:meals:dev`
-- Mobile preview: `/meal-composition-preview` (local mode uses `MockMealCompositionProvider`)
+- Mobile preview: `/meal-composition-preview`
+  - Local planner (`EXPO_PUBLIC_USE_LOCAL_PLANNER=true`) uses `MockMealCompositionProvider` (no Edge call)
+  - Remote mode calls hosted `compose-meals`
 
 ## Concurrency
 
