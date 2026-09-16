@@ -62,15 +62,33 @@ export function createMealCompositionPreviewUiState(): MealCompositionPreviewUiS
   };
 }
 
+export function isLegacyComposeMealsRecipesRequiredError(error: {
+  message?: string;
+  code?: string;
+  diagnostics?: string;
+}): boolean {
+  const blob = `${error.message ?? ""}\n${error.diagnostics ?? ""}`;
+  return (
+    /"recipes"\s*:\s*\[\s*"Required"\s*\]/.test(blob) ||
+    (error.code === "INVALID_COMPOSITION_REQUEST" &&
+      error.message === "Required" &&
+      blob.includes("recipes"))
+  );
+}
+
 export function humanizeMealCompositionError(error: {
   message: string;
   code?: string;
+  diagnostics?: string;
 }): string {
   if (error.code === "RATE_LIMITED") {
     return "Gemini rate-limited meal composition. Try again shortly.";
   }
   if (error.code === "LLM_CONFIGURATION_ERROR") {
     return "Gemini API key is not configured on the Edge Function.";
+  }
+  if (isLegacyComposeMealsRecipesRequiredError(error)) {
+    return "Hosted compose-meals still expects PLAN-009.5 recipes. Lightweight composition sends rankedCandidates only — deploy this branch with `pnpm sync:edge` and `npx supabase functions deploy compose-meals`, or use EXPO_PUBLIC_USE_LOCAL_PLANNER=true.";
   }
   if (error.message === "Failed to send a request to the Edge Function") {
     return "Could not reach compose-meals. Deploy it with CORS enabled and confirm EXPO_PUBLIC_SUPABASE_URL points at that project.";

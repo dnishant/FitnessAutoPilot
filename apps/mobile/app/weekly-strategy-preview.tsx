@@ -30,6 +30,7 @@ import {
   type RankedWeekPreviewScenarioId,
   type RankedWeeklyStrategyPreviewUiState,
 } from "../src/lib/ranked-weekly-strategy-preview";
+import { humanizeMealCompositionError } from "../src/lib/meal-composition-preview";
 
 function CollapsibleSection(props: {
   title: string;
@@ -166,7 +167,11 @@ export default function WeeklyStrategyPreviewScreen() {
         busy: false,
         pipelineBusy: null,
         error: {
-          message: composed.error,
+          message: humanizeMealCompositionError({
+            message: composed.error,
+            code: composed.code,
+            diagnostics: composed.diagnostics,
+          }),
           code: composed.code,
           diagnostics: composed.diagnostics,
         },

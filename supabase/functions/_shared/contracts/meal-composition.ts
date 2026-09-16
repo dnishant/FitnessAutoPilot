@@ -401,8 +401,8 @@ export const ComposeMealsStageSchema = z.enum(["concepts", "selected_resolution"
 export const ComposeMealsRequestSchema = z
   .object({
     stage: ComposeMealsStageSchema.optional().default("concepts"),
-    rankedCandidates: z.array(RankedCulinaryCandidateSchema).max(40).optional(),
-    recipes: z.array(ResolvedRecipeSchema).max(14).optional(),
+    rankedCandidates: z.array(RankedCulinaryCandidateSchema).max(40).nullish(),
+    recipes: z.array(ResolvedRecipeSchema).max(14).nullish(),
     mealConcepts: z.array(MealConceptSchema).max(40).optional(),
     nutritionByCandidateId: z.record(z.string(), RecipeNutritionResultSchema).optional(),
     uniqueCandidateIds: z.array(z.string().trim().min(1).max(80)).max(40).optional(),
@@ -427,6 +427,7 @@ export const ComposeMealsRequestSchema = z
       if (!hasRanked && !hasRecipes) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
+          path: ["rankedCandidates"],
           message: "Concept composition requires rankedCandidates or recipes.",
         });
       }

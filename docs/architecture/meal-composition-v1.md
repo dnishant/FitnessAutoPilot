@@ -100,6 +100,8 @@ npx supabase functions deploy compose-meals --project-ref <project-ref>
 
 Confirm `EXPO_PUBLIC_SUPABASE_URL` points at that same project (`https://<project-ref>.supabase.co`).
 
+If the preview returns `fieldErrors.recipes: ["Required"]`, the hosted function is still the old PLAN-009.5 schema. Redeploy this branch; `compose-meals` now accepts `rankedCandidates` without `recipes`. Local planner mode composes without Edge.
+
 - Dev CLI: `pnpm compose:meals:dev`
 - Mobile preview: `/meal-composition-preview`
   - Local planner (`EXPO_PUBLIC_USE_LOCAL_PLANNER=true`) uses `MockMealCompositionProvider` (no Edge call)

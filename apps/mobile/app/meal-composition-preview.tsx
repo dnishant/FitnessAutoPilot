@@ -132,6 +132,7 @@ export default function MealCompositionPreviewScreen() {
           message: humanizeMealCompositionError({
             message: response.error,
             code: response.code,
+            diagnostics: response.diagnostics,
           }),
           code: response.code,
           diagnostics: response.diagnostics,

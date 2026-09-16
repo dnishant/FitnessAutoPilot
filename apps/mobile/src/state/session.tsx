@@ -95,7 +95,7 @@ import {
 } from "../lib/candidate-ranking-preview";
 import { invokeResolveRecipes } from "../lib/recipe-resolution-preview";
 import { invokeResolveRecipeNutrition } from "../lib/food-resolution-preview";
-import { invokeComposeMeals } from "../lib/meal-composition-preview";
+import { invokeComposeMeals, isLegacyComposeMealsRecipesRequiredError } from "../lib/meal-composition-preview";
 
 type SessionUser = { id: string; email: string };
 
@@ -260,6 +260,56 @@ type SessionValue = {
 
 const SessionContext = createContext<SessionValue | null>(null);
 const LOCAL_USER_KEY = "fa.local.user";
+
+async function composeMealConceptsLocally(input: {
+  rankedCandidates: RankedCulinaryCandidate[];
+  uniqueCandidateIds?: string[];
+  concurrency?: number;
+  targetCalories?: number;
+  allergies?: string[];
+  dietaryRestrictions?: string[];
+  dislikes?: string[];
+}): Promise<
+  | {
+      ok: true;
+      concepts: WeeklyMealConceptResult;
+      meta: NonNullable<ComposeMealsResponse["meta"]>;
+    }
+  | { ok: false; error: string; code?: string }
+> {
+  const provider = new MockMealCompositionProvider();
+  const { result, failures } = await composeMealConceptsDomain({
+    rankedCandidates: input.rankedCandidates,
+    uniqueCandidateIds: input.uniqueCandidateIds,
+    concurrency: input.concurrency,
+    targetCalories: input.targetCalories,
+    allergies: input.allergies ?? [],
+    dietaryRestrictions: input.dietaryRestrictions ?? [],
+    dislikes: input.dislikes ?? [],
+    provider,
+    providerMeta: { provider: "mock", model: "local-fixture" },
+    slotCount: input.rankedCandidates.length,
+  });
+  if (failures.length > 0 && result.conceptCount === 0) {
+    return {
+      ok: false,
+      error: failures[0]?.message ?? "Meal composition failed.",
+      code: failures[0]?.code,
+    };
+  }
+  return {
+    ok: true,
+    concepts: result,
+    meta: {
+      requestId: `local_mc_${Date.now()}`,
+      promptVersion: "meal-composition-v2",
+      policyVersion: "meal-composition-v1",
+      stage: "concepts",
+      provider: "mock",
+      model: "local-fixture",
+    },
+  };
+}
 
 async function loadRemoteOnboardingState(userId: string): Promise<{
   profile: ProfileBasics | null;
@@ -1147,38 +1197,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       async composeMealConcepts(input) {
         try {
           if (useLocalPlanner) {
-            const provider = new MockMealCompositionProvider();
-            const { result, failures } = await composeMealConceptsDomain({
-              rankedCandidates: input.rankedCandidates,
-              uniqueCandidateIds: input.uniqueCandidateIds,
-              concurrency: input.concurrency,
-              targetCalories: input.targetCalories,
-              allergies: input.allergies ?? [],
-              dietaryRestrictions: input.dietaryRestrictions ?? [],
-              dislikes: input.dislikes ?? [],
-              provider,
-              providerMeta: { provider: "mock", model: "local-fixture" },
-              slotCount: input.rankedCandidates.length,
-            });
-            if (failures.length > 0 && result.conceptCount === 0) {
-              return {
-                ok: false,
-                error: failures[0]?.message ?? "Meal composition failed.",
-                code: failures[0]?.code,
-              };
-            }
-            return {
-              ok: true,
-              concepts: result,
-              meta: {
-                requestId: `local_mc_${Date.now()}`,
-                promptVersion: "meal-composition-v2",
-                policyVersion: "meal-composition-v1",
-                stage: "concepts",
-                provider: "mock",
-                model: "local-fixture",
-              },
-            };
+            return composeMealConceptsLocally(input);
           }
           if (!supabase) {
             return {
@@ -1212,6 +1231,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             input,
           );
           if (!result.ok) {
+            if (isLegacyComposeMealsRecipesRequiredError(result.error)) {
+              return composeMealConceptsLocally(input);
+            }
             return {
               ok: false,
               error: result.error.message,

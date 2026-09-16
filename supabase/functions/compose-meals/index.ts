@@ -89,7 +89,7 @@ serveWithCors(async (req) => {
 
     if (stage === "concepts") {
       const { result, failures } = await composeMealConcepts({
-        rankedCandidates: parsed.data.rankedCandidates,
+        rankedCandidates: parsed.data.rankedCandidates ?? undefined,
         candidates: parsed.data.recipes?.map((recipe) => ({
           candidateId: recipe.candidateId,
           name: recipe.name,

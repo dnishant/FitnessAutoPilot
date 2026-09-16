@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   createMealCompositionPreviewUiState,
+  humanizeMealCompositionError,
+  isLegacyComposeMealsRecipesRequiredError,
   plateLines,
   roleCheck,
   sourceLabel,
@@ -20,6 +22,23 @@ describe("meal-composition-preview helpers", () => {
     expect(roleCheck("primary protein", true)).toContain("✓");
     expect(roleCheck("carb", false)).toContain("✗");
     expect(sourceLabel("composition_engine")).toMatch(/Composition engine/);
+  });
+
+  it("recognizes the old compose-meals recipes Required error", () => {
+    const error = {
+      message: "Required",
+      code: "INVALID_COMPOSITION_REQUEST",
+      diagnostics: JSON.stringify({
+        error: {
+          code: "INVALID_COMPOSITION_REQUEST",
+          message: "Required",
+          details: { formErrors: [], fieldErrors: { recipes: ["Required"] } },
+        },
+      }),
+    };
+    expect(isLegacyComposeMealsRecipesRequiredError(error)).toBe(true);
+    expect(humanizeMealCompositionError(error)).toMatch(/rankedCandidates/);
+    expect(humanizeMealCompositionError(error)).not.toBe("Required");
   });
 
   it("summarizes weekly diagnostics including fiber policy and v2 prompt", () => {
