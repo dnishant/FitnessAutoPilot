@@ -42,15 +42,22 @@ export function collectUniqueRankedRepertoire(
   return uniqueRankedCandidates([...lunchCandidates, ...dinnerCandidates]);
 }
 
+function asConceptsByCandidateId(
+  concepts: Record<string, MealConcept> | WeeklyMealConceptResult,
+): Record<string, MealConcept> {
+  if (Array.isArray((concepts as WeeklyMealConceptResult).uniqueCandidateIds)) {
+    return (concepts as WeeklyMealConceptResult).conceptsByCandidateId;
+  }
+  return concepts as Record<string, MealConcept>;
+}
+
 export function attachMealConceptsToWeeklyRequest(
   request: RankedWeeklyStrategyRequest,
   concepts: Record<string, MealConcept> | WeeklyMealConceptResult,
 ): RankedWeeklyStrategyRequest {
-  const mealConceptsByCandidateId =
-    "conceptsByCandidateId" in concepts ? concepts.conceptsByCandidateId : concepts;
   return {
     ...request,
-    mealConceptsByCandidateId,
+    mealConceptsByCandidateId: asConceptsByCandidateId(concepts),
   };
 }
 
@@ -107,10 +114,7 @@ export async function resolveSelectedPipelineMeals(input: {
   uniqueMainRecipesResolved: number;
   uniqueComponentRecipesResolved: number;
 }> {
-  const conceptsById =
-    "conceptsByCandidateId" in input.concepts
-      ? input.concepts.conceptsByCandidateId
-      : input.concepts;
+  const conceptsById = asConceptsByCandidateId(input.concepts);
   const selectedCandidateIds = [...input.strategy.uniqueCandidateIds];
   let recipesByCandidateId: Record<string, ResolvedRecipe> = {};
   if (input.recipeResolver) {

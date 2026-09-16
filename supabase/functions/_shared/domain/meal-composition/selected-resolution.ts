@@ -57,8 +57,10 @@ function lookupCandidate(
     | undefined,
 ): CulinaryDiscoveryCandidate | undefined {
   if (!lookup) return undefined;
-  if (lookup instanceof Map) return lookup.get(id);
-  return lookup[id];
+  if (typeof (lookup as Map<string, CulinaryDiscoveryCandidate>).get === "function") {
+    return (lookup as Map<string, CulinaryDiscoveryCandidate>).get(id);
+  }
+  return (lookup as Record<string, CulinaryDiscoveryCandidate>)[id];
 }
 
 function mapConceptSource(source: MealConceptComponent["source"]): CompleteMealComponent["source"] {

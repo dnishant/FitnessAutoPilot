@@ -109,8 +109,20 @@ export async function composeCompleteMeal(
   return ok(meal);
 }
 
-export type ComposeWeeklyMealsInput = Omit<ComposeMealsRequest, "mealType"> & {
+export type ComposeWeeklyMealsInput = {
+  rankedCandidates?: ComposeMealsRequest["rankedCandidates"];
+  recipes?: ComposeMealsRequest["recipes"];
+  uniqueCandidateIds?: ComposeMealsRequest["uniqueCandidateIds"];
+  selectedCandidateIds?: ComposeMealsRequest["selectedCandidateIds"];
   mealType?: ComposeMealsRequest["mealType"];
+  allergies?: ComposeMealsRequest["allergies"];
+  dietaryRestrictions?: ComposeMealsRequest["dietaryRestrictions"];
+  dislikes?: ComposeMealsRequest["dislikes"];
+  cookingStyleHint?: ComposeMealsRequest["cookingStyleHint"];
+  targetCalories?: ComposeMealsRequest["targetCalories"];
+  concurrency?: ComposeMealsRequest["concurrency"];
+  resolveAddedComponents?: ComposeMealsRequest["resolveAddedComponents"];
+  slotCount?: ComposeMealsRequest["slotCount"];
   provider: MealCompositionProvider;
   foodResolver?: FoodResolver | null;
   providerMeta?: { provider?: string; model?: string };
@@ -143,6 +155,9 @@ export async function composeWeeklyMeals(
     reasons: ["Derived from resolved recipe for composition."],
   }));
   const ranked = input.rankedCandidates ?? rankedFromRecipes;
+  const recipesByCandidateId = Object.fromEntries(
+    (input.recipes ?? []).map((recipe) => [recipe.candidateId, recipe]),
+  );
   const conceptOutcome = await composeMealConcepts({
     rankedCandidates: ranked,
     uniqueCandidateIds: input.uniqueCandidateIds,
@@ -154,6 +169,7 @@ export async function composeWeeklyMeals(
     targetCalories: input.targetCalories,
     concurrency: input.concurrency ?? DEFAULT_MEAL_COMPOSITION_CONCURRENCY,
     slotCount: input.slotCount,
+    recipesByCandidateId,
     provider: input.provider,
     providerMeta: input.providerMeta,
   });
@@ -162,10 +178,6 @@ export async function composeWeeklyMeals(
     input.selectedCandidateIds && input.selectedCandidateIds.length > 0
       ? input.selectedCandidateIds
       : conceptOutcome.result.uniqueCandidateIds;
-
-  const recipesByCandidateId = Object.fromEntries(
-    (input.recipes ?? []).map((recipe) => [recipe.candidateId, recipe]),
-  );
 
   const detailed = await resolveSelectedCompleteMeals({
     concepts: conceptOutcome.result.conceptsByCandidateId,

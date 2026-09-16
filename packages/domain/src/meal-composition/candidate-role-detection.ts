@@ -186,11 +186,9 @@ export function detectedRecipeComponentsToConcepts(
     name: c.name,
     relationship: c.relationship,
     source:
-      c.source === "composition_engine"
-        ? "composition_engine"
-        : c.source === "existing_recipe_component"
-          ? "existing_candidate_component"
-          : "candidate",
+      c.source === "existing_recipe_component"
+        ? "existing_candidate_component"
+        : "candidate",
     reason: c.reason,
     definitionKind: c.definitionKind,
     normalizedComponentKey: c.normalizedComponentKey,

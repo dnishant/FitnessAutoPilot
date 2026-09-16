@@ -8,6 +8,7 @@ import type {
   MealConcept,
   MealConceptComponent,
   RankedCulinaryCandidate,
+  ResolvedRecipe,
   WeeklyMealConceptResult,
 } from "../../contracts/index.ts";
 import {
@@ -252,6 +253,7 @@ export type ComposeMealConceptsInput = {
   targetCalories?: number;
   concurrency?: number;
   slotCount?: number;
+  recipesByCandidateId?: Record<string, ResolvedRecipe>;
   provider: MealCompositionProvider;
   providerMeta?: { provider?: string; model?: string };
 };
@@ -319,6 +321,7 @@ export async function composeMealConcepts(
       mealType: input.mealType ?? "dinner",
       candidate,
       ranked: rankedItem,
+      recipe: input.recipesByCandidateId?.[candidate.candidateId],
       allergies: input.allergies ?? [],
       dietaryRestrictions: input.dietaryRestrictions ?? [],
       dislikes: input.dislikes ?? [],
@@ -326,7 +329,10 @@ export async function composeMealConcepts(
       cuisineFamily: candidate.cuisineFamily,
       regionalStyle: candidate.regionalStyle,
       compositionContext: {
-        existingRoles: detectRolesForCompositionRequest({ candidate }).profile,
+        existingRoles: detectRolesForCompositionRequest({
+          candidate,
+          recipe: input.recipesByCandidateId?.[candidate.candidateId],
+        }).profile,
         otherSelectedMealNames: otherNames.filter((name) => name !== candidate.name),
         existingComponentKeys: [...sharedKeys],
       },
