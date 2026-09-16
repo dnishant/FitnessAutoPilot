@@ -189,13 +189,14 @@ export default function MealCompositionPreviewScreen() {
       ) : null}
 
       {state.result ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
+        <View style={styles.chipWrap}>
           {state.result.uniqueCandidateIds.map((id) => {
             const meal = state.result!.mealsByCandidateId[id];
             const active = id === state.selectedCandidateId;
             return (
               <Pressable
                 key={id}
+                accessibilityRole="button"
                 style={[styles.chip, active && styles.chipActive]}
                 onPress={() => setState((s) => ({ ...s, selectedCandidateId: id }))}
               >
@@ -205,7 +206,7 @@ export default function MealCompositionPreviewScreen() {
               </Pressable>
             );
           })}
-        </ScrollView>
+        </View>
       ) : null}
 
       {selected ? <MealCard meal={selected} /> : null}
@@ -257,13 +258,12 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   errorText: { color: "#c92a2a", fontWeight: "600" },
-  chipRow: { maxHeight: 44 },
+  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   chip: {
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 16,
     backgroundColor: "#e0e7ff",
-    marginRight: 8,
   },
   chipActive: { backgroundColor: "#1d3557" },
   chipText: { color: "#1d3557", fontSize: 12, fontWeight: "600" },
