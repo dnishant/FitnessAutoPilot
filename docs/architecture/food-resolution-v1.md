@@ -46,6 +46,15 @@ Recommended sides without quantities stay `pending_portioning` (no invented gram
 ## Edge / preview
 
 - Edge Function: `resolve-recipe-nutrition` (server-side `USDA_API_KEY`)
+- Uses the same CORS + in-function JWT pattern as `resolve-recipes` (`serveWithCors`, `verify_jwt = false` in `config.toml`)
+- Deploy before using the hosted preview — an undeployed function returns gateway `NOT_FOUND`, which browsers often surface as a CORS error:
+
+```bash
+pnpm sync:edge
+npx supabase functions deploy resolve-recipe-nutrition --project-ref <project-ref>
+npx supabase secrets set USDA_API_KEY=... --project-ref <project-ref>
+```
+
 - Dev CLI: `pnpm resolve:recipe-nutrition:dev`
 - Mobile preview: `/food-resolution-preview`
 

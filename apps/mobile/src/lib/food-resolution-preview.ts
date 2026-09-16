@@ -55,7 +55,10 @@ export function humanizeFoodResolutionError(error: {
     return "USDA_API_KEY is not configured on the Edge Function.";
   }
   if (error.message === "Failed to send a request to the Edge Function") {
-    return "Could not reach resolve-recipe-nutrition. Deploy it with CORS enabled and confirm EXPO_PUBLIC_SUPABASE_URL.";
+    return "Could not reach resolve-recipe-nutrition. Deploy it with CORS enabled (`npx supabase functions deploy resolve-recipe-nutrition --project-ref <project-ref>`, verify_jwt=false) and confirm EXPO_PUBLIC_SUPABASE_URL points at that project.";
+  }
+  if (error.message === "Edge Function returned a non-2xx status code") {
+    return "Food resolution failed in the Edge Function (non-2xx). Confirm resolve-recipe-nutrition is deployed and USDA_API_KEY is set as a function secret.";
   }
   return error.message;
 }

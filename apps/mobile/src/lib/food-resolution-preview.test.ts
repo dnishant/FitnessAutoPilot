@@ -1,10 +1,16 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   createFoodResolutionPreviewUiState,
   formatNutritionLine,
+  humanizeFoodResolutionError,
   plan009SimpleResolvedRecipes,
   weeklyNutritionSummaryRows,
 } from "./food-resolution-preview";
+
+const mobileRoot = join(dirname(fileURLToPath(import.meta.url)), "../..");
 
 describe("food-resolution-preview helpers", () => {
   it("loads six PLAN-008 simple repertoire fixtures", () => {
@@ -62,5 +68,38 @@ describe("food-resolution-preview helpers", () => {
       },
     });
     expect(rows.some((r) => r.label === "Unique recipes" && r.value === "6")).toBe(true);
+  });
+
+  it("humanizes unreachable Edge Function / CORS failures", () => {
+    expect(
+      humanizeFoodResolutionError({
+        message: "Failed to send a request to the Edge Function",
+      }),
+    ).toContain("resolve-recipe-nutrition");
+  });
+
+  it("serves resolve-recipe-nutrition with CORS like resolve-recipes", () => {
+    const nutrition = readFileSync(
+      join(mobileRoot, "../../supabase/functions/resolve-recipe-nutrition/index.ts"),
+      "utf8",
+    );
+    const recipes = readFileSync(
+      join(mobileRoot, "../../supabase/functions/resolve-recipes/index.ts"),
+      "utf8",
+    );
+    const config = readFileSync(join(mobileRoot, "../../supabase/config.toml"), "utf8");
+    const domainIndex = readFileSync(
+      join(mobileRoot, "../../supabase/functions/_shared/domain/index.ts"),
+      "utf8",
+    );
+    expect(nutrition).toContain("serveWithCors");
+    expect(nutrition).not.toContain("Deno.serve");
+    expect(recipes).toContain("serveWithCors");
+    expect(config).toContain("[functions.resolve-recipe-nutrition]");
+    expect(config).toMatch(
+      /\[functions\.resolve-recipe-nutrition\][\s\S]*?verify_jwt\s*=\s*false/,
+    );
+    // Directory barrel must sync to /index.ts (not food-resolution.ts) or deploy 404s as CORS.
+    expect(domainIndex).toContain('"./food-resolution/index.ts"');
   });
 });
