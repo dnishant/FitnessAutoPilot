@@ -41,6 +41,7 @@ describe("meal composition schema", () => {
     expect(coerced.addedComponents[0]?.definitionKind).toBe("atomic_food");
     expect(coerced.addedComponents[0]).not.toHaveProperty("caloriesKcal");
     expect(coerced.addedComponents[0]).not.toHaveProperty("grams");
+    expect(coerced.addedComponents[0]).not.toHaveProperty("recipeIngredients");
   });
 });
 
@@ -100,6 +101,7 @@ describe("GeminiMealCompositionProvider", () => {
 
     expect(generateContent).toHaveBeenCalledTimes(1);
     expect(proposal.addedComponents[0]?.name).toBe("kachumber");
+    expect(proposal.addedComponents[0]).not.toHaveProperty("recipeIngredients");
     expect(proposal).not.toHaveProperty("caloriesKcal");
   });
 });

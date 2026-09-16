@@ -3,6 +3,7 @@ import {
   CompleteMealSchema,
   FIBER_POLICY_VERSION,
   MEAL_COMPOSITION_PROMPT_VERSION,
+  MealConceptSchema,
   MealCompositionProposalSchema,
 } from "./meal-composition";
 
@@ -89,5 +90,56 @@ describe("PLAN-009.5 meal composition contracts", () => {
     });
     expect(meal.components[1]?.quantityMode).toBe("solver_determined");
     expect(FIBER_POLICY_VERSION).toBe("fiber-policy-v1");
+  });
+
+  it("accepts a lightweight meal concept without quantities or instructions", () => {
+    expect(MEAL_COMPOSITION_PROMPT_VERSION).toBe("meal-composition-v2");
+    const concept = MealConceptSchema.parse({
+      candidateId: "tikka-chicken",
+      name: "Chicken Tikka",
+      main: {
+        componentId: "main",
+        role: "main",
+        name: "Chicken Tikka",
+        relationship: "intrinsic",
+        source: "candidate",
+        reason: "Ranked main-dish candidate",
+        definitionKind: "recipe_component",
+        normalizedComponentKey: "main:chicken tikka",
+      },
+      components: [
+        {
+          componentId: "rice",
+          role: "carbohydrate",
+          name: "basmati rice",
+          relationship: "required_companion",
+          source: "composition_engine",
+          reason: "Traditional starch",
+          definitionKind: "atomic_food",
+          normalizedComponentKey: "carbohydrate:basmati rice",
+          quantity: 1,
+          unit: "cup",
+          instructions: ["steam rice"],
+        },
+      ],
+      compositionProfile: {
+        hasPrimaryProtein: true,
+        hasMeaningfulCarbohydrate: true,
+        hasMeaningfulVegetableOrFruit: false,
+        hasMeaningfulFiberSource: false,
+        hasSauceOrMoistureComponent: false,
+        addedComponentRoles: ["carbohydrate"],
+      },
+      metadata: {
+        promptVersion: "meal-composition-v2",
+        policyVersion: "meal-composition-v1",
+        createdAt: "2026-09-16T00:00:00.000Z",
+      },
+    });
+    expect(concept.components[0]).not.toHaveProperty("quantity");
+    expect(concept.components[0]).not.toHaveProperty("instructions");
+    expect(JSON.stringify(MealConceptSchema.shape.components)).not.toMatch(
+      /instructions|recipeIngredients|quantity/,
+    );
   });
 });

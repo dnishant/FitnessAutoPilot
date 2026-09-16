@@ -2,6 +2,7 @@ import type {
   CulinaryDiscoveryCandidate,
   DayOfWeek,
   LunchPreparationStrategy,
+  MealConcept,
   RankedCulinaryCandidate,
   RankedWeeklyAdjacentPair,
   RankedWeeklyDay,
@@ -29,6 +30,10 @@ import {
   SIMILARITY_PENALTY_THRESHOLD,
   computeCandidateSimilarity,
 } from "../recipes/candidate-ranking.ts";
+import {
+  formatComponentReuseForPrompt,
+  summarizeMealConceptRepertoire,
+} from "../meal-composition/repertoire.ts";
 
 export {
   MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK,
@@ -92,6 +97,17 @@ export type RankedWeeklyPlannerCandidate = {
   estimatedFinishMinutesAfterPrep: number | null;
   sourceName: string;
   fitnessAdaptability: CulinaryDiscoveryCandidate["fitnessAdaptability"];
+  mealConcept?: {
+    plate: string[];
+    components: Array<{
+      role: string;
+      name: string;
+      relationship: string;
+      source: string;
+      definitionKind: string;
+    }>;
+    compositionProfile: MealConcept["compositionProfile"];
+  };
 };
 
 type RankedWeeklyModelSlot = {
@@ -208,9 +224,10 @@ export function parseRankedWeeklyStrategyRequest(
 
 export function compactRankedCandidateForPrompt(
   ranked: RankedCulinaryCandidate,
+  mealConcept?: MealConcept,
 ): RankedWeeklyPlannerCandidate {
   const { candidate } = ranked;
-  return {
+  const compacted: RankedWeeklyPlannerCandidate = {
     candidateId: candidate.candidateId,
     name: candidate.name,
     rank: ranked.rank,
@@ -228,6 +245,20 @@ export function compactRankedCandidateForPrompt(
     sourceName: candidate.source.name,
     fitnessAdaptability: candidate.fitnessAdaptability,
   };
+  if (mealConcept) {
+    compacted.mealConcept = {
+      plate: [mealConcept.main.name, ...mealConcept.components.map((c) => c.name)],
+      components: mealConcept.components.map((c) => ({
+        role: c.role,
+        name: c.name,
+        relationship: c.relationship,
+        source: c.source,
+        definitionKind: c.definitionKind,
+      })),
+      compositionProfile: mealConcept.compositionProfile,
+    };
+  }
+  return compacted;
 }
 
 export function indexRankedCandidates(
@@ -280,9 +311,19 @@ function formatPrepSessionMinutes(
   return `${minutes}`;
 }
 
-function formatPlannerCandidates(ranked: readonly RankedCulinaryCandidate[]): string {
+function formatPlannerCandidates(
+  ranked: readonly RankedCulinaryCandidate[],
+  mealConceptsByCandidateId?: Record<string, MealConcept>,
+): string {
   return ranked
-    .map((item) => JSON.stringify(compactRankedCandidateForPrompt(item)))
+    .map((item) =>
+      JSON.stringify(
+        compactRankedCandidateForPrompt(
+          item,
+          mealConceptsByCandidateId?.[item.candidate.candidateId],
+        ),
+      ),
+    )
     .join("\n");
 }
 
@@ -377,7 +418,9 @@ export function buildRankedWeeklyStrategyPrompt(
     "Architecture:",
     "- PLAN-005 discovered these dishes (broad, exciting pool).",
     "- PLAN-006 ranked and removed redundant candidates.",
-    "- You choose and schedule candidate IDs into an operationally practical week.",
+    "- Lightweight meal composition described the complete plate for each unique ranked candidate (names/roles only).",
+    "- You choose and schedule candidate IDs into an operationally practical week, using those complete-meal concepts.",
+    "- Detailed recipes, USDA nutrition, and portions are resolved later — and only for selected meals.",
     "- The candidate pool SHOULD be more diverse than the actual week. Do not schedule nearly every candidate.",
     "- Do NOT invent recipes, original concepts, or unsupported dishes.",
     "- There is NO original_concept escape hatch. If the pools cannot support a valid week, the server will fail — do not invent.",
@@ -435,8 +478,23 @@ export function buildRankedWeeklyStrategyPrompt(
     "4. strategic repetition within the chosen repertoire",
     "5. sufficient culinary variety (boredom constraint — do NOT maximize; stay within preferred band when possible)",
     "6. candidate quality/rank (prior only — not a quota)",
-    "7. likely ingredient/prep reuse (conceptual only)",
+    "7. likely ingredient/component reuse (complete-plate concepts when provided)",
     "8. fitness adaptability",
+    "",
+    "COMPLETE MEAL CONCEPTS:",
+    "Candidates may include a lightweight complete-plate concept (main + components).",
+    "Use that plate when judging eating variety, flavor similarity, prep complexity,",
+    "ingredient/component reuse, repeated side components, unique component count,",
+    "and whether sides are fresh vs prep-friendly.",
+    "Ingredient/component reuse is NOT meal repetition.",
+    "Example: Chicken Tikka and Kerala Beef Fry may both use basmati rice while remaining distinct culinary experiences. That reuse is desirable.",
+    "Do not force reuse merely because component names match if culinary fit is poor.",
+    "",
+    "COMPOSITION COMPLEXITY (diagnostic, not a hard quota):",
+    "The unique-main-dish cap still applies.",
+    "Also notice component explosion: a Simple week with 6 mains plus ~18 completely unique sides/sauces can be operationally terrible even if mains stay inside the hard max.",
+    "Prefer a compact reusable component set over a large collection of unique sides when culinary fit remains good.",
+    "Do not invent numeric component quotas. Treat this as a ranking/diagnostic signal.",
     "",
     "Candidate rank behavior:",
     "- Prefer higher-ranked candidates when other considerations are similar.",
@@ -499,13 +557,16 @@ export function buildRankedWeeklyStrategyPrompt(
     "- Do not infer piggyback prep merely because two dishes probably contain aromatics, herbs, chili, citrus, seeds, or common pantry ingredients.",
     "- If the claimed reuse cannot be explained concretely from the supplied candidate fields, choose independent_meal_prep.",
     "",
-    "Ingredient reuse and planning reasons:",
-    "- You do not have resolved ingredient lists. Speak only of likely ingredient/prep reuse.",
-    "- Do not claim specific ingredient/prep reuse unless it is strongly supported by candidate metadata.",
-    "- Use cautious language when exact ingredients are unresolved.",
-    "- Bad: 'Uses the chopped onion and parsley from Tuesday.' / 'leveraging chili and herb prep from Tuesday' / 'seed prep piggybacked from Thursday dinner'",
-    "- Acceptable: 'Pairs well with the existing batch-prep structure.'",
-    "- Best: only claim specific reuse when candidate metadata makes it obvious.",
+    "Ingredient / component reuse and planning reasons:",
+    "- Prefer complete-plate component names when mealConcept data is supplied.",
+    "- Component reuse (shared rice, chutney, slaw) is a positive prep-efficiency signal when culinary fit remains good.",
+    "- Do not treat two meals that share a side as the same meal.",
+    "- You still must not invent grocery lists or exact ingredient quantities.",
+    "- Do not claim specific ingredient/prep reuse unless it is strongly supported by candidate metadata or the supplied mealConcept components.",
+    "- Use cautious language when exact recipes are unresolved.",
+    "- Bad: 'Uses the chopped onion and parsley from Tuesday.' / 'leveraging chili and herb prep from Tuesday'",
+    "- Acceptable: 'Pairs well with the existing batch-prep structure.' / 'Reuses basmati rice already in the week's plate concepts.'",
+    "- Best: only claim specific reuse when candidate metadata or mealConcept components make it obvious.",
     "- For repeats, prefer reasons like: 'Repeated intentionally to reuse the batch-prepped dish while spacing the meal several days from its first appearance.'",
     "- For new dishes, prefer reasons like: 'Adds a distinct fresh dinner experience without introducing a major additional prep burden.'",
     "- Avoid empty statements such as: 'Provides variety.'",
@@ -524,6 +585,26 @@ export function buildRankedWeeklyStrategyPrompt(
     "Do not include uniqueCandidateIds or metadata — the server calculates those.",
     `Prompt version: ${RANKED_WEEKLY_STRATEGY_PROMPT_VERSION}`,
   ].filter((line) => line !== "").join("\n");
+
+  const concepts = Object.values(request.mealConceptsByCandidateId ?? {});
+  const repertoireSummary =
+    concepts.length > 0 ? summarizeMealConceptRepertoire(concepts) : null;
+  const compositionBlock =
+    repertoireSummary == null
+      ? [
+          "Complete meal concepts were not supplied. Reason from candidate metadata only.",
+          "Do not invent detailed recipes or nutrition.",
+        ].join("\n")
+      : [
+          "Complete meal concepts (lightweight plates — not recipes):",
+          `unique mains in ranked repertoire: ${repertoireSummary.uniqueMains}`,
+          `unique side/sauce components: ${repertoireSummary.uniqueComponents}`,
+          `reused components: ${repertoireSummary.reusedComponents}`,
+          `composition complexity signal: ${repertoireSummary.complexitySignal}`,
+          "This complexity signal is diagnostic, not a hard quota.",
+          "Component reuse index (prep-efficiency; do not force reuse merely because names match):",
+          formatComponentReuseForPrompt(repertoireSummary.reuseIndex),
+        ].join("\n");
 
   const userPrompt = [
     "Generate a 7-day lunch+dinner weekly meal strategy by selecting supplied candidate IDs.",
@@ -560,10 +641,12 @@ export function buildRankedWeeklyStrategyPrompt(
     `Recent meal concepts: ${recent}`,
     "",
     "Lunch candidates (choose lunch candidateId values only from this list):",
-    formatPlannerCandidates(request.lunchCandidates),
+    formatPlannerCandidates(request.lunchCandidates, request.mealConceptsByCandidateId),
     "",
     "Dinner candidates (choose dinner candidateId values only from this list):",
-    formatPlannerCandidates(request.dinnerCandidates),
+    formatPlannerCandidates(request.dinnerCandidates, request.mealConceptsByCandidateId),
+    "",
+    compositionBlock,
     "",
     "Return exactly seven days with lunch and dinner slots.",
     "Each slot: candidateId, prepIntent, planningReason; lunch may include lunchPreparationStrategy.",
@@ -727,6 +810,46 @@ function resolveCandidateForSlot(
     return lookupCandidate(lunchPool, slot.candidateId);
   }
   return lookupCandidate(dinnerPool, slot.candidateId);
+}
+
+function compositionStatsFromRequest(
+  strategy: RankedWeeklyStrategy,
+  request: RankedWeeklyStrategyRequest,
+): Pick<
+  RankedWeeklyStrategyQualityStats,
+  | "uniqueComponentCount"
+  | "reusedComponentCount"
+  | "uniqueComponentsInSelectedWeek"
+  | "reusedComponentsInSelectedWeek"
+  | "componentComplexitySignal"
+  | "componentReuse"
+> {
+  const conceptsById = request.mealConceptsByCandidateId ?? {};
+  const selectedIds = [
+    ...new Set(collectRankedMealSlots(strategy.days).map((slot) => slot.candidateId)),
+  ];
+  const selectedConcepts = selectedIds
+    .map((id) => conceptsById[id])
+    .filter((concept): concept is MealConcept => concept != null);
+  if (selectedConcepts.length === 0) {
+    return {
+      uniqueComponentCount: selectedIds.length,
+      reusedComponentCount: 0,
+      uniqueComponentsInSelectedWeek: selectedIds.length,
+      reusedComponentsInSelectedWeek: 0,
+      componentComplexitySignal: "unknown",
+      componentReuse: [],
+    };
+  }
+  const summary = summarizeMealConceptRepertoire(selectedConcepts);
+  return {
+    uniqueComponentCount: summary.uniqueComponents,
+    reusedComponentCount: summary.reusedComponents,
+    uniqueComponentsInSelectedWeek: summary.uniqueComponents,
+    reusedComponentsInSelectedWeek: summary.reusedComponents,
+    componentComplexitySignal: summary.complexitySignal,
+    componentReuse: summary.reuseIndex,
+  };
 }
 
 export function calculateRankedWeeklyStrategyQualityStats(
@@ -943,6 +1066,7 @@ export function calculateRankedWeeklyStrategyQualityStats(
         : Math.round((ranks.reduce((sum, rank) => sum + rank, 0) / ranks.length) * 100) / 100,
     candidateUsage,
     ...(worstAdjacentPair ? { worstAdjacentPair } : {}),
+    ...compositionStatsFromRequest(strategy, request),
   };
 }
 

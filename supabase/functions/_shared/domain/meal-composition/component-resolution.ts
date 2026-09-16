@@ -1,16 +1,26 @@
 import type {
   CompleteMealComponent,
   ComponentDefinition,
+  ComponentRecipeIngredient,
   ComponentResolution,
-  MealCompositionAddedComponentProposal,
 } from "../../contracts/index.ts";
 import { err, ok, type Result } from "../../validation/index.ts";
 import type { FoodResolver } from "../food-resolution/food-resolver.ts";
 import { looksLikeCompoundComponent } from "./component-identity.ts";
 import { mealCompositionError, type MealCompositionError } from "./validate.ts";
 
+export type ComponentDefinitionProposal = {
+  name: string;
+  definitionKind: "atomic_food" | "recipe_component";
+  reason?: string;
+  preparation?: string | null;
+  measurementState?: "raw" | "cooked" | "as_purchased" | "prepared" | "unknown";
+  recipeIngredients?: ComponentRecipeIngredient[];
+  instructions?: string[];
+};
+
 export function buildComponentDefinition(
-  proposal: MealCompositionAddedComponentProposal,
+  proposal: ComponentDefinitionProposal,
 ): Result<ComponentDefinition, MealCompositionError> {
   if (proposal.definitionKind === "atomic_food") {
     if (looksLikeCompoundComponent(proposal.name)) {

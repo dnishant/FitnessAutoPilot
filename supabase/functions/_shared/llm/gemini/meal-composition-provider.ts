@@ -74,6 +74,12 @@ export class GeminiMealCompositionProvider implements MealCompositionProvider {
     const requestId = this.requestIdFactory();
     const started = this.now();
     const prompt = buildMealCompositionPrompt(request);
+    const candidateId =
+      request.candidate?.candidateId ??
+      request.ranked?.candidate.candidateId ??
+      request.recipe?.candidateId;
+    const candidateName =
+      request.candidate?.name ?? request.ranked?.candidate.name ?? request.recipe?.name;
 
     try {
       const result = await withGeminiRetries(
@@ -113,8 +119,8 @@ export class GeminiMealCompositionProvider implements MealCompositionProvider {
         requestId,
         durationMs: this.now() - started,
         success: true,
-        candidateId: request.recipe.candidateId,
-        candidateName: request.recipe.name,
+        candidateId,
+        candidateName,
         addedCount: Array.isArray(proposal.addedComponents)
           ? proposal.addedComponents.length
           : undefined,
@@ -132,8 +138,8 @@ export class GeminiMealCompositionProvider implements MealCompositionProvider {
         errorMessage: sanitizeLogMessage(
           error instanceof Error ? error.message : "Meal composition failed.",
         ),
-        candidateId: request.recipe.candidateId,
-        candidateName: request.recipe.name,
+        candidateId,
+        candidateName,
       });
       throw error;
     }

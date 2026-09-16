@@ -121,9 +121,9 @@ npx supabase functions deploy resolve-recipe-nutrition --project-ref <project-re
 # set USDA_API_KEY (and optional GEMINI_API_KEY for semantic disambiguation) as function secrets
 ```
 
-### Dev-only meal composition (PLAN-009.5)
+### Dev-only meal composition (lightweight plates before weekly strategy)
 
-Complete a resolved main into a culturally coherent plate (no personalized portions). Hosted Meal Composition Preview (`/meal-composition-preview`) calls `compose-meals`:
+Compose unique ranked candidates into complete-plate *concepts* (`meal-composition-v2`) before weekly strategy. Detailed side recipes (`component-recipe-v1`) and USDA stay selected-only. Hosted Meal Planning Pipeline Preview (`/meal-composition-preview`) calls `compose-meals` with `stage=concepts`:
 
 ```bash
 pnpm sync:edge

@@ -19,6 +19,7 @@ import {
   buildRankedPromptPreview,
   buildRankedQualityStatRows,
   buildRankedWeeklyDayViews,
+  plateForCandidate,
   buildRankedWeeklyStrategyRequestFromPreview,
   canStartRankedWeeklyGeneration,
   createRankedWeeklyStrategyPreviewUiState,
@@ -132,6 +133,54 @@ describe("ranked weekly strategy preview", () => {
     expect(buildRankedCandidateUsageRows(stats).length).toBe(stats.uniqueCandidateCount);
     expect(buildRankedCandidateUsageRows(stats)[0]?.label).toMatch(/— \d+ meals?/);
     expect(lunchPreparationStrategyLabel("piggyback_prep")).toBe("Piggyback prep");
+    expect(
+      plateForCandidate("tikka-chicken", {
+        "tikka-chicken": {
+          candidateId: "tikka-chicken",
+          name: "Chicken Tikka",
+          main: {
+            componentId: "main",
+            role: "main",
+            name: "Chicken Tikka",
+            relationship: "intrinsic",
+            source: "candidate",
+            reason: "main",
+            definitionKind: "recipe_component",
+            normalizedComponentKey: "main:chicken tikka",
+          },
+          components: [
+            {
+              componentId: "rice",
+              role: "carbohydrate",
+              name: "Basmati Rice",
+              relationship: "required_companion",
+              source: "composition_engine",
+              reason: "starch",
+              definitionKind: "atomic_food",
+              normalizedComponentKey: "carbohydrate:basmati rice",
+            },
+          ],
+          compositionProfile: {
+            hasPrimaryProtein: true,
+            hasMeaningfulCarbohydrate: true,
+            hasMeaningfulVegetableOrFruit: false,
+            hasMeaningfulFiberSource: false,
+            hasSauceOrMoistureComponent: false,
+            addedComponentRoles: ["carbohydrate"],
+          },
+          metadata: {
+            promptVersion: "meal-composition-v2",
+            policyVersion: "meal-composition-v1",
+            createdAt: "2026-09-16T00:00:00.000Z",
+          },
+        },
+      }),
+    ).toEqual(["Chicken Tikka", "Basmati Rice"]);
+    expect(
+      buildRankedQualityStatRows(stats).some(
+        (row) => row.label === "Unique components in selected week",
+      ),
+    ).toBe(true);
   });
 
   it("does not throw when building rows from old PLAN-007 stats without complexity/slots fields", () => {
@@ -191,7 +240,7 @@ describe("ranked weekly strategy preview", () => {
   it("rebuilds the PLAN-007.1 prompt locally without secrets", () => {
     const request = sampleRankedWeeklyStrategyRequest();
     const prompt = buildRankedPromptPreview(request);
-    expect(prompt.version).toBe("weekly-strategy-ranked-v1.2.0");
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1.3.0");
     expect(prompt.userPrompt).toContain("andhra-green-chilli-chicken");
     expect(prompt.systemInstruction).toContain("Variety is a constraint to prevent boredom");
     expect(prompt.systemInstruction).toContain("WEEKLY REPERTOIRE FIRST");

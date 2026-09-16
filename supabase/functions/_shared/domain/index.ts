@@ -25,3 +25,4 @@ export * from "./planning/planner.ts";
 export * from "./planning/weekly-strategy.ts";
 export * from "./planning/ranked-weekly-strategy.ts";
 export * from "./planning/ranked-weekly-strategy-fixtures.ts";
+export * from "./planning/meal-planning-pipeline.ts";

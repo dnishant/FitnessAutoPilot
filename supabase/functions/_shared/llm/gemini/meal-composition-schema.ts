@@ -3,12 +3,11 @@ import {
   AddableMealComponentRoleSchema,
   ComponentDefinitionKindSchema,
   MealComponentRoleSchema,
-  MealCompositionAddedComponentProposalSchema,
 } from "../../contracts/index.ts";
 import { zodToGeminiJsonSchema } from "./json-schema.ts";
 
 /**
- * Model payload for PLAN-009.5. No nutrition fields. No personalized quantities.
+ * Model payload for meal-composition-v2. No nutrition, quantities, or instructions.
  */
 export const GeminiMealCompositionPayloadSchema = z.object({
   mealName: z.string().min(1).max(160),
@@ -26,20 +25,6 @@ export const GeminiMealCompositionPayloadSchema = z.object({
         measurementState: z
           .enum(["raw", "cooked", "as_purchased", "prepared", "unknown"])
           .optional(),
-        recipeIngredients: z
-          .array(
-            z.object({
-              name: z.string().min(1).max(200),
-              quantity: z.number().positive().optional(),
-              unit: z.string().min(1).max(40).optional(),
-              role: z.string().min(1).max(40).optional(),
-              preparation: z.string().min(1).max(200).nullable().optional(),
-            }),
-          )
-          .min(1)
-          .max(20)
-          .optional(),
-        instructions: z.array(z.string().min(1).max(400)).max(12).optional(),
       }),
     )
     .max(8),
@@ -109,7 +94,6 @@ export function coerceMealCompositionPayload(value: unknown): unknown {
           c.definitionKind = "recipe_component";
         }
       }
-      // Strip any nutrition / quantity keys the model may invent.
       for (const banned of [
         "calories",
         "caloriesKcal",
@@ -121,6 +105,11 @@ export function coerceMealCompositionPayload(value: unknown): unknown {
         "servingGrams",
         "macros",
         "nutrition",
+        "recipeIngredients",
+        "instructions",
+        "ingredients",
+        "quantity",
+        "unit",
       ]) {
         delete c[banned];
       }
@@ -130,6 +119,3 @@ export function coerceMealCompositionPayload(value: unknown): unknown {
 
   return record;
 }
-
-// Keep schema import used for type alignment in tests.
-void MealCompositionAddedComponentProposalSchema;

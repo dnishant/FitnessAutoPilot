@@ -2,6 +2,7 @@ import type {
   CulinaryDiscoveryCandidate,
   CulinaryDiscoveryRequest,
   GenerateRankedWeeklyStrategyResponse,
+  MealConcept,
   RankedCulinaryCandidate,
   RankedWeeklyMealSlot,
   RankedWeeklyStrategy,
@@ -76,6 +77,7 @@ export type RankedWeeklyStrategyPreviewUiState = {
   strategy: RankedWeeklyStrategy | null;
   stats: RankedWeeklyStrategyQualityStats | null;
   meta?: RankedWeeklyStrategyGenerationMeta;
+  mealConceptsByCandidateId?: RankedWeeklyStrategyRequest["mealConceptsByCandidateId"];
   showContext: boolean;
   showRaw: boolean;
   showPrompt: boolean;
@@ -223,6 +225,7 @@ export function buildRankedWeeklyStrategyRequestFromPreview(
   lunchCandidates: RankedCulinaryCandidate[],
   dinnerCandidates: RankedCulinaryCandidate[],
   varietyLevel: VarietyLevel,
+  mealConceptsByCandidateId?: RankedWeeklyStrategyRequest["mealConceptsByCandidateId"],
 ): RankedWeeklyStrategyRequest | null {
   const base = buildWeeklyStrategyRequest(session);
   if (!base) {
@@ -236,6 +239,7 @@ export function buildRankedWeeklyStrategyRequestFromPreview(
     },
     lunchCandidates,
     dinnerCandidates,
+    mealConceptsByCandidateId,
   };
 }
 
@@ -277,13 +281,25 @@ export type RankedWeeklyDayView = {
   lunchPrep: string;
   dinnerPrep: string;
   lunchStrategy: string | null;
+  lunchPlate: string[];
+  dinnerPlate: string[];
   why: string;
 };
+
+export function plateForCandidate(
+  candidateId: string,
+  concepts?: Record<string, MealConcept>,
+): string[] {
+  const concept = concepts?.[candidateId];
+  if (!concept) return [];
+  return [concept.main.name, ...concept.components.map((c) => c.name)];
+}
 
 export function buildRankedWeeklyDayViews(
   strategy: RankedWeeklyStrategy,
   lunchPool: readonly RankedCulinaryCandidate[],
   dinnerPool: readonly RankedCulinaryCandidate[],
+  concepts?: Record<string, MealConcept>,
 ): RankedWeeklyDayView[] {
   return strategy.days.map((day) => ({
     dayLabel: dayOfWeekLabel(day.day).toUpperCase(),
@@ -294,6 +310,8 @@ export function buildRankedWeeklyDayViews(
     lunchPrep: prepIntentLabel(day.lunch.prepIntent),
     dinnerPrep: prepIntentLabel(day.dinner.prepIntent),
     lunchStrategy: lunchPreparationStrategyLabel(day.lunch.lunchPreparationStrategy),
+    lunchPlate: plateForCandidate(day.lunch.candidateId, concepts),
+    dinnerPlate: plateForCandidate(day.dinner.candidateId, concepts),
     why: [day.lunch.planningReason, day.dinner.planningReason].join(" "),
   }));
 }
@@ -344,6 +362,9 @@ export type RankedWeeklyStrategyQualityStatsLike = Omit<
     mealTypes: RankedWeeklyStrategyQualityStats["candidateUsage"][number]["mealTypes"];
     slots?: RankedWeeklyStrategyQualityStats["candidateUsage"][number]["slots"];
   }>;
+  uniqueComponentsInSelectedWeek?: number;
+  reusedComponentsInSelectedWeek?: number;
+  componentComplexitySignal?: RankedWeeklyStrategyQualityStats["componentComplexitySignal"];
 };
 
 export function buildRankedQualityStatRows(
@@ -406,6 +427,18 @@ export function buildRankedQualityStatRows(
       value: formatOptionalStat(stats.uniqueCookingTechniqueCount),
     },
     { label: "Flavor families", value: String(stats.uniqueFlavorFamilyCount) },
+    {
+      label: "Unique components in selected week",
+      value: formatOptionalStat(stats.uniqueComponentsInSelectedWeek),
+    },
+    {
+      label: "Reused components in selected week",
+      value: formatOptionalStat(stats.reusedComponentsInSelectedWeek),
+    },
+    {
+      label: "Component complexity",
+      value: formatOptionalStat(stats.componentComplexitySignal),
+    },
     {
       label: "Average candidate rank",
       value:

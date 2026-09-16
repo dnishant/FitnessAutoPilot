@@ -1,8 +1,8 @@
 import type {
-  CompleteMeal,
   ComposeMealsResponse,
-  ResolvedRecipe,
-  WeeklyMealCompositionResult,
+  MealConcept,
+  RankedCulinaryCandidate,
+  WeeklyMealConceptResult,
 } from "@fitness-autopilot/contracts";
 import {
   DEFAULT_MEAL_COMPOSITION_CONCURRENCY,
@@ -10,22 +10,39 @@ import {
   MEAL_COMPOSITION_POLICY_VERSION,
   MEAL_COMPOSITION_PROMPT_VERSION,
 } from "@fitness-autopilot/contracts";
-import { plan009SimpleResolvedRecipes } from "@fitness-autopilot/domain";
+import {
+  CHICKEN_TIKKA,
+  JAMAICAN_JERK_CHICKEN,
+  KERALA_BEEF_FRY,
+  SHRIMP_TACOS,
+  THAI_GREEN_CURRY,
+  CA_KHO_TO,
+  makeRankedCandidate,
+} from "@fitness-autopilot/domain";
 import { readFunctionsInvokeErrorBody } from "./recipe-preview";
 
 export const COMPOSE_MEALS_FUNCTION_NAME = "compose-meals";
-export const MEAL_COMPOSITION_PREVIEW_TITLE = "Meal Composition Preview";
-export const MEAL_COMPOSITION_PREVIEW_LOADING = "Composing complete meals...";
+export const MEAL_COMPOSITION_PREVIEW_TITLE = "Meal Planning Pipeline Preview";
+export const MEAL_COMPOSITION_PREVIEW_LOADING = "Composing complete meal concepts...";
 
 export type MealCompositionGenerationMeta = NonNullable<ComposeMealsResponse["meta"]>;
 
-export { plan009SimpleResolvedRecipes };
+export function planCompositionPreviewRankedCandidates(): RankedCulinaryCandidate[] {
+  return [
+    CHICKEN_TIKKA,
+    KERALA_BEEF_FRY,
+    JAMAICAN_JERK_CHICKEN,
+    THAI_GREEN_CURRY,
+    CA_KHO_TO,
+    SHRIMP_TACOS,
+  ].map((candidate, index) => makeRankedCandidate(candidate, index + 1));
+}
 
 export type MealCompositionPreviewUiState = {
   busy: boolean;
   error: { message: string; code?: string; diagnostics?: string } | null;
-  recipes: ResolvedRecipe[];
-  result: WeeklyMealCompositionResult | null;
+  rankedCandidates: RankedCulinaryCandidate[];
+  concepts: WeeklyMealConceptResult | null;
   meta?: MealCompositionGenerationMeta;
   selectedCandidateId: string | null;
   showRaw: boolean;
@@ -33,13 +50,13 @@ export type MealCompositionPreviewUiState = {
 };
 
 export function createMealCompositionPreviewUiState(): MealCompositionPreviewUiState {
-  const recipes = plan009SimpleResolvedRecipes();
+  const rankedCandidates = planCompositionPreviewRankedCandidates();
   return {
     busy: false,
     error: null,
-    recipes,
-    result: null,
-    selectedCandidateId: recipes[0]?.candidateId ?? null,
+    rankedCandidates,
+    concepts: null,
+    selectedCandidateId: rankedCandidates[0]?.candidate.candidateId ?? null,
     showRaw: false,
     targetCalories: 2250,
   };
@@ -72,19 +89,18 @@ type InvokeClient = (
 export async function invokeComposeMeals(
   invoke: InvokeClient,
   body: {
-    recipes: ResolvedRecipe[];
+    rankedCandidates: RankedCulinaryCandidate[];
     uniqueCandidateIds?: string[];
     concurrency?: number;
     targetCalories?: number;
     allergies?: string[];
     dietaryRestrictions?: string[];
     dislikes?: string[];
-    resolveAddedComponents?: boolean;
   },
 ): Promise<
   | {
       ok: true;
-      result: WeeklyMealCompositionResult;
+      concepts: WeeklyMealConceptResult;
       meta?: MealCompositionGenerationMeta;
     }
   | {
@@ -95,14 +111,14 @@ export async function invokeComposeMeals(
 > {
   const invoked = await invoke(COMPOSE_MEALS_FUNCTION_NAME, {
     body: {
-      recipes: body.recipes,
+      stage: "concepts",
+      rankedCandidates: body.rankedCandidates,
       uniqueCandidateIds: body.uniqueCandidateIds,
       concurrency: body.concurrency ?? DEFAULT_MEAL_COMPOSITION_CONCURRENCY,
       targetCalories: body.targetCalories,
       allergies: body.allergies ?? [],
       dietaryRestrictions: body.dietaryRestrictions ?? [],
       dislikes: body.dislikes ?? [],
-      resolveAddedComponents: body.resolveAddedComponents ?? true,
       mealType: "dinner",
     },
   });
@@ -124,24 +140,25 @@ export async function invokeComposeMeals(
   }
 
   const data = invoked.data as ComposeMealsResponse | null;
-  if (!data || typeof data !== "object" || !("result" in data) || !data.result) {
+  if (!data || typeof data !== "object" || !data.concepts) {
     return {
       ok: false,
-      error: { message: "compose-meals returned an empty payload." },
+      error: { message: "compose-meals returned an empty concept payload." },
     };
   }
 
-  return { ok: true, result: data.result, meta: data.meta };
+  return { ok: true, concepts: data.concepts, meta: data.meta };
 }
 
 export function weeklyCompositionSummaryRows(
-  result: WeeklyMealCompositionResult | null,
+  result: WeeklyMealConceptResult | null,
 ): Array<{ label: string; value: string }> {
   if (!result) return [];
   const d = result.diagnostics;
   return [
-    { label: "Unique mains", value: String(d.uniqueMainRecipes) },
-    { label: "Provider calls", value: String(d.compositionProviderCalls) },
+    { label: "Ranked candidates", value: String(d.rankedCandidates ?? result.uniqueCandidateIds.length) },
+    { label: "Unique candidates composed", value: String(d.uniqueCandidatesComposed ?? result.conceptCount) },
+    { label: "Composition provider calls", value: String(d.compositionProviderCalls) },
     {
       label: "Complete / with additions",
       value: `${d.mealsAlreadyComplete} / ${d.mealsWithAddedComponents}`,
@@ -151,8 +168,8 @@ export function weeklyCompositionSummaryRows(
       value: `${d.totalAddedComponents} / ${d.uniqueAddedComponents} / ${d.reusedComponents}`,
     },
     {
-      label: "Atomic / recipe / unresolved",
-      value: `${d.atomicComponents} / ${d.recipeComponents} / ${d.unresolvedComponents}`,
+      label: "Complexity signal",
+      value: d.componentComplexitySignal ?? "—",
     },
     {
       label: "Daily fiber target",
@@ -167,31 +184,23 @@ export function weeklyCompositionSummaryRows(
   ];
 }
 
+export function plateLines(concept: MealConcept): string[] {
+  return [concept.main.name, ...concept.components.map((c) => c.name)];
+}
+
 export function roleCheck(label: string, ok: boolean): string {
   return `${ok ? "✓" : "✗"} ${label}`;
 }
 
-export function sourceLabel(source: CompleteMeal["components"][number]["source"]): string {
+export function sourceLabel(source: MealConcept["components"][number]["source"]): string {
   switch (source) {
-    case "main_recipe":
-      return "Intrinsic recipe";
-    case "existing_recipe_component":
-      return "Existing PLAN-008 component";
+    case "candidate":
+      return "Intrinsic candidate";
+    case "existing_candidate_component":
+      return "Existing candidate component";
     case "composition_engine":
       return "Composition engine addition";
     default:
       return source;
   }
-}
-
-export function resolutionLabel(
-  component: CompleteMeal["components"][number],
-): string {
-  const status = component.resolution?.status;
-  if (!status) return "—";
-  if (status === "canonical_food_resolved") return "canonical food resolved · pending quantity";
-  if (status === "component_recipe_resolved") return "component recipe resolved · pending quantity";
-  if (status === "pending_quantity") return "pending quantity";
-  if (status === "skipped_intrinsic") return "intrinsic / covered by main";
-  return "unresolved";
 }

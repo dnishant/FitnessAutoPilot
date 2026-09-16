@@ -39,13 +39,14 @@ import type {
   ResolvedRecipe,
   WeeklyRecipeNutritionResult,
   ResolveRecipeNutritionResponse,
+  RankedCulinaryCandidate,
   ComposeMealsResponse,
-  WeeklyMealCompositionResult,
+  WeeklyMealConceptResult,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   completeOnboarding as completeOnboardingDomain,
-  composeWeeklyMeals,
+  composeMealConcepts as composeMealConceptsDomain,
   MockMealCompositionProvider,
 } from "@fitness-autopilot/domain";
 import { supabase, useLocalPlanner } from "../lib/supabase";
@@ -233,19 +234,18 @@ type SessionValue = {
         meta?: NonNullable<ResolveRecipeNutritionResponse["meta"]>;
       }
   >;
-  composeMeals: (input: {
-    recipes: ResolvedRecipe[];
+  composeMealConcepts: (input: {
+    rankedCandidates: RankedCulinaryCandidate[];
     uniqueCandidateIds?: string[];
     concurrency?: number;
     targetCalories?: number;
     allergies?: string[];
     dietaryRestrictions?: string[];
     dislikes?: string[];
-    resolveAddedComponents?: boolean;
   }) => Promise<
     | {
         ok: true;
-        result: WeeklyMealCompositionResult;
+        concepts: WeeklyMealConceptResult;
         meta?: NonNullable<ComposeMealsResponse["meta"]>;
       }
     | {
@@ -1144,24 +1144,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           };
         }
       },
-      async composeMeals(input) {
+      async composeMealConcepts(input) {
         try {
           if (useLocalPlanner) {
             const provider = new MockMealCompositionProvider();
-            const { result, failures } = await composeWeeklyMeals({
-              recipes: input.recipes,
+            const { result, failures } = await composeMealConceptsDomain({
+              rankedCandidates: input.rankedCandidates,
               uniqueCandidateIds: input.uniqueCandidateIds,
               concurrency: input.concurrency,
               targetCalories: input.targetCalories,
               allergies: input.allergies ?? [],
               dietaryRestrictions: input.dietaryRestrictions ?? [],
               dislikes: input.dislikes ?? [],
-              resolveAddedComponents: false,
               provider,
               providerMeta: { provider: "mock", model: "local-fixture" },
-              slotCount: input.recipes.length,
+              slotCount: input.rankedCandidates.length,
             });
-            if (failures.length > 0 && result.mealCount === 0) {
+            if (failures.length > 0 && result.conceptCount === 0) {
               return {
                 ok: false,
                 error: failures[0]?.message ?? "Meal composition failed.",
@@ -1170,11 +1169,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             }
             return {
               ok: true,
-              result,
+              concepts: result,
               meta: {
                 requestId: `local_mc_${Date.now()}`,
-                promptVersion: "meal-composition-v1",
+                promptVersion: "meal-composition-v2",
                 policyVersion: "meal-composition-v1",
+                stage: "concepts",
                 provider: "mock",
                 model: "local-fixture",
               },
@@ -1222,7 +1222,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           }
           return {
             ok: true,
-            result: result.result,
+            concepts: result.concepts,
             meta: result.meta,
           };
         } catch (e) {

@@ -1,16 +1,26 @@
 import type {
   CompleteMealComponent,
   ComponentDefinition,
+  ComponentRecipeIngredient,
   ComponentResolution,
-  MealCompositionAddedComponentProposal,
 } from "@fitness-autopilot/contracts";
 import { err, ok, type Result } from "@fitness-autopilot/validation";
 import type { FoodResolver } from "../food-resolution/food-resolver";
 import { looksLikeCompoundComponent } from "./component-identity";
 import { mealCompositionError, type MealCompositionError } from "./validate";
 
+export type ComponentDefinitionProposal = {
+  name: string;
+  definitionKind: "atomic_food" | "recipe_component";
+  reason?: string;
+  preparation?: string | null;
+  measurementState?: "raw" | "cooked" | "as_purchased" | "prepared" | "unknown";
+  recipeIngredients?: ComponentRecipeIngredient[];
+  instructions?: string[];
+};
+
 export function buildComponentDefinition(
-  proposal: MealCompositionAddedComponentProposal,
+  proposal: ComponentDefinitionProposal,
 ): Result<ComponentDefinition, MealCompositionError> {
   if (proposal.definitionKind === "atomic_food") {
     if (looksLikeCompoundComponent(proposal.name)) {
