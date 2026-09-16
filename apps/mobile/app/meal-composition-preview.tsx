@@ -22,26 +22,38 @@ import {
 } from "../src/lib/meal-composition-preview";
 
 function MealCard({ meal }: { meal: CompleteMeal }) {
-  const profile = meal.compositionProfile;
   const added = meal.components.filter((c) => c.source === "composition_engine");
+  const before = meal.components.filter((c) => c.source !== "composition_engine");
+  const hasRole = (role: CompleteMeal["components"][number]["role"]) =>
+    before.some((c) => c.role === role);
+  const hasVegFiber =
+    before.some((c) =>
+      ["vegetable", "fruit", "legume"].includes(c.role),
+    ) || meal.compositionProfile.hasMeaningfulFiberSource && added.length === 0;
   return (
     <View style={styles.card}>
       <Text style={styles.cardTitle}>{meal.name}</Text>
       <Text style={styles.muted}>candidate: {meal.candidateId}</Text>
 
-      <Text style={styles.label}>Already satisfies</Text>
-      <Text style={styles.body}>{roleCheck("primary protein", profile.hasPrimaryProtein)}</Text>
+      <Text style={styles.label}>Already satisfies (before additions)</Text>
+      <Text style={styles.body}>{roleCheck("primary protein", hasRole("main"))}</Text>
       <Text style={styles.body}>
-        {roleCheck("meaningful carbohydrate", profile.hasMeaningfulCarbohydrate)}
+        {roleCheck("meaningful carbohydrate", hasRole("carbohydrate") || hasRole("legume"))}
       </Text>
       <Text style={styles.body}>
-        {roleCheck("meaningful fiber/vegetable", profile.hasMeaningfulVegetableOrFruit)}
+        {roleCheck(
+          "meaningful fiber/vegetable",
+          hasRole("vegetable") || hasRole("fruit") || hasRole("legume"),
+        )}
       </Text>
       <Text style={styles.body}>
-        {roleCheck("flavor/sauce structure", profile.hasSauceOrMoistureComponent)}
+        {roleCheck("flavor/sauce structure", hasRole("sauce_condiment"))}
       </Text>
       <Text style={styles.body}>
-        {roleCheck("meaningful fiber source", profile.hasMeaningfulFiberSource)}
+        {roleCheck(
+          "meaningful fiber opportunity",
+          hasVegFiber || hasRole("vegetable") || hasRole("legume"),
+        )}
       </Text>
 
       {added.length > 0 ? (
