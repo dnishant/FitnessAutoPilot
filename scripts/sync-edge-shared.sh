@@ -26,14 +26,24 @@ RELATIVE_SPEC = re.compile(
     r"""(?P<prefix>(?:from|import)\s*\(?\s*)(?P<quote>['"])(?P<path>\.\.?/[^'"]+)(?P=quote)"""
 )
 
-def ensure_ts_extension(path: str) -> str:
+def ensure_ts_extension(path: str, source_file: Path) -> str:
     if path.endswith((".ts", ".tsx", ".js", ".mjs", ".cjs", ".json")):
         return path
+    # Resolve relative to the importing file so directory barrels become /index.ts
+    # (Node resolves "./food-resolution" → "./food-resolution/index.ts").
+    resolved = (source_file.parent / path).resolve()
+    if resolved.is_dir() and (resolved / "index.ts").exists():
+        return f"{path}/index.ts"
+    if resolved.with_suffix(".ts").exists():
+        return f"{path}.ts"
+    # Fall back: if a sibling directory exists in the synced tree, prefer index.
+    if resolved.is_dir():
+        return f"{path}/index.ts"
     return f"{path}.ts"
 
-def rewrite_relative_imports(text: str) -> str:
+def rewrite_relative_imports(text: str, source_file: Path) -> str:
     def repl(match: re.Match[str]) -> str:
-        path = ensure_ts_extension(match.group("path"))
+        path = ensure_ts_extension(match.group("path"), source_file)
         return f"{match.group('prefix')}{match.group('quote')}{path}{match.group('quote')}"
 
     return RELATIVE_SPEC.sub(repl, text)
@@ -47,12 +57,19 @@ for path in root.rglob("*.ts"):
     text2 = text2.replace("@fitness-autopilot/domain", f"{ups}/domain/index.ts")
     text2 = text2.replace("@fitness-autopilot/llm", f"{ups}/llm/index.ts")
     # Node process.env is unavailable in Deno edge; map to Deno.env for config.
-    if path.as_posix().endswith("/llm/config.ts"):
+    if path.as_posix().endswith("/llm/config.ts") or path.as_posix().endswith(
+        "/llm/usda/config.ts"
+    ):
         text2 = text2.replace(
             "reader: EnvReader = (key) => process.env[key]",
             "reader: EnvReader = (key) => Deno.env.get(key)",
         )
-    text2 = rewrite_relative_imports(text2)
+    if path.as_posix().endswith("/llm/create-food-resolver.ts"):
+        text2 = text2.replace(
+            "((key: string) => process.env[key])",
+            "((key: string) => Deno.env.get(key))",
+        )
+    text2 = rewrite_relative_imports(text2, path)
     if text2 != text:
         path.write_text(text2)
 print("synced edge _shared domain/contracts/validation/llm copies")

@@ -36,6 +36,9 @@ import type {
   RecipeResolutionFailure,
   ResolveRecipesResponse,
   WeeklyRecipeResolutionResult,
+  ResolvedRecipe,
+  WeeklyRecipeNutritionResult,
+  ResolveRecipeNutritionResponse,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { completeOnboarding as completeOnboardingDomain } from "@fitness-autopilot/domain";
@@ -84,6 +87,7 @@ import {
   type CandidateRankingGenerationMeta,
 } from "../lib/candidate-ranking-preview";
 import { invokeResolveRecipes } from "../lib/recipe-resolution-preview";
+import { invokeResolveRecipeNutrition } from "../lib/food-resolution-preview";
 
 type SessionUser = { id: string; email: string };
 
@@ -201,6 +205,25 @@ type SessionValue = {
         result?: WeeklyRecipeResolutionResult;
         failures?: RecipeResolutionFailure[];
         meta?: NonNullable<ResolveRecipesResponse["meta"]>;
+      }
+  >;
+  resolveRecipeNutrition: (input: {
+    recipes: ResolvedRecipe[];
+    uniqueCandidateIds?: string[];
+    concurrency?: number;
+    enableSemanticDisambiguation?: boolean;
+  }) => Promise<
+    | {
+        ok: true;
+        result: WeeklyRecipeNutritionResult;
+        meta?: NonNullable<ResolveRecipeNutritionResponse["meta"]>;
+      }
+    | {
+        ok: false;
+        error: string;
+        code?: string;
+        diagnostics?: string;
+        meta?: NonNullable<ResolveRecipeNutritionResponse["meta"]>;
       }
   >;
 };
@@ -1026,6 +1049,68 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return {
             ok: false,
             error: e instanceof Error ? e.message : "Failed to resolve recipes",
+          };
+        }
+      },
+      async resolveRecipeNutrition(input) {
+        try {
+          if (useLocalPlanner) {
+            return {
+              ok: false,
+              error:
+                "Food resolution requires Supabase remote mode with server-side USDA_API_KEY.",
+              code: "FOOD_PROVIDER_CONFIGURATION_ERROR",
+            };
+          }
+          if (!supabase) {
+            return {
+              ok: false,
+              error: "Supabase is not configured.",
+              code: "FOOD_PROVIDER_CONFIGURATION_ERROR",
+            };
+          }
+          if (!user) {
+            return { ok: false, error: "Not signed in" };
+          }
+          const client = supabase;
+          const result = await invokeResolveRecipeNutrition(
+            async (functionName, options) => {
+              const invoked = await client.functions.invoke(functionName, {
+                body: options.body,
+              });
+              return {
+                data: invoked.data,
+                error: invoked.error
+                  ? {
+                      message: invoked.error.message,
+                      context:
+                        "context" in invoked.error
+                          ? (invoked.error as { context?: unknown }).context
+                          : undefined,
+                    }
+                  : null,
+              };
+            },
+            input,
+          );
+          if (!result.ok) {
+            return {
+              ok: false,
+              error: result.error.message,
+              code: result.error.code,
+              diagnostics: result.error.diagnostics,
+              meta: result.meta,
+            };
+          }
+          return {
+            ok: true,
+            result: result.result,
+            meta: result.meta,
+          };
+        } catch (e) {
+          return {
+            ok: false,
+            error: e instanceof Error ? e.message : "Failed to resolve recipe nutrition",
           };
         }
       },

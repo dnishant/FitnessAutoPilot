@@ -22,6 +22,29 @@ export {
   createRecipeResolver,
   type CreateRecipeResolverOptions,
 } from "./create-recipe-resolver.ts";
+export {
+  createFoodResolver,
+  type CreateFoodResolverOptions,
+} from "./create-food-resolver.ts";
+export {
+  loadUsdaServerConfig,
+  DEFAULT_USDA_BASE_URL,
+  DEFAULT_USDA_TIMEOUT_MS,
+  DEFAULT_USDA_MAX_ATTEMPTS,
+  type UsdaServerConfig,
+  type UsdaConfigError,
+} from "./usda/config.ts";
+export {
+  UsdaFoodDataProvider,
+  type UsdaFoodDataProviderOptions,
+  type UsdaFetch,
+} from "./usda/provider.ts";
+export { mapUsdaFoodDetail, mapUsdaSearchHit } from "./usda/map-usda.ts";
+export {
+  GeminiFoodDisambiguator,
+  type GeminiFoodDisambiguatorOptions,
+  type FoodDisambiguationLogEvent,
+} from "./gemini/food-disambiguator.ts";
 export type {
   GeminiContentClient,
   GeminiGenerateContentParams,

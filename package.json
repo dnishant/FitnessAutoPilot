@@ -17,7 +17,8 @@
     "generate:weekly-strategy:dev": "pnpm --filter @fitness-autopilot/llm generate:weekly-strategy:dev",
     "generate:ranked-weekly-strategy:dev": "pnpm --filter @fitness-autopilot/llm generate:ranked-weekly-strategy:dev",
     "discover:culinary:dev": "pnpm --filter @fitness-autopilot/llm discover:culinary:dev",
-    "resolve:recipes:dev": "pnpm --filter @fitness-autopilot/llm resolve:recipes:dev"
+    "resolve:recipes:dev": "pnpm --filter @fitness-autopilot/llm resolve:recipes:dev",
+    "resolve:recipe-nutrition:dev": "pnpm --filter @fitness-autopilot/llm resolve:recipe-nutrition:dev"
   },
   "engines": {
     "node": ">=20"
