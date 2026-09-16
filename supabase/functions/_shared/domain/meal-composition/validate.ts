@@ -38,6 +38,13 @@ export function mealCompositionError(
   return details === undefined ? { code, message } : { code, message, details };
 }
 
+const BANNED_DETAILED_RECIPE_KEYS = [
+  "recipeIngredients",
+  "instructions",
+  "ingredients",
+  "steps",
+];
+
 const BANNED_NUTRITION_KEYS = [
   "calories",
   "caloriesKcal",
@@ -74,9 +81,6 @@ function assertNoAuthoritativeNutrition(
     return ok(undefined);
   }
   const record = value as Record<string, unknown>;
-  const inRecipeIngredient =
-    /addedComponents\[\d+\]\.recipeIngredients\[\d+\]$/.test(path) ||
-    path.endsWith(".recipeIngredients");
   for (const key of Object.keys(record)) {
     if (BANNED_NUTRITION_KEYS.includes(key)) {
       return err(
@@ -87,29 +91,31 @@ function assertNoAuthoritativeNutrition(
         ),
       );
     }
-    // Personalized final quantities on additions — culinary ratio qty on recipeIngredients is OK.
     if (
-      (key === "grams" || key === "servingGrams" || key === "portionGrams" || key === "quantityGrams") &&
+      BANNED_DETAILED_RECIPE_KEYS.includes(key) &&
       path.includes("addedComponents")
     ) {
       return err(
         mealCompositionError(
           "INVALID_COMPOSITION",
-          `Composition-engine additions must not include personalized quantity field "${key}".`,
+          `Lightweight composition must not include detailed recipe field "${key}".`,
           { field: key, path },
         ),
       );
     }
     if (
-      key === "quantity" &&
-      path.includes("addedComponents") &&
-      !inRecipeIngredient &&
-      !path.includes("recipeIngredients")
+      (key === "grams" ||
+        key === "servingGrams" ||
+        key === "portionGrams" ||
+        key === "quantityGrams" ||
+        key === "quantity" ||
+        key === "unit") &&
+      path.includes("addedComponents")
     ) {
       return err(
         mealCompositionError(
           "INVALID_COMPOSITION",
-          `Composition-engine additions must not include personalized quantity field "${key}".`,
+          `Lightweight composition must not include quantity field "${key}".`,
           { field: key, path },
         ),
       );
@@ -238,18 +244,7 @@ export function validateMealCompositionProposal(
       );
     }
 
-    if (added.definitionKind === "recipe_component") {
-      if (!added.recipeIngredients || added.recipeIngredients.length < 2) {
-        return err(
-          mealCompositionError(
-            "INVALID_COMPOSITION",
-            `Recipe component "${added.name}" must include at least 2 ingredients.`,
-          ),
-        );
-      }
-    }
-
-    // No personalized final quantities on engine additions (quantity fields optional on recipe ingredient ratios only).
+    // Lightweight v2: compound vs atomic is a routing hint only. Ingredients come later.
   }
 
   // Dedup within the same meal
@@ -273,10 +268,12 @@ export function validateMealCompositionProposal(
   if (existing) {
     for (const added of proposal.addedComponents) {
       const existingNames = [
-        request.recipe.name,
-        ...request.recipe.mealComponents.map((c) => c.name),
-        ...request.recipe.ingredients.map((i) => i.name),
-      ];
+        request.candidate?.name,
+        request.ranked?.candidate.name,
+        request.recipe?.name,
+        ...(request.recipe?.mealComponents.map((c) => c.name) ?? []),
+        ...(request.recipe?.ingredients.map((i) => i.name) ?? []),
+      ].filter((name): name is string => typeof name === "string" && name.length > 0);
       if (existingNames.some((n) => namesLikelyEquivalent(n, added.name))) {
         return err(
           mealCompositionError(

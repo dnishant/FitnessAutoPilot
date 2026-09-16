@@ -5,8 +5,11 @@ import {
   MEAL_COMPOSITION_POLICY_VERSION,
   MEAL_COMPOSITION_PROMPT_VERSION,
 } from "../_shared/contracts/meal-composition.ts";
+import { composeMealConcepts } from "../_shared/domain/meal-composition/concept.ts";
 import { composeWeeklyMeals } from "../_shared/domain/meal-composition/compose.ts";
+import { resolveSelectedCompleteMeals } from "../_shared/domain/meal-composition/selected-resolution.ts";
 import { createMealCompositionProvider } from "../_shared/llm/create-meal-composition-provider.ts";
+import { createComponentRecipeProvider } from "../_shared/llm/create-component-recipe-provider.ts";
 import { createFoodResolver } from "../_shared/llm/create-food-resolver.ts";
 import { loadLlmServerConfig } from "../_shared/llm/config.ts";
 
@@ -73,6 +76,7 @@ serveWithCors(async (req) => {
   const started = Date.now();
   const requestId = `mc_${crypto.randomUUID()}`;
   const concurrency = parsed.data.concurrency ?? DEFAULT_MEAL_COMPOSITION_CONCURRENCY;
+  const stage = parsed.data.stage ?? "concepts";
 
   try {
     const provider = createMealCompositionProvider({
@@ -83,6 +87,70 @@ serveWithCors(async (req) => {
       },
     });
 
+    if (stage === "concepts") {
+      const { result, failures } = await composeMealConcepts({
+        rankedCandidates: parsed.data.rankedCandidates ?? undefined,
+        candidates: parsed.data.recipes?.map((recipe) => ({
+          candidateId: recipe.candidateId,
+          name: recipe.name,
+          source: {
+            name: recipe.source.name,
+            url: recipe.source.url ?? "https://example.com/recipe",
+            author: recipe.source.author ?? null,
+          },
+          cuisineFamily: recipe.flavorProfile.cuisineFamily,
+          regionalStyle: recipe.flavorProfile.regionalStyle ?? null,
+          primaryProtein: null,
+          dishFormat: recipe.flavorProfile.cookingTechniques[0] ?? "plate",
+          flavorFamilies: [...recipe.flavorProfile.flavorFamilies],
+          cookingTechniques: [...recipe.flavorProfile.cookingTechniques],
+          textureTags: [...recipe.experienceProfile.textureTags],
+          experienceTags: [recipe.experienceProfile.moistureLevel],
+          whyItIsInteresting: recipe.description.slice(0, 600),
+          fitnessAdaptability: "moderate",
+          fitnessAdaptabilityReason: "Derived from resolved recipe.",
+          mealPrepAdaptability: "component_prepped",
+          estimatedFinishMinutesAfterPrep: recipe.cookTimeMinutes,
+          noveltyReason: "Resolved recipe subject.",
+          discoveryConfidence: "high",
+        })),
+        uniqueCandidateIds: parsed.data.uniqueCandidateIds,
+        mealType: parsed.data.mealType,
+        allergies: parsed.data.allergies,
+        dietaryRestrictions: parsed.data.dietaryRestrictions,
+        dislikes: parsed.data.dislikes,
+        cookingStyleHint: parsed.data.cookingStyleHint,
+        targetCalories: parsed.data.targetCalories,
+        concurrency,
+        slotCount: parsed.data.slotCount,
+        provider,
+        providerMeta: { provider: "gemini", model: llmConfig.value.gemini.model },
+      });
+
+      if (failures.length > 0 && result.conceptCount === 0) {
+        return json({ error: failures[0], failures }, statusFor(failures[0]?.code));
+      }
+
+      return json({
+        concepts: result,
+        failures: failures.length > 0 ? failures : undefined,
+        meta: {
+          requestId,
+          promptVersion: MEAL_COMPOSITION_PROMPT_VERSION,
+          policyVersion: MEAL_COMPOSITION_POLICY_VERSION,
+          stage,
+          provider: "gemini",
+          model: llmConfig.value.gemini.model,
+          durationMs: Date.now() - started,
+          concurrency,
+        },
+      });
+    }
+
+    const componentRecipeProvider = createComponentRecipeProvider({
+      config: llmConfig.value,
+      env: (key) => Deno.env.get(key),
+    });
     const foodResolver =
       parsed.data.resolveAddedComponents === false
         ? null
@@ -94,26 +162,51 @@ serveWithCors(async (req) => {
             },
           });
 
+    if (parsed.data.mealConcepts && parsed.data.selectedCandidateIds) {
+      const { result, failures } = await resolveSelectedCompleteMeals({
+        concepts: parsed.data.mealConcepts,
+        selectedCandidateIds: parsed.data.selectedCandidateIds,
+        recipesByCandidateId: Object.fromEntries(
+          (parsed.data.recipes ?? []).map((recipe) => [recipe.candidateId, recipe]),
+        ),
+        componentRecipeProvider,
+        foodResolver,
+        resolveAddedComponents: parsed.data.resolveAddedComponents === true,
+        concurrency,
+        slotCount: parsed.data.slotCount,
+        targetCalories: parsed.data.targetCalories,
+      });
+      return json({
+        result,
+        failures: failures.length > 0 ? failures : undefined,
+        meta: {
+          requestId,
+          promptVersion: MEAL_COMPOSITION_PROMPT_VERSION,
+          policyVersion: MEAL_COMPOSITION_POLICY_VERSION,
+          stage,
+          provider: "gemini",
+          model: llmConfig.value.gemini.model,
+          durationMs: Date.now() - started,
+          concurrency,
+        },
+      });
+    }
+
     const { result, failures } = await composeWeeklyMeals({
       ...parsed.data,
       provider,
+      componentRecipeProvider,
       foodResolver,
       providerMeta: {
         provider: "gemini",
         model: llmConfig.value.gemini.model,
       },
       concurrency,
-      slotCount: parsed.data.slotCount ?? parsed.data.recipes.length,
+      slotCount: parsed.data.slotCount ?? parsed.data.recipes?.length,
     });
 
     if (failures.length > 0 && result.mealCount === 0) {
-      return json(
-        {
-          error: failures[0],
-          failures,
-        },
-        statusFor(failures[0]?.code),
-      );
+      return json({ error: failures[0], failures }, statusFor(failures[0]?.code));
     }
 
     return json({
@@ -123,6 +216,7 @@ serveWithCors(async (req) => {
         requestId,
         promptVersion: MEAL_COMPOSITION_PROMPT_VERSION,
         policyVersion: MEAL_COMPOSITION_POLICY_VERSION,
+        stage,
         provider: "gemini",
         model: llmConfig.value.gemini.model,
         durationMs: Date.now() - started,

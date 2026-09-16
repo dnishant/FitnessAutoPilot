@@ -1,6 +1,6 @@
 /**
- * Dev CLI for PLAN-009.5 meal composition against live Gemini (optional).
- * Prefer plan0095:qa:fixture for offline QA.
+ * Dev CLI for meal composition against live Gemini (optional).
+ * Prefer plan0095:qa:fixture for offline QA (no live Gemini).
  */
 import { ComposeMealsRequestSchema } from "@fitness-autopilot/contracts";
 import { plan009SimpleResolvedRecipes } from "@fitness-autopilot/domain";

@@ -30,6 +30,7 @@ export {
   createMealCompositionProvider,
   type CreateMealCompositionProviderOptions,
 } from "./create-meal-composition-provider.ts";
+export { createComponentRecipeProvider } from "./create-component-recipe-provider.ts";
 export {
   loadUsdaServerConfig,
   DEFAULT_USDA_BASE_URL,

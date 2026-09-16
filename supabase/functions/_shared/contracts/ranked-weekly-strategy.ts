@@ -2,6 +2,11 @@ import { z } from "zod";
 import { RankedCulinaryCandidateSchema } from "./candidate-ranking.ts";
 import { RecentMealConceptSchema } from "./culinary-discovery.ts";
 import { LunchPreparationStrategySchema } from "./cooking-preferences.ts";
+import {
+  ComponentReuseEntrySchema,
+  CompositionComplexitySignalSchema,
+  MealConceptSchema,
+} from "./meal-composition.ts";
 import type { VarietyLevel } from "./meal-preferences.ts";
 import {
   DayOfWeekSchema,
@@ -20,7 +25,7 @@ import {
  * prevents boredom without maximizing independent prep workflows.
  */
 
-export const RANKED_WEEKLY_STRATEGY_PROMPT_VERSION = "weekly-strategy-ranked-v1.2.0" as const;
+export const RANKED_WEEKLY_STRATEGY_PROMPT_VERSION = "weekly-strategy-ranked-v1.3.0" as const;
 
 export const MIN_RANKED_CANDIDATES_PER_MEAL_TYPE = 1;
 
@@ -177,6 +182,12 @@ export const RankedWeeklyStrategyQualityStatsSchema = z.object({
   averageCandidateRank: z.number().nonnegative().optional(),
   candidateUsage: z.array(RankedWeeklyCandidateUsageSchema).max(28),
   worstAdjacentPair: RankedWeeklyAdjacentPairSchema.optional(),
+  uniqueComponentCount: z.number().int().nonnegative().optional(),
+  reusedComponentCount: z.number().int().nonnegative().optional(),
+  uniqueComponentsInSelectedWeek: z.number().int().nonnegative().optional(),
+  reusedComponentsInSelectedWeek: z.number().int().nonnegative().optional(),
+  componentComplexitySignal: CompositionComplexitySignalSchema.optional(),
+  componentReuse: z.array(ComponentReuseEntrySchema).max(40).optional(),
 });
 
 export const RankedWeeklyStrategyRequestSchema = z.object({
@@ -186,6 +197,8 @@ export const RankedWeeklyStrategyRequestSchema = z.object({
   lunchCandidates: z.array(RankedCulinaryCandidateSchema).max(40),
   dinnerCandidates: z.array(RankedCulinaryCandidateSchema).max(40),
   recentConcepts: z.array(RecentMealConceptSchema).max(40).optional(),
+  /** Lightweight complete-plate concepts keyed by candidateId (meal-composition-v2). */
+  mealConceptsByCandidateId: z.record(z.string(), MealConceptSchema).optional(),
 });
 
 export const GenerateRankedWeeklyStrategyRequestSchema = RankedWeeklyStrategyRequestSchema;

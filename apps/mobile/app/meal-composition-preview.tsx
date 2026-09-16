@@ -7,35 +7,65 @@ import {
   Text,
   View,
 } from "react-native";
-import type { CompleteMeal } from "@fitness-autopilot/contracts";
+import type { MealConcept } from "@fitness-autopilot/contracts";
 import { useSession } from "../src/state/session";
 import {
   createMealCompositionPreviewUiState,
   MEAL_COMPOSITION_PREVIEW_LOADING,
   MEAL_COMPOSITION_PREVIEW_TITLE,
   humanizeMealCompositionError,
-  resolutionLabel,
+  plateLines,
   roleCheck,
   sourceLabel,
   weeklyCompositionSummaryRows,
   type MealCompositionPreviewUiState,
 } from "../src/lib/meal-composition-preview";
 
-function MealCard({ meal }: { meal: CompleteMeal }) {
-  const added = meal.components.filter((c) => c.source === "composition_engine");
-  const before = meal.components.filter((c) => c.source !== "composition_engine");
-  const hasRole = (role: CompleteMeal["components"][number]["role"]) =>
-    before.some((c) => c.role === role);
-  const hasVegFiber =
-    before.some((c) =>
-      ["vegetable", "fruit", "legume"].includes(c.role),
-    ) || meal.compositionProfile.hasMeaningfulFiberSource && added.length === 0;
+function PipelineStages({ concept, selected }: { concept: MealConcept; selected: boolean }) {
   return (
     <View style={styles.card}>
-      <Text style={styles.cardTitle}>{meal.name}</Text>
-      <Text style={styles.muted}>candidate: {meal.candidateId}</Text>
+      <Text style={styles.label}>RANKED CANDIDATE</Text>
+      <Text style={styles.cardTitle}>{concept.main.name}</Text>
+      <Text style={styles.muted}>candidate: {concept.candidateId}</Text>
 
-      <Text style={styles.label}>Already satisfies (before additions)</Text>
+      <Text style={styles.arrow}>↓</Text>
+      <Text style={styles.label}>LIGHTWEIGHT COMPOSITION</Text>
+      {plateLines(concept).map((name) => (
+        <Text key={name} style={styles.body}>
+          • {name}
+        </Text>
+      ))}
+
+      <Text style={styles.arrow}>↓</Text>
+      <Text style={styles.label}>WEEKLY STRATEGY</Text>
+      <Text style={styles.body}>Selected: {selected ? "yes (when this plate is in the week)" : "inspect after PLAN-007"}</Text>
+      <Text style={styles.muted}>
+        Weekly strategy now schedules complete plates, not mains only.
+      </Text>
+
+      <Text style={styles.arrow}>↓</Text>
+      <Text style={styles.label}>DETAILED RESOLUTION</Text>
+      <Text style={styles.muted}>
+        Main + compound sides resolve only after selection (PLAN-008 / component-recipe-v1).
+      </Text>
+
+      <Text style={styles.arrow}>↓</Text>
+      <Text style={styles.label}>USDA</Text>
+      <Text style={styles.muted}>Canonical nutrition stays downstream of selected recipes.</Text>
+    </View>
+  );
+}
+
+function ConceptCard({ concept }: { concept: MealConcept }) {
+  const added = concept.components.filter((c) => c.source === "composition_engine");
+  const before = [concept.main, ...concept.components.filter((c) => c.source !== "composition_engine")];
+  const hasRole = (role: MealConcept["components"][number]["role"]) =>
+    before.some((c) => c.role === role);
+  return (
+    <View style={styles.card}>
+      <Text style={styles.cardTitle}>{concept.name}</Text>
+      <Text style={styles.muted}>prompt {concept.metadata.promptVersion}</Text>
+      <Text style={styles.label}>Already satisfies</Text>
       <Text style={styles.body}>{roleCheck("primary protein", hasRole("main"))}</Text>
       <Text style={styles.body}>
         {roleCheck("meaningful carbohydrate", hasRole("carbohydrate") || hasRole("legume"))}
@@ -49,16 +79,9 @@ function MealCard({ meal }: { meal: CompleteMeal }) {
       <Text style={styles.body}>
         {roleCheck("flavor/sauce structure", hasRole("sauce_condiment"))}
       </Text>
-      <Text style={styles.body}>
-        {roleCheck(
-          "meaningful fiber opportunity",
-          hasVegFiber || hasRole("vegetable") || hasRole("legume"),
-        )}
-      </Text>
-
       {added.length > 0 ? (
         <>
-          <Text style={styles.label}>ADDED</Text>
+          <Text style={styles.label}>ADDED CONCEPTS</Text>
           {added.map((c) => (
             <View key={c.componentId} style={styles.componentBlock}>
               <Text style={styles.bodyBold}>{c.name}</Text>
@@ -67,51 +90,38 @@ function MealCard({ meal }: { meal: CompleteMeal }) {
               </Text>
               <Text style={styles.muted}>{sourceLabel(c.source)}</Text>
               <Text style={styles.body}>{c.reason}</Text>
-              <Text style={styles.muted}>{resolutionLabel(c)}</Text>
             </View>
           ))}
         </>
       ) : (
         <Text style={styles.label}>No additions needed</Text>
       )}
-
-      <Text style={styles.label}>Complete meal components</Text>
-      {meal.components.map((c) => (
-        <Text key={c.componentId} style={styles.body}>
-          • [{c.role}] {c.name} — {sourceLabel(c.source)}
+      <Text style={styles.label}>Complete plate</Text>
+      {plateLines(concept).map((name, index) => (
+        <Text key={`${name}-${index}`} style={styles.body}>
+          • {name}
         </Text>
       ))}
-
-      {meal.nutritionSignals ? (
-        <>
-          <Text style={styles.label}>Nutrition signals (deterministic)</Text>
-          <Text style={styles.muted}>
-            P {meal.nutritionSignals.proteinPresence} · C{" "}
-            {meal.nutritionSignals.carbohydratePresence} · Fiber{" "}
-            {meal.nutritionSignals.fiberPresence}
-          </Text>
-        </>
-      ) : null}
     </View>
   );
 }
 
 export default function MealCompositionPreviewScreen() {
-  const { composeMeals, useLocalMode } = useSession();
+  const { composeMealConcepts, useLocalMode } = useSession();
   const [state, setState] = useState<MealCompositionPreviewUiState>(
     createMealCompositionPreviewUiState,
   );
 
   const selected = useMemo(() => {
-    if (!state.result || !state.selectedCandidateId) return null;
-    return state.result.mealsByCandidateId[state.selectedCandidateId] ?? null;
-  }, [state.result, state.selectedCandidateId]);
+    if (!state.concepts || !state.selectedCandidateId) return null;
+    return state.concepts.conceptsByCandidateId[state.selectedCandidateId] ?? null;
+  }, [state.concepts, state.selectedCandidateId]);
 
   async function onCompose() {
     setState((s) => ({ ...s, busy: true, error: null }));
-    const response = await composeMeals({
-      recipes: state.recipes,
-      uniqueCandidateIds: state.recipes.map((r) => r.candidateId),
+    const response = await composeMealConcepts({
+      rankedCandidates: state.rankedCandidates,
+      uniqueCandidateIds: state.rankedCandidates.map((item) => item.candidate.candidateId),
       targetCalories: state.targetCalories,
     });
     if (!response.ok) {
@@ -122,6 +132,7 @@ export default function MealCompositionPreviewScreen() {
           message: humanizeMealCompositionError({
             message: response.error,
             code: response.code,
+            diagnostics: response.diagnostics,
           }),
           code: response.code,
           diagnostics: response.diagnostics,
@@ -132,21 +143,22 @@ export default function MealCompositionPreviewScreen() {
     setState((s) => ({
       ...s,
       busy: false,
-      result: response.result,
+      concepts: response.concepts,
       meta: response.meta,
       selectedCandidateId:
-        response.result.uniqueCandidateIds[0] ?? s.selectedCandidateId,
+        response.concepts.uniqueCandidateIds[0] ?? s.selectedCandidateId,
     }));
   }
 
-  const summary = weeklyCompositionSummaryRows(state.result);
+  const summary = weeklyCompositionSummaryRows(state.concepts);
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{MEAL_COMPOSITION_PREVIEW_TITLE}</Text>
       <Text style={styles.subtitle}>
-        PLAN-009.5 — complete the plate (culinary). No personalized portions.
-        {useLocalMode ? " (local compose via mock when Edge unavailable)" : ""}
+        Rank → lightweight complete-plate composition → weekly strategy → selected detailed
+        resolution → USDA. This screen composes unique ranked candidates only.
+        {useLocalMode ? " (local mock provider)" : ""}
       </Text>
 
       <Pressable
@@ -157,7 +169,7 @@ export default function MealCompositionPreviewScreen() {
         {state.busy ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Text style={styles.buttonText}>Compose six dishes</Text>
+          <Text style={styles.buttonText}>Compose ranked repertoire</Text>
         )}
       </Pressable>
       {state.busy ? <Text style={styles.muted}>{MEAL_COMPOSITION_PREVIEW_LOADING}</Text> : null}
@@ -173,7 +185,7 @@ export default function MealCompositionPreviewScreen() {
 
       {summary.length > 0 ? (
         <View style={styles.card}>
-          <Text style={styles.label}>Weekly diagnostics</Text>
+          <Text style={styles.label}>Pipeline diagnostics</Text>
           {summary.map((row) => (
             <Text key={row.label} style={styles.body}>
               {row.label}: {row.value}
@@ -188,10 +200,10 @@ export default function MealCompositionPreviewScreen() {
         </View>
       ) : null}
 
-      {state.result ? (
+      {state.concepts ? (
         <View style={styles.chipWrap}>
-          {state.result.uniqueCandidateIds.map((id) => {
-            const meal = state.result!.mealsByCandidateId[id];
+          {state.concepts.uniqueCandidateIds.map((id) => {
+            const concept = state.concepts!.conceptsByCandidateId[id];
             const active = id === state.selectedCandidateId;
             return (
               <Pressable
@@ -201,7 +213,7 @@ export default function MealCompositionPreviewScreen() {
                 onPress={() => setState((s) => ({ ...s, selectedCandidateId: id }))}
               >
                 <Text style={[styles.chipText, active && styles.chipTextActive]}>
-                  {meal?.name ?? id}
+                  {concept?.name ?? id}
                 </Text>
               </Pressable>
             );
@@ -209,7 +221,24 @@ export default function MealCompositionPreviewScreen() {
         </View>
       ) : null}
 
-      {selected ? <MealCard meal={selected} /> : null}
+      {selected ? (
+        <>
+          <PipelineStages concept={selected} selected={false} />
+          <ConceptCard concept={selected} />
+        </>
+      ) : null}
+
+      {state.concepts?.candidateTrace ? (
+        <View style={styles.card}>
+          <Text style={styles.label}>candidate → composition</Text>
+          {state.concepts.candidateTrace.map((row) => (
+            <Text key={row.candidateId} style={styles.body}>
+              {row.name}: {row.componentNames.join(" + ")}
+              {row.providerCalled ? " · provider" : " · skipped"}
+            </Text>
+          ))}
+        </View>
+      ) : null}
 
       <Pressable
         onPress={() => setState((s) => ({ ...s, showRaw: !s.showRaw }))}
@@ -217,8 +246,8 @@ export default function MealCompositionPreviewScreen() {
       >
         <Text style={styles.linkText}>{state.showRaw ? "Hide raw JSON" : "Show raw JSON"}</Text>
       </Pressable>
-      {state.showRaw && state.result ? (
-        <Text style={styles.raw}>{JSON.stringify(state.result, null, 2)}</Text>
+      {state.showRaw && state.concepts ? (
+        <Text style={styles.raw}>{JSON.stringify(state.concepts, null, 2)}</Text>
       ) : null}
     </ScrollView>
   );
@@ -250,6 +279,7 @@ const styles = StyleSheet.create({
   body: { color: "#334e68", fontSize: 14, lineHeight: 20 },
   bodyBold: { color: "#102a43", fontWeight: "600", fontSize: 15 },
   muted: { color: "#627d98", fontSize: 13 },
+  arrow: { color: "#9fb3c8", fontWeight: "700", marginTop: 8 },
   componentBlock: { marginTop: 6, gap: 2 },
   errorBox: {
     backgroundColor: "#ffe3e3",

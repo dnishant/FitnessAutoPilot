@@ -1,6 +1,6 @@
 /**
- * PLAN-009.5 local QA: compose six Simple repertoire dishes with MockMealCompositionProvider.
- * No live Gemini calls.
+ * Local QA: compose six Simple repertoire dishes through lightweight concepts
+ * then selected detailed resolution. MockMealCompositionProvider only — no live Gemini.
  *
  * Usage: pnpm --filter @fitness-autopilot/llm plan0095:qa:fixture
  */
@@ -43,7 +43,7 @@ async function main() {
     slotCount: 14,
   });
 
-  console.log("=== PLAN-009.5 Six-dish composition QA ===\n");
+  console.log("=== Lightweight composition + selected resolution QA ===\n");
   console.log("Fiber target:", result.fiberTarget);
   console.log("Diagnostics:", result.diagnostics);
   console.log("Failures:", failures.length ? failures : "none");

@@ -4,8 +4,10 @@ import type {
   ResolvedRecipe,
 } from "../../contracts/index.ts";
 import { makeChickenTikkaResolvedRecipe, plan009SimpleResolvedRecipes } from "../food-resolution/fixtures.ts";
+import { detectRolesForCompositionRequest } from "./candidate-role-detection.ts";
+import { subjectCandidateFromRequest } from "./prompt.ts";
 import type { MealCompositionProvider } from "./provider.ts";
-import { detectExistingMealRoles, missingRolesFromProfile } from "./role-detection.ts";
+import { missingRolesFromProfile } from "./role-detection.ts";
 
 export { makeChickenTikkaResolvedRecipe, plan009SimpleResolvedRecipes };
 
@@ -184,15 +186,23 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
 
   async compose(request: MealCompositionRequest): Promise<MealCompositionProposal> {
     this.calls.push(request);
-    const override = this.overrides.get(request.recipe.candidateId);
+    const candidate = subjectCandidateFromRequest(request);
+    const override = this.overrides.get(candidate.candidateId);
     if (override) return override;
 
-    const detected = detectExistingMealRoles(request.recipe, request.recipeNutrition);
-    const missing = missingRolesFromProfile(detected.profile, detected.nutritionSignals);
+    const detected = detectRolesForCompositionRequest({
+      candidate,
+      recipe: request.recipe,
+    });
+    const missing = missingRolesFromProfile(detected.profile, {
+      proteinPresence: detected.profile.hasPrimaryProtein ? "meaningful" : "low",
+      carbohydratePresence: detected.profile.hasMeaningfulCarbohydrate ? "meaningful" : "low",
+      fiberPresence: detected.profile.hasMeaningfulFiberSource ? "meaningful" : "low",
+    });
 
     if (missing.length === 0) {
       return {
-        mealName: request.recipe.name,
+        mealName: candidate.name,
         alreadySatisfiedRoles: ["main", "carbohydrate", "vegetable", "sauce_condiment"],
         missingRoles: [],
         addedComponents: [],
@@ -201,9 +211,13 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
       };
     }
 
-    const cuisine = (
-      request.cuisineFamily ?? request.recipe.flavorProfile.cuisineFamily
-    ).toLowerCase();
+    const cuisine = [
+      request.cuisineFamily ?? candidate.cuisineFamily,
+      request.regionalStyle ?? candidate.regionalStyle ?? "",
+      candidate.name,
+    ]
+      .join(" ")
+      .toLowerCase();
     const added: MealCompositionProposal["addedComponents"] = [];
 
     if (missing.includes("carbohydrate")) {
@@ -219,11 +233,6 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
           relationship: "required_companion",
           reason: "Traditional Caribbean starch accompaniment",
           definitionKind: "recipe_component",
-          recipeIngredients: [
-            { name: "long-grain rice", quantity: 200, unit: "g", role: "carbohydrate" },
-            { name: "pigeon peas", quantity: 100, unit: "g", role: "legume" },
-            { name: "coconut milk", quantity: 100, unit: "g", role: "sauce" },
-          ],
         });
       } else {
         added.push({
@@ -239,34 +248,29 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
     }
 
     if (missing.includes("vegetable")) {
-      if (cuisine.includes("indian")) {
+      if (cuisine.includes("kerala") || /beef fry/i.test(candidate.name)) {
+        added.push({
+          name: "cabbage thoran",
+          role: "vegetable",
+          relationship: "required_companion",
+          reason: "Traditional Kerala coconut vegetable side",
+          definitionKind: "recipe_component",
+        });
+      } else if (cuisine.includes("indian")) {
         added.push({
           name: "kachumber",
           role: "vegetable",
           relationship: "required_companion",
           reason: "Fresh cucumber-onion-tomato salad traditionally served with Indian grills",
           definitionKind: "recipe_component",
-          recipeIngredients: [
-            { name: "cucumber", quantity: 150, unit: "g", role: "vegetable" },
-            { name: "tomato", quantity: 100, unit: "g", role: "vegetable" },
-            { name: "onion", quantity: 50, unit: "g", role: "vegetable" },
-            { name: "lemon juice", quantity: 15, unit: "g", role: "acid" },
-            { name: "cilantro", quantity: 10, unit: "g", role: "garnish" },
-          ],
-          instructions: ["Dice vegetables", "Toss with lemon and cilantro"],
         });
       } else if (cuisine.includes("jamaican") || cuisine.includes("caribbean")) {
         added.push({
-          name: "festival cabbage slaw",
+          name: "steamed cabbage",
           role: "vegetable",
           relationship: "recommended",
-          reason: "Crisp vinegar slaw balances jerk heat",
+          reason: "Simple cabbage side that balances jerk heat",
           definitionKind: "recipe_component",
-          recipeIngredients: [
-            { name: "cabbage", quantity: 200, unit: "g", role: "vegetable" },
-            { name: "carrot", quantity: 50, unit: "g", role: "vegetable" },
-            { name: "vinegar", quantity: 20, unit: "g", role: "acid" },
-          ],
         });
       } else {
         added.push({
@@ -275,39 +279,38 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
           relationship: "recommended",
           reason: "Fresh pickled vegetables complement the main",
           definitionKind: "recipe_component",
-          recipeIngredients: [
-            { name: "cucumber", quantity: 100, unit: "g", role: "vegetable" },
-            { name: "carrot", quantity: 80, unit: "g", role: "vegetable" },
-            { name: "rice vinegar", quantity: 30, unit: "g", role: "acid" },
-          ],
         });
       }
     }
 
     if (missing.includes("sauce_condiment")) {
       if (cuisine.includes("indian")) {
-        added.push({
-          name: "mint-yogurt chutney",
-          role: "sauce_condiment",
-          relationship: "recommended",
-          reason: "Cooling yogurt condiment traditionally served with tikka and dry fries",
-          definitionKind: "recipe_component",
-          recipeIngredients: [
-            { name: "plain yogurt", quantity: 120, unit: "g", role: "sauce" },
-            { name: "mint leaves", quantity: 20, unit: "g", role: "herb" },
-            { name: "cilantro", quantity: 15, unit: "g", role: "herb" },
-            { name: "green chili", quantity: 5, unit: "g", role: "seasoning" },
-          ],
-        });
+        if (cuisine.includes("kerala") || /beef fry/i.test(candidate.name)) {
+          added.push({
+            name: "cucumber pachadi",
+            role: "sauce_condiment",
+            relationship: "recommended",
+            reason: "Cooling yogurt-cucumber accompaniment for Kerala dry fries",
+            definitionKind: "recipe_component",
+          });
+        } else {
+          added.push({
+            name: "mint-yogurt chutney",
+            role: "sauce_condiment",
+            relationship: "recommended",
+            reason: "Cooling yogurt condiment traditionally served with tikka and dry fries",
+            definitionKind: "recipe_component",
+          });
+        }
       }
     }
 
     return {
-      mealName: `${request.recipe.name} plate`,
+      mealName: `${candidate.name}`,
       alreadySatisfiedRoles: ["main"],
       missingRoles: missing,
       addedComponents: added,
-      compositionSummary: `Complete ${request.recipe.name} with culturally appropriate companions.`,
+      compositionSummary: `Complete ${candidate.name} with culturally appropriate companions.`,
       noAdditionsNeeded: added.length === 0,
     };
   }

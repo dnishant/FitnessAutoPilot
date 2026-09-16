@@ -99,10 +99,10 @@ describe("ranked weekly strategy request parsing", () => {
 });
 
 describe("ranked weekly strategy prompt", () => {
-  it("is versioned weekly-strategy-ranked-v1.2.0 and prioritizes repertoire-first practicality", () => {
+  it("is versioned weekly-strategy-ranked-v1.3.0 and prioritizes repertoire-first practicality", () => {
     const prompt = buildRankedWeeklyStrategyPrompt(sampleRankedWeeklyStrategyRequest());
-    expect(prompt.version).toBe("weekly-strategy-ranked-v1.2.0");
-    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1.2.0");
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1.3.0");
+    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1.3.0");
     expect(prompt.systemInstruction).toContain("Do NOT invent");
     expect(prompt.systemInstruction).toContain("NO original_concept");
     expect(prompt.systemInstruction).toContain("Do NOT rename, healthify");
@@ -131,6 +131,8 @@ describe("ranked weekly strategy prompt", () => {
     expect(prompt.systemInstruction).toContain("Repetition is a useful meal-prep tool");
     expect(prompt.systemInstruction).toContain("When uncertain, use independent_meal_prep");
     expect(prompt.systemInstruction).not.toMatch(/always choose the highest-ranked/i);
+    expect(prompt.systemInstruction).toContain("COMPLETE MEAL CONCEPTS");
+    expect(prompt.systemInstruction).toContain("Ingredient/component reuse is NOT meal repetition");
     expect(prompt.systemInstruction).toContain("Do NOT output calories, protein, carbs, fat, portion grams, or serving sizes");
     expect(prompt.userPrompt).not.toContain("caloriesKcal");
     expect(prompt.userPrompt).not.toMatch(/assign (authoritative )?(calories|macros)/i);
@@ -397,6 +399,111 @@ describe("ranked weekly strategy quality stats", () => {
       { day: "monday", mealType: "lunch" },
       { day: "thursday", mealType: "lunch" },
     ]);
+  });
+
+  it("exposes complete-plate reuse and complexity as ranking diagnostics", () => {
+    const request = sampleRankedWeeklyStrategyRequest({
+      mealConceptsByCandidateId: {
+        "andhra-green-chilli-chicken": {
+          candidateId: "andhra-green-chilli-chicken",
+          name: "Andhra Green Chilli Chicken",
+          main: {
+            componentId: "main",
+            role: "main",
+            name: "Andhra Green Chilli Chicken",
+            relationship: "intrinsic",
+            source: "candidate",
+            reason: "main",
+            definitionKind: "recipe_component",
+            normalizedComponentKey: "main:andhra green chilli chicken",
+          },
+          components: [
+            {
+              componentId: "rice",
+              role: "carbohydrate",
+              name: "basmati rice",
+              relationship: "required_companion",
+              source: "composition_engine",
+              reason: "starch",
+              definitionKind: "atomic_food",
+              normalizedComponentKey: "carbohydrate:basmati rice",
+            },
+            {
+              componentId: "salad",
+              role: "vegetable",
+              name: "kachumber",
+              relationship: "required_companion",
+              source: "composition_engine",
+              reason: "salad",
+              definitionKind: "recipe_component",
+              normalizedComponentKey: "vegetable:kachumber",
+            },
+          ],
+          compositionProfile: {
+            hasPrimaryProtein: true,
+            hasMeaningfulCarbohydrate: true,
+            hasMeaningfulVegetableOrFruit: true,
+            hasMeaningfulFiberSource: true,
+            hasSauceOrMoistureComponent: false,
+            addedComponentRoles: ["carbohydrate", "vegetable"],
+          },
+          metadata: {
+            promptVersion: "meal-composition-v2",
+            policyVersion: "meal-composition-v1",
+            createdAt: "2026-09-16T00:00:00.000Z",
+          },
+        },
+        "kerala-meen-pollichathu": {
+          candidateId: "kerala-meen-pollichathu",
+          name: "Kerala Meen Pollichathu",
+          main: {
+            componentId: "main",
+            role: "main",
+            name: "Kerala Meen Pollichathu",
+            relationship: "intrinsic",
+            source: "candidate",
+            reason: "main",
+            definitionKind: "recipe_component",
+            normalizedComponentKey: "main:kerala meen pollichathu",
+          },
+          components: [
+            {
+              componentId: "rice",
+              role: "carbohydrate",
+              name: "basmati rice",
+              relationship: "required_companion",
+              source: "composition_engine",
+              reason: "starch",
+              definitionKind: "atomic_food",
+              normalizedComponentKey: "carbohydrate:basmati rice",
+            },
+          ],
+          compositionProfile: {
+            hasPrimaryProtein: true,
+            hasMeaningfulCarbohydrate: true,
+            hasMeaningfulVegetableOrFruit: false,
+            hasMeaningfulFiberSource: false,
+            hasSauceOrMoistureComponent: true,
+            addedComponentRoles: ["carbohydrate"],
+          },
+          metadata: {
+            promptVersion: "meal-composition-v2",
+            policyVersion: "meal-composition-v1",
+            createdAt: "2026-09-16T00:00:00.000Z",
+          },
+        },
+      },
+    });
+    const prompt = buildRankedWeeklyStrategyPrompt(request);
+    expect(prompt.userPrompt).toMatch(/basmati rice/i);
+    expect(prompt.userPrompt).toMatch(/used by 2 meals/i);
+    const validated = validateRankedWeeklyStrategy(clonePayload(), request, metadata);
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    const stats = calculateRankedWeeklyStrategyQualityStats(validated.value, request);
+    expect(stats.reusedComponentsInSelectedWeek).toBeGreaterThan(0);
+    expect(stats.componentReuse?.some((entry) => /basmati rice/i.test(entry.name))).toBe(true);
+    expect(stats.componentComplexitySignal).toMatch(/compact_reusable|mixed|high_unique_sides/);
   });
 
   it("reuses PLAN-006 similarity for adjacency diagnostics", () => {

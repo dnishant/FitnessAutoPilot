@@ -2,18 +2,36 @@ import { describe, expect, it } from "vitest";
 import {
   calculateFiberTarget,
   composeCompleteMeal,
+  composeMealConcept,
+  composeMealConcepts,
+  composeRankedRepertoireForWeeklyStrategy,
   composeWeeklyMeals,
+  detectExistingCandidateRoles,
   detectExistingMealRoles,
   FIBER_GRAMS_PER_1000_KCAL,
   FIBER_POLICY_VERSION,
   looksLikeCompoundComponent,
+  namesLikelyEquivalent,
   makeChickenTikkaResolvedRecipe,
   makeCompletePastaResolvedRecipe,
   makeIntrinsicTacoResolvedRecipe,
+  makeRankedCandidate,
+  MockComponentRecipeProvider,
   MockMealCompositionProvider,
   normalizeComponentName,
+  pipelineDiagnostics,
   plan009SimpleResolvedRecipes,
+  resolveSelectedCompleteMeals,
+  resolveSelectedPipelineMeals,
+  SHRIMP_TACOS,
+  CHICKEN_TIKKA,
+  KERALA_BEEF_FRY,
+  JAMAICAN_JERK_CHICKEN,
+  THAI_GREEN_CURRY,
+  sampleRankedWeeklyStrategyRequest,
+  summarizeMealConceptRepertoire,
   validateMealCompositionProposal,
+  buildRankedWeeklyStrategyPrompt,
 } from "../index";
 import { calculateMacroTargets } from "../nutrition/macros";
 
@@ -206,10 +224,6 @@ describe("PLAN-009.5 composition", () => {
             relationship: "required_companion",
             reason: "Fresh salad",
             definitionKind: "recipe_component",
-            recipeIngredients: [
-              { name: "cucumber", quantity: 100, unit: "g" },
-              { name: "tomato", quantity: 80, unit: "g" },
-            ],
           },
         ],
         compositionSummary: "Rice + kachumber",
@@ -259,10 +273,6 @@ describe("PLAN-009.5 composition", () => {
             relationship: "recommended",
             reason: "test",
             definitionKind: "recipe_component",
-            recipeIngredients: [
-              { name: "peanuts", quantity: 50, unit: "g" },
-              { name: "chili", quantity: 5, unit: "g" },
-            ],
           },
         ],
         compositionSummary: "bad",
@@ -432,4 +442,362 @@ describe("component identity", () => {
   it("normalizes names for dedup", () => {
     expect(normalizeComponentName("Mint-Yogurt Chutney")).toBe("mint yogurt chutney");
   });
+
+  it("does not collapse distinct cabbage sides into one identity", () => {
+    expect(namesLikelyEquivalent("cabbage slaw", "slaw")).toBe(true);
+    expect(namesLikelyEquivalent("cabbage thoran", "steamed cabbage")).toBe(false);
+  });
 });
+
+describe("lightweight meal-composition-v2", () => {
+  it("composes ranked candidates before weekly strategy and omits recipe details", async () => {
+    const provider = new MockMealCompositionProvider();
+    const request = sampleRankedWeeklyStrategyRequest({
+      lunchCandidates: [makeRankedCandidate(CHICKEN_TIKKA, 1), makeRankedCandidate(KERALA_BEEF_FRY, 2)],
+      dinnerCandidates: [makeRankedCandidate(JAMAICAN_JERK_CHICKEN, 1)],
+    });
+    const composed = await composeRankedRepertoireForWeeklyStrategy({
+      request,
+      provider,
+      providerMeta: { provider: "mock" },
+    });
+    expect(composed.concepts.conceptCount).toBe(3);
+    const prompt = buildRankedWeeklyStrategyPrompt(composed.request);
+    expect(prompt.userPrompt).toMatch(/basmati rice/i);
+    expect(prompt.userPrompt).toMatch(/kachumber/i);
+    expect(prompt.systemInstruction).toContain("Ingredient/component reuse is NOT meal repetition");
+    const tikka = composed.concepts.conceptsByCandidateId[CHICKEN_TIKKA.candidateId]!;
+    const serialized = JSON.stringify(tikka);
+    expect(serialized).not.toMatch(/recipeIngredients|instructions|"quantity":/);
+    expect(tikka.components.every((c) => !("instructions" in c) && !("definition" in c))).toBe(true);
+  });
+
+  it("does not generate detailed recipes for unselected candidates", async () => {
+    const provider = new MockMealCompositionProvider();
+    const ranked = [
+      CHICKEN_TIKKA,
+      KERALA_BEEF_FRY,
+      JAMAICAN_JERK_CHICKEN,
+      THAI_GREEN_CURRY,
+      SHRIMP_TACOS,
+    ].map((candidate, index) => makeRankedCandidate(candidate, index + 1));
+    const extra = Array.from({ length: 5 }, (_, index) =>
+      makeRankedCandidate(
+        {
+          ...CHICKEN_TIKKA,
+          candidateId: `extra-${index}`,
+          name: `Extra Grill ${index}`,
+          dishFormat: "tikka kebab",
+        },
+        index + 6,
+      ),
+    );
+    const all = [...ranked, ...extra];
+    const composed = await composeMealConcepts({
+      rankedCandidates: all,
+      provider,
+    });
+    expect(composed.result.uniqueCandidateIds).toHaveLength(10);
+    const selected = ranked.slice(0, 4).map((item) => item.candidate.candidateId);
+    const recipes = Object.fromEntries(
+      selected.map((id) => {
+        const rankedItem = all.find((item) => item.candidate.candidateId === id)!;
+        return [id, makeChickenTikkaResolvedRecipe({ candidateId: id, name: rankedItem.candidate.name })];
+      }),
+    );
+    const componentProvider = new MockComponentRecipeProvider();
+    const recipeCalls: string[] = [];
+    const resolved = await resolveSelectedPipelineMeals({
+      strategy: {
+        days: sampleRankedWeeklyStrategyRequest().lunchCandidates.slice(0, 7).map((_, i) => {
+          const day = (
+            ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
+          )[i]!;
+          const id = selected[i % selected.length]!;
+          const name = all.find((item) => item.candidate.candidateId === id)!.candidate.name;
+          return {
+            day,
+            lunch: {
+              day,
+              mealType: "lunch" as const,
+              candidateId: id,
+              name,
+              prepIntent: "fully_prepped" as const,
+              planningReason: "Selected for selected-only resolution test.",
+            },
+            dinner: {
+              day,
+              mealType: "dinner" as const,
+              candidateId: id,
+              name,
+              prepIntent: "quick_fresh_finish" as const,
+              planningReason: "Selected for selected-only resolution test.",
+            },
+          };
+        }),
+        uniqueCandidateIds: selected,
+        strategySummary: {
+          varietyApproach: "test",
+          prepApproach: "test",
+          ingredientReuseApproach: "test",
+        },
+        metadata: { provider: "test", model: "test", promptVersion: "weekly-strategy-ranked-v1.3.0" },
+      },
+      concepts: composed.result,
+      candidatesById: new Map(all.map((item) => [item.candidate.candidateId, item.candidate])),
+      recipeResolver: {
+        async resolve(request) {
+          recipeCalls.push(request.candidate.candidateId);
+          return recipes[request.candidate.candidateId]!;
+        },
+      },
+      componentRecipeProvider: componentProvider,
+    });
+    expect(recipeCalls.sort()).toEqual([...selected].sort());
+    expect(recipeCalls).toHaveLength(4);
+    expect(Object.keys(resolved.completeMeals.mealsByCandidateId).sort()).toEqual([...selected].sort());
+    expect(componentProvider.calls.length).toBeGreaterThan(0);
+    expect(componentProvider.calls.every((call) => selected.includes(call.candidate.candidateId))).toBe(
+      true,
+    );
+    expect(
+      extra.every(
+        (item) =>
+          !componentProvider.calls.some((call) => call.candidate.candidateId === item.candidate.candidateId),
+      ),
+    ).toBe(true);
+    expect(resolved.uniqueMainRecipesResolved).toBe(4);
+    expect(resolved.uniqueComponentRecipesResolved).toBeGreaterThan(0);
+  });
+
+  it("treats shrimp tacos as already complete", async () => {
+    const provider = new MockMealCompositionProvider();
+    const detected = detectExistingCandidateRoles(SHRIMP_TACOS);
+    expect(detected.profile.hasMeaningfulCarbohydrate).toBe(true);
+    expect(detected.profile.hasMeaningfulVegetableOrFruit).toBe(true);
+    expect(detected.profile.hasSauceOrMoistureComponent).toBe(true);
+    const result = await composeMealConcept(
+      {
+        mealType: "dinner",
+        candidate: SHRIMP_TACOS,
+        allergies: [],
+        dietaryRestrictions: [],
+        dislikes: [],
+      },
+      { provider },
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.components.filter((c) => c.source === "composition_engine")).toHaveLength(0);
+    expect(provider.calls).toHaveLength(0);
+  });
+
+  it("exposes basmati rice reuse across two Indian meals", async () => {
+    const provider = new MockMealCompositionProvider();
+    const composed = await composeMealConcepts({
+      rankedCandidates: [makeRankedCandidate(CHICKEN_TIKKA, 1), makeRankedCandidate(KERALA_BEEF_FRY, 2)],
+      provider,
+    });
+    const reuse = composed.result.componentReuse.find((entry) =>
+      /basmati rice/i.test(entry.name),
+    );
+    expect(reuse?.usedByCandidateIds).toEqual(
+      expect.arrayContaining([CHICKEN_TIKKA.candidateId, KERALA_BEEF_FRY.candidateId]),
+    );
+    const request = sampleRankedWeeklyStrategyRequest({
+      lunchCandidates: [makeRankedCandidate(CHICKEN_TIKKA, 1)],
+      dinnerCandidates: [makeRankedCandidate(KERALA_BEEF_FRY, 1)],
+      mealConceptsByCandidateId: composed.result.conceptsByCandidateId,
+    });
+    expect(buildRankedWeeklyStrategyPrompt(request).userPrompt).toMatch(/Basmati Rice/i);
+  });
+
+  it("distinguishes compact reusable plates from a large unique-side collection", () => {
+    const compact = summarizeMealConceptRepertoire([
+      {
+        candidateId: "a",
+        name: "Chicken Tikka",
+        main: {
+          componentId: "main",
+          role: "main",
+          name: "Chicken Tikka",
+          relationship: "intrinsic",
+          source: "candidate",
+          reason: "main",
+          definitionKind: "recipe_component",
+          normalizedComponentKey: "main:chicken tikka",
+        },
+        components: [
+          {
+            componentId: "rice",
+            role: "carbohydrate",
+            name: "basmati rice",
+            relationship: "required_companion",
+            source: "composition_engine",
+            reason: "starch",
+            definitionKind: "atomic_food",
+            normalizedComponentKey: "carbohydrate:basmati rice",
+          },
+          {
+            componentId: "salad",
+            role: "vegetable",
+            name: "kachumber",
+            relationship: "required_companion",
+            source: "composition_engine",
+            reason: "salad",
+            definitionKind: "recipe_component",
+            normalizedComponentKey: "vegetable:kachumber",
+          },
+        ],
+        compositionProfile: {
+          hasPrimaryProtein: true,
+          hasMeaningfulCarbohydrate: true,
+          hasMeaningfulVegetableOrFruit: true,
+          hasMeaningfulFiberSource: true,
+          hasSauceOrMoistureComponent: false,
+          addedComponentRoles: ["carbohydrate", "vegetable"],
+        },
+        metadata: {
+          promptVersion: "meal-composition-v2",
+          policyVersion: "meal-composition-v1",
+          createdAt: "2026-09-16T00:00:00.000Z",
+        },
+      },
+      {
+        candidateId: "b",
+        name: "Kerala Beef Fry",
+        main: {
+          componentId: "main",
+          role: "main",
+          name: "Kerala Beef Fry",
+          relationship: "intrinsic",
+          source: "candidate",
+          reason: "main",
+          definitionKind: "recipe_component",
+          normalizedComponentKey: "main:kerala beef fry",
+        },
+        components: [
+          {
+            componentId: "rice",
+            role: "carbohydrate",
+            name: "basmati rice",
+            relationship: "required_companion",
+            source: "composition_engine",
+            reason: "starch",
+            definitionKind: "atomic_food",
+            normalizedComponentKey: "carbohydrate:basmati rice",
+          },
+          {
+            componentId: "thoran",
+            role: "vegetable",
+            name: "cabbage thoran",
+            relationship: "required_companion",
+            source: "composition_engine",
+            reason: "veg",
+            definitionKind: "recipe_component",
+            normalizedComponentKey: "vegetable:cabbage thoran",
+          },
+        ],
+        compositionProfile: {
+          hasPrimaryProtein: true,
+          hasMeaningfulCarbohydrate: true,
+          hasMeaningfulVegetableOrFruit: true,
+          hasMeaningfulFiberSource: true,
+          hasSauceOrMoistureComponent: false,
+          addedComponentRoles: ["carbohydrate", "vegetable"],
+        },
+        metadata: {
+          promptVersion: "meal-composition-v2",
+          policyVersion: "meal-composition-v1",
+          createdAt: "2026-09-16T00:00:00.000Z",
+        },
+      },
+    ]);
+    expect(compact.complexitySignal).toBe("compact_reusable");
+    expect(compact.reusedComponents).toBeGreaterThan(0);
+
+    const uniqueSides = Array.from({ length: 6 }, (_, index) => ({
+      candidateId: `m${index}`,
+      name: `Main ${index}`,
+      main: {
+        componentId: "main",
+        role: "main" as const,
+        name: `Main ${index}`,
+        relationship: "intrinsic" as const,
+        source: "candidate" as const,
+        reason: "main",
+        definitionKind: "recipe_component" as const,
+        normalizedComponentKey: `main:main ${index}`,
+      },
+      components: ["a", "b", "c"].map((suffix) => ({
+        componentId: `${suffix}-${index}`,
+        role: "vegetable" as const,
+        name: `Unique side ${suffix} ${index}`,
+        relationship: "recommended" as const,
+        source: "composition_engine" as const,
+        reason: "unique",
+        definitionKind: "recipe_component" as const,
+        normalizedComponentKey: `vegetable:unique side ${suffix} ${index}`,
+      })),
+      compositionProfile: {
+        hasPrimaryProtein: true,
+        hasMeaningfulCarbohydrate: false,
+        hasMeaningfulVegetableOrFruit: true,
+        hasMeaningfulFiberSource: true,
+        hasSauceOrMoistureComponent: false,
+        addedComponentRoles: ["vegetable" as const],
+      },
+      metadata: {
+        promptVersion: "meal-composition-v2" as const,
+        policyVersion: "meal-composition-v1" as const,
+        createdAt: "2026-09-16T00:00:00.000Z",
+      },
+    }));
+    const exploded = summarizeMealConceptRepertoire(uniqueSides);
+    expect(exploded.complexitySignal).toBe("high_unique_sides");
+    expect(exploded.uniqueComponents).toBe(18);
+    expect(exploded.reusedComponents).toBe(0);
+  });
+
+  it("composes a repeated candidate once", async () => {
+    const provider = new MockMealCompositionProvider();
+    const ranked = [
+      makeRankedCandidate(CHICKEN_TIKKA, 1),
+      makeRankedCandidate(CHICKEN_TIKKA, 2),
+      makeRankedCandidate(CHICKEN_TIKKA, 3),
+    ];
+    const composed = await composeMealConcepts({ rankedCandidates: ranked, provider });
+    expect(composed.result.uniqueCandidateIds).toEqual([CHICKEN_TIKKA.candidateId]);
+    expect(composed.result.conceptCount).toBe(1);
+    expect(provider.calls.length).toBeLessThanOrEqual(1);
+  });
+
+  it("records composition → selection diagnostics", async () => {
+    const provider = new MockMealCompositionProvider();
+    const ranked = [CHICKEN_TIKKA, SHRIMP_TACOS, KERALA_BEEF_FRY].map((c, i) =>
+      makeRankedCandidate(c, i + 1),
+    );
+    const composed = await composeMealConcepts({ rankedCandidates: ranked, provider });
+    const selected = [CHICKEN_TIKKA.candidateId, KERALA_BEEF_FRY.candidateId];
+    const detailed = await resolveSelectedCompleteMeals({
+      concepts: composed.result.conceptsByCandidateId,
+      selectedCandidateIds: selected,
+    });
+    const diagnostics = pipelineDiagnostics({
+      rankedCandidates: 3,
+      concepts: composed.result,
+      selectedCandidateIds: selected,
+      uniqueMainRecipesResolved: detailed.uniqueMainRecipesResolved,
+      uniqueComponentRecipesResolved: detailed.uniqueComponentRecipesResolved,
+    });
+    expect(diagnostics.uniqueCandidatesComposed).toBe(3);
+    expect(diagnostics.weeklyCandidatesSelected).toBe(2);
+    expect(diagnostics.candidateTrace.find((row) => row.candidateId === SHRIMP_TACOS.candidateId)?.selected).toBe(
+      false,
+    );
+    expect(
+      diagnostics.candidateTrace.find((row) => row.candidateId === CHICKEN_TIKKA.candidateId)?.selected,
+    ).toBe(true);
+  });
+});
+

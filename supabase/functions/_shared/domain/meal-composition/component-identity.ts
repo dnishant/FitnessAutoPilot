@@ -164,10 +164,11 @@ export function namesLikelyEquivalent(a: string, b: string): boolean {
   const synonyms: Array<[RegExp, string]> = [
     [/\bmint\b.*\b(yogurt|yoghurt)\b.*\b(chutney|raita|sauce)\b/, "mint yogurt sauce"],
     [/\bmint\b.*\braita\b/, "mint yogurt sauce"],
+    [/\brice\s*(and|&)\s*peas\b/, "rice and peas"],
     [/\bbasmati\b.*\brice\b/, "basmati rice"],
     [/\bjasmine\b.*\brice\b/, "jasmine rice"],
     [/\bsteamed\b.*\brice\b/, "steamed rice"],
-    [/\bcabbage\b.*\bslaw\b|\bslaw\b|\bcabbage\b/, "cabbage"],
+    [/\b(cabbage\s+)?(cole)?slaw\b/, "cabbage slaw"],
   ];
   let ca = na;
   let cb = nb;

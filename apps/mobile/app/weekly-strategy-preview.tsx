@@ -30,6 +30,7 @@ import {
   type RankedWeekPreviewScenarioId,
   type RankedWeeklyStrategyPreviewUiState,
 } from "../src/lib/ranked-weekly-strategy-preview";
+import { humanizeMealCompositionError } from "../src/lib/meal-composition-preview";
 
 function CollapsibleSection(props: {
   title: string;
@@ -71,6 +72,7 @@ export default function WeeklyStrategyPreviewScreen() {
     cookingPreferences,
     generateRankedWeeklyStrategy,
     discoverCulinaryCandidates,
+    composeMealConcepts,
     useLocalMode,
   } = useSession();
   const [state, setState] = useState<RankedWeeklyStrategyPreviewUiState>(() =>
@@ -90,8 +92,9 @@ export default function WeeklyStrategyPreviewScreen() {
         state.lunchCandidates,
         state.dinnerCandidates,
         varietyLevel,
+        state.mealConceptsByCandidateId,
       ),
-    [sessionInput, state.lunchCandidates, state.dinnerCandidates, varietyLevel],
+      [sessionInput, state.lunchCandidates, state.dinnerCandidates, varietyLevel, state.mealConceptsByCandidateId],
   );
 
   const contextRows = useMemo(
@@ -151,7 +154,35 @@ export default function WeeklyStrategyPreviewScreen() {
       return;
     }
     setState((prev) => ({ ...prev, busy: true, pipelineBusy: "week", error: null }));
-    const result = await generateRankedWeeklyStrategy(draftRequest);
+    const composed = await composeMealConcepts({
+      rankedCandidates: [...state.lunchCandidates, ...state.dinnerCandidates],
+      targetCalories: draftRequest.nutrition.targetCaloriesPerDay,
+      allergies: draftRequest.foodPreferences.allergies,
+      dietaryRestrictions: draftRequest.foodPreferences.dietaryRestrictions,
+      dislikes: draftRequest.foodPreferences.dislikes,
+    });
+    if (!composed.ok) {
+      setState((prev) => ({
+        ...prev,
+        busy: false,
+        pipelineBusy: null,
+        error: {
+          message: humanizeMealCompositionError({
+            message: composed.error,
+            code: composed.code,
+            diagnostics: composed.diagnostics,
+          }),
+          code: composed.code,
+          diagnostics: composed.diagnostics,
+        },
+      }));
+      return;
+    }
+    const requestWithConcepts = {
+      ...draftRequest,
+      mealConceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+    };
+    const result = await generateRankedWeeklyStrategy(requestWithConcepts);
     if (!result.ok) {
       setState((prev) => ({
         ...prev,
@@ -170,10 +201,11 @@ export default function WeeklyStrategyPreviewScreen() {
       busy: false,
       pipelineBusy: null,
       error: null,
-      request: draftRequest,
+      request: requestWithConcepts,
       strategy: result.strategy,
       stats: result.stats,
       meta: result.meta,
+      mealConceptsByCandidateId: composed.concepts.conceptsByCandidateId,
     }));
   }
 
@@ -183,6 +215,7 @@ export default function WeeklyStrategyPreviewScreen() {
           state.strategy,
           state.lunchCandidates,
           state.dinnerCandidates,
+          state.mealConceptsByCandidateId,
         )
       : [];
   const statsRows = state.stats
@@ -216,10 +249,9 @@ export default function WeeklyStrategyPreviewScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>{WEEKLY_STRATEGY_PREVIEW_TITLE}</Text>
       <Text style={styles.help}>
-        PLAN-007.1 ranked weekly strategy with practicality guardrails. Load PLAN-001/002
-        preferences, supply ranked lunch and dinner pools, then generate one 7-day
-        lunch+dinner week from candidate IDs. Concepts only — no recipe resolution or meal
-        nutrition.
+        PLAN-007.1 ranked weekly strategy with practicality guardrails. Unique ranked
+        candidates are composed into complete plates before the week is scheduled.
+        Detailed recipes and USDA nutrition stay downstream of selection.
       </Text>
 
       {useLocalMode ? (
@@ -356,6 +388,9 @@ export default function WeeklyStrategyPreviewScreen() {
               <View style={styles.slotBox}>
                 <Text style={styles.slotType}>Lunch</Text>
                 <Text style={styles.slotName}>{day.lunch.name}</Text>
+                {day.lunchPlate.length > 0 ? (
+                  <Text style={styles.slotMeta}>Plate: {day.lunchPlate.join(" + ")}</Text>
+                ) : null}
                 <Text style={styles.slotMeta}>
                   {day.lunchRank} · Prep: {day.lunchPrep}
                   {day.lunchStrategy ? ` · ${day.lunchStrategy}` : ""}
@@ -364,6 +399,9 @@ export default function WeeklyStrategyPreviewScreen() {
               <View style={styles.slotBox}>
                 <Text style={styles.slotType}>Dinner</Text>
                 <Text style={styles.slotName}>{day.dinner.name}</Text>
+                {day.dinnerPlate.length > 0 ? (
+                  <Text style={styles.slotMeta}>Plate: {day.dinnerPlate.join(" + ")}</Text>
+                ) : null}
                 <Text style={styles.slotMeta}>
                   {day.dinnerRank} · Prep: {day.dinnerPrep}
                 </Text>

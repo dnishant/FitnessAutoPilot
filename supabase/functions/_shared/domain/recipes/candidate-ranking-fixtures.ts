@@ -343,6 +343,8 @@ export const QUICK_FRESH_DINNER = makeRankingCandidate({
   discoveryConfidence: "high",
 });
 
+export const SHRIMP_TACOS = QUICK_FRESH_DINNER;
+
 export const TANDOORI_CHICKEN = makeRankingCandidate({
   candidateId: "tandoori-chicken",
   name: "Tandoori Chicken",

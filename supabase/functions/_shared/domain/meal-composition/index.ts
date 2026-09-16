@@ -6,3 +6,8 @@ export * from "./role-detection.ts";
 export * from "./component-identity.ts";
 export * from "./component-resolution.ts";
 export * from "./validate.ts";
+export * from "./concept.ts";
+export * from "./candidate-role-detection.ts";
+export * from "./repertoire.ts";
+export * from "./component-recipe.ts";
+export * from "./selected-resolution.ts";

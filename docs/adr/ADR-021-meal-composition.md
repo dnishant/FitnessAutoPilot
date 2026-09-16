@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. Pipeline ordering was later split in [ADR-022](./ADR-022-lightweight-meal-composition.md): lightweight plate concepts now run before weekly strategy; detailed component recipes remain selected-only.
 
 ## Context
 

@@ -6,3 +6,8 @@ export * from "./role-detection";
 export * from "./component-identity";
 export * from "./component-resolution";
 export * from "./validate";
+export * from "./concept";
+export * from "./candidate-role-detection";
+export * from "./repertoire";
+export * from "./component-recipe";
+export * from "./selected-resolution";

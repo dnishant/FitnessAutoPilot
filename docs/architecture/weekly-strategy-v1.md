@@ -17,20 +17,22 @@ PLAN-005 grounded culinary discovery
         ↓
 PLAN-006 ranking + deduplication
         ↓
+Lightweight complete-meal composition (`meal-composition-v2`)
+        ↓
 PLAN-007 whole-week selection + scheduling
         ↓
-7 lunches + 7 dinners
+7 lunches + 7 dinners (selected plates only then get detailed recipes / USDA)
 ```
 
-It answers: “Which of these ranked dishes should this person eat this week, and when?”
+It answers: “Which of these composed plates should this person eat this week, and when?”
 
-It does **not** resolve recipes, calculate authoritative nutrition, or invent unsupported dishes.
+It does **not** resolve detailed recipes, calculate authoritative nutrition, or invent unsupported dishes. Component reuse on the plate (shared rice, chutney) is a prep-efficiency signal, not meal repetition.
 
 ### Contract
 
-- Input: `RankedWeeklyStrategyRequest` (`packages/contracts`)
-- Output: `RankedWeeklyStrategy` (candidate IDs + prep metadata) + deterministic `RankedWeeklyStrategyQualityStats`
-- Prompt version: `weekly-strategy-ranked-v1.2.0` (PLAN-007.1 practicality + PLAN-008 automatic shared-prep semantics)
+- Input: `RankedWeeklyStrategyRequest` (`packages/contracts`), including optional `mealConceptsByCandidateId`
+- Output: `RankedWeeklyStrategy` (candidate IDs + prep metadata) + deterministic `RankedWeeklyStrategyQualityStats` (including component reuse / composition complexity diagnostics)
+- Prompt version: `weekly-strategy-ranked-v1.3.0` (composed plates + PLAN-007.1 practicality + PLAN-008 automatic shared-prep semantics)
 - One Gemini call per week normally; at most one corrective retry when unique candidates exceed the variety-level hard max
 - `uniqueCandidateIds`, quality stats, and complexity status are calculated in code
 - Names are hydrated from the supplied candidate pools — Gemini cannot silently rename a dish
