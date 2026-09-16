@@ -70,6 +70,10 @@ verify_jwt = false
 import_map = "./functions/import_map.json"
 verify_jwt = false
 
+[functions.compose-meals]
+import_map = "./functions/import_map.json"
+verify_jwt = false
+
 [functions.get-today-plan]
 import_map = "./functions/import_map.json"
 verify_jwt = false

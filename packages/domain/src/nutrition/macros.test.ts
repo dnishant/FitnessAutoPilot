@@ -167,7 +167,11 @@ describe("calculateMacroTargets", () => {
       carbKcalPerGram: 4,
       fatKcalPerGram: 9,
       policyVersion: "macro-policy-v1",
+      fiberGramsPer1000Kcal: 14,
+      fiberPolicyVersion: "fiber-policy-v1",
     });
+    expect(first.value.fiberGrams).toBeCloseTo(31.5, 10);
+    expect(first.value.fiberPolicyVersion).toBe("fiber-policy-v1");
   });
 
   it("reconciles macros with the calorie target at full precision", () => {
@@ -261,6 +265,7 @@ describe("nutrition target display", () => {
       { label: "Protein", value: "1 g per lb of body weight" },
       { label: "Fat", value: "0.7 g per kg of body weight" },
       { label: "Carbohydrates", value: "Remaining calories after protein and fat" },
+      { label: "Fiber", value: "14 g fiber per 1000 kcal (fiber-policy-v1)" },
     ]);
     expect(kgToLb(lbToKg(180))).toBeCloseTo(180, 10);
   });

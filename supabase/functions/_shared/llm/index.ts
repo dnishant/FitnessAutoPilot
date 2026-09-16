@@ -27,6 +27,10 @@ export {
   type CreateFoodResolverOptions,
 } from "./create-food-resolver.ts";
 export {
+  createMealCompositionProvider,
+  type CreateMealCompositionProviderOptions,
+} from "./create-meal-composition-provider.ts";
+export {
   loadUsdaServerConfig,
   DEFAULT_USDA_BASE_URL,
   DEFAULT_USDA_TIMEOUT_MS,
@@ -45,6 +49,16 @@ export {
   type GeminiFoodDisambiguatorOptions,
   type FoodDisambiguationLogEvent,
 } from "./gemini/food-disambiguator.ts";
+export {
+  GeminiMealCompositionProvider,
+  type GeminiMealCompositionProviderOptions,
+  type MealCompositionLogEvent,
+} from "./gemini/meal-composition-provider.ts";
+export {
+  GeminiMealCompositionPayloadSchema,
+  coerceMealCompositionPayload,
+  geminiMealCompositionResponseJsonSchema,
+} from "./gemini/meal-composition-schema.ts";
 export type {
   GeminiContentClient,
   GeminiGenerateContentParams,

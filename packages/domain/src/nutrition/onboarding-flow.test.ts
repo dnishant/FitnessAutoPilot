@@ -344,6 +344,7 @@ describe("nutrition target result", () => {
       { label: "Protein", value: "1 g per lb of body weight" },
       { label: "Fat", value: "0.7 g per kg of body weight" },
       { label: "Carbohydrates", value: "Remaining calories after protein and fat" },
+      { label: "Fiber", value: "14 g fiber per 1000 kcal (fiber-policy-v1)" },
     ]);
     expect(JSON.stringify(view.nutritionTarget)).not.toMatch(/%|percent|percentage/i);
     expect(view.nutritionTarget?.draft.inputSnapshot.proteinGramsPerLb).toBe(1);
