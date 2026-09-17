@@ -105,7 +105,11 @@ import {
 } from "../lib/candidate-ranking-preview";
 import { invokeResolveRecipes } from "../lib/recipe-resolution-preview";
 import { invokeResolveRecipeNutrition } from "../lib/food-resolution-preview";
-import { invokeComposeMeals, isLegacyComposeMealsRecipesRequiredError } from "../lib/meal-composition-preview";
+import {
+  invokeComposeMeals,
+  invokeComposeSelectedCompleteMeals,
+  isLegacyComposeMealsRecipesRequiredError,
+} from "../lib/meal-composition-preview";
 
 type SessionUser = { id: string; email: string };
 
@@ -1343,6 +1347,86 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             composeMealConcepts: api.composeMealConcepts,
             generateRankedWeeklyStrategy: api.generateRankedWeeklyStrategy,
             resolveWeeklyRecipes: api.resolveWeeklyRecipes,
+            resolveSelectedCompleteMeals: async (input) => {
+              if (useLocalPlanner || !supabase || !user) {
+                return { ok: false, error: "Selected complete meals require remote mode." };
+              }
+              const client = supabase;
+              const selected = await invokeComposeSelectedCompleteMeals(
+                async (functionName, options) => {
+                  const invoked = await client.functions.invoke(functionName, {
+                    body: options.body,
+                  });
+                  return {
+                    data: invoked.data,
+                    error: invoked.error
+                      ? {
+                          message: invoked.error.message,
+                          context:
+                            "context" in invoked.error
+                              ? (invoked.error as { context?: unknown }).context
+                              : undefined,
+                        }
+                      : null,
+                  };
+                },
+                {
+                  mealConcepts: input.concepts,
+                  selectedCandidateIds: input.selectedCandidateIds,
+                  recipes: Object.values(input.recipesByCandidateId),
+                  targetCalories: nutritionTarget?.targetCalories,
+                  resolveAddedComponents: input.resolveAddedComponents !== false,
+                },
+              );
+              if (!selected.ok) {
+                return {
+                  ok: false,
+                  error: selected.error.message,
+                  code: selected.error.code,
+                };
+              }
+              return { ok: true, result: selected.result };
+            },
+            resolveRecipeNutritionBatch: async (input) => {
+              if (useLocalPlanner || !supabase || !user) {
+                return { ok: false, error: "Recipe nutrition requires remote mode." };
+              }
+              if (input.recipes.length === 0) {
+                return { ok: true, recipesByCandidateId: {} };
+              }
+              const client = supabase;
+              const nutrition = await invokeResolveRecipeNutrition(
+                async (functionName, options) => {
+                  const invoked = await client.functions.invoke(functionName, {
+                    body: options.body,
+                  });
+                  return {
+                    data: invoked.data,
+                    error: invoked.error
+                      ? {
+                          message: invoked.error.message,
+                          context:
+                            "context" in invoked.error
+                              ? (invoked.error as { context?: unknown }).context
+                              : undefined,
+                        }
+                      : null,
+                  };
+                },
+                { recipes: input.recipes },
+              );
+              if (!nutrition.ok) {
+                return {
+                  ok: false,
+                  error: nutrition.error.message,
+                  code: nutrition.error.code,
+                };
+              }
+              return {
+                ok: true,
+                recipesByCandidateId: nutrition.result.recipesByCandidateId,
+              };
+            },
           },
           async (stage: ConsumerPlanGenerationStage) => {
             await persistWeeklyPlan({

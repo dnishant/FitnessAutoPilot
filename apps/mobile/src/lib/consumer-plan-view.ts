@@ -12,14 +12,18 @@ import type {
   PrepIntent,
   RankedWeeklyStrategy,
   ResolvedRecipe,
+  CompleteMeal,
+  RecipeNutritionResult,
 } from "@fitness-autopilot/contracts";
 import { WEEK_DAYS as DAYS } from "@fitness-autopilot/contracts";
 import {
+  buildSolveMealPortionsRequestFromCompleteMeal,
   developerTestMealIntentFromDaily,
   formatMacroGrams,
   formatNutritionCalories,
   plan010FixtureRequestForCandidate,
   solveMealPortions,
+  type ComponentBaseNutrition,
 } from "@fitness-autopilot/domain";
 import { prepIntentLabel as domainPrepIntentLabel } from "./weekly-strategy-preview";
 
@@ -240,24 +244,36 @@ export function buildConsumerMealsFromStrategy(input: {
 }
 
 /**
- * Apply authoritative PLAN-010 portions when trusted fixture/nutrition coefficients exist.
+ * Authoritative nutrition inputs for PLAN-010 during consumer plan generation.
+ * Prefer CompleteMeal + PLAN-009 results; fixtures are fallback only.
+ */
+export type PersonalizedPortionSolveContext = {
+  completeMealsByCandidateId?: Record<string, CompleteMeal>;
+  mainNutritionByCandidateId?: Record<string, RecipeNutritionResult>;
+  /** Compound side nutrition keyed by componentId / normalizedComponentKey. */
+  componentNutritionById?: Record<string, ComponentBaseNutrition>;
+};
+
+/**
+ * Apply authoritative PLAN-010 portions for every meal that has trusted coefficients.
  *
- * Production meal intents: only labeled developer/test shares derived from daily targets
- * (see `developerTestMealIntentFromDaily`). Legitimate unlabeled MealNutritionIntent
- * allocation is PLAN-011 — do not invent a production allocation policy here.
+ * Priority:
+ * 1. CompleteMeal + PLAN-009 nutrition → buildSolveMealPortionsRequestFromCompleteMeal
+ * 2. Fixture coefficients (dev/demo QA dishes) when live build is unavailable
+ * 3. Otherwise leave meal without invented portions
  *
- * Does not invent portions for meals without trusted nutrition data.
- * `best_feasible` is treated as a normal consumer plate (no diagnostic chrome).
- * `blocked` never invents quantities; sets portionStatus for a graceful empty state.
+ * Intents remain developer-test shares until PLAN-011.
  */
 export function applyPersonalizedPortionsToMeals(
   meals: readonly ConsumerMealSlot[],
   options?: {
     nutritionTarget?: NutritionTarget | null;
+    portionContext?: PersonalizedPortionSolveContext | null;
   },
 ): ConsumerMealSlot[] {
   const cache = new Map<string, ReturnType<typeof solveMealPortions>>();
   const daily = options?.nutritionTarget;
+  const portionContext = options?.portionContext ?? null;
 
   return meals.map((meal) => {
     const intent = daily
@@ -276,15 +292,21 @@ export function applyPersonalizedPortionsToMeals(
           label: "Developer test intent (default) — not PLAN-011",
         };
 
-    const request = plan010FixtureRequestForCandidate(meal.candidateId, intent);
-    if (!request) return meal;
+    const mealId = `${meal.candidateId}:${meal.day}:${meal.mealType}`;
+    let request =
+      buildLiveSolveRequest(meal, mealId, intent, portionContext) ??
+      plan010FixtureRequestForCandidate(meal.candidateId, intent);
 
-    const cacheKey = `${meal.candidateId}:${intent.targetCaloriesKcal}:${intent.targetProteinGrams ?? ""}`;
+    if (!request) {
+      return meal;
+    }
+
+    const cacheKey = `${meal.candidateId}:${intent.targetCaloriesKcal}:${intent.targetProteinGrams ?? ""}:${request.components.map((c) => c.componentId).join(",")}`;
     let plan = cache.get(cacheKey);
     if (!plan) {
       plan = solveMealPortions({
         ...request,
-        mealId: `${meal.candidateId}:${meal.day}:${meal.mealType}`,
+        mealId,
         mealName: meal.name,
       });
       cache.set(cacheKey, plan);
@@ -316,7 +338,7 @@ export function applyPersonalizedPortionsToMeals(
       };
     });
 
-    // Prefer solver portion order when the plate matches fixture components.
+    // Prefer solver portion order when the plate matches solved components.
     // Compound culinary units stay whole (e.g. Kachumber 130 g) — never explode ingredients.
     const mergedComponents =
       components.some((c) => c.amount != null) && plan.portions.length >= components.length
@@ -343,6 +365,31 @@ export function applyPersonalizedPortionsToMeals(
       portionStatus: "available" as const,
     };
   });
+}
+
+function buildLiveSolveRequest(
+  meal: ConsumerMealSlot,
+  mealId: string,
+  intent: ReturnType<typeof developerTestMealIntentFromDaily> | {
+    targetCaloriesKcal: number;
+    targetProteinGrams: number;
+    isDeveloperTestIntent: boolean;
+    label: string;
+  },
+  portionContext: PersonalizedPortionSolveContext | null,
+) {
+  const completeMeal = portionContext?.completeMealsByCandidateId?.[meal.candidateId];
+  if (!completeMeal) return null;
+
+  const built = buildSolveMealPortionsRequestFromCompleteMeal({
+    mealId,
+    mealName: meal.name,
+    completeMeal,
+    nutritionIntent: intent,
+    mainNutrition: portionContext?.mainNutritionByCandidateId?.[meal.candidateId],
+    componentNutritionById: portionContext?.componentNutritionById,
+  });
+  return built.ok ? built.request : null;
 }
 
 export function createEmptyConsumerPlan(weekStart = startOfWeekMonday()): ConsumerWeeklyPlan {

@@ -4,3 +4,5 @@ export * from "./build-variables.ts";
 export * from "./solver.ts";
 export * from "./fixtures.ts";
 export * from "./weekly.ts";
+export * from "./from-complete-meal.ts";
+export * from "./component-recipe-adapter.ts";

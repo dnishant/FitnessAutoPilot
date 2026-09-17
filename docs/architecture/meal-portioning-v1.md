@@ -62,19 +62,24 @@ Coarse-to-fine deterministic search over 2–5 portion variables:
 Authoritative PLAN-010 results flow into the existing consumer plan:
 
 ```
-Generate Plan → applyPersonalizedPortionsToMeals → ConsumerMealSlot
-  → MealCard / Today (kcal · protein)
-  → Meal Detail (Your plate + nutrition)
-  → Recipe (optional Your portion when opened from a meal)
+Generate Plan
+  → CompleteMeal selected resolution
+  → PLAN-009 recipe/component nutrition
+  → buildSolveMealPortionsRequestFromCompleteMeal
+  → solveMealPortions
+  → ConsumerMealSlot
+  → MealCard / Today / Meal Detail / Recipe
 ```
 
 - Portions/nutrition are flattened onto `ConsumerMealSlot` for display — React never solves.
+- Coefficients are built from **CompleteMeal + PLAN-009** for every selected meal when nutrition is complete.
+- Fixture coefficients remain a **fallback** for known demo IDs when live nutrition is incomplete — not the primary production path.
 - Compound culinary units stay whole on Meal Detail (e.g. Kachumber), not ingredientized.
 - `best_feasible` renders as a normal consumer meal; diagnostics stay in developer preview.
 - `blocked` sets `portionStatus` with no invented quantities.
 - Production intents today are **developer-test shares** of daily targets
   (`developerTestMealIntentFromDaily`). Legitimate meal-level allocation is **PLAN-011**.
-- Without trusted coefficients for a candidate, the meal concept still shows; no fake macros.
+- Without trusted coefficients for a meal, the meal concept still shows; no fake macros.
 
 ## Non-goals
 

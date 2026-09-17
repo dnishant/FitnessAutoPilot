@@ -30,6 +30,7 @@ import {
   humanizePlanGenerationError,
   startOfWeekMonday,
 } from "./consumer-plan-view";
+import { buildPersonalizedPortionContext, type PortionContextApis } from "./personalized-portion-context";
 import { buildRankedWeeklyStrategyRequestFromPreview } from "./ranked-weekly-strategy-preview";
 
 export type PlanGenerationApis = {
@@ -77,6 +78,8 @@ export type PlanGenerationApis = {
         result?: { recipesByCandidateId: Record<string, ResolvedRecipe> };
       }
   >;
+  resolveSelectedCompleteMeals?: PortionContextApis["resolveSelectedCompleteMeals"];
+  resolveRecipeNutritionBatch?: PortionContextApis["resolveRecipeNutritionBatch"];
 };
 
 export type GenerationProgressCallback = (stage: ConsumerPlanGenerationStage) => void;
@@ -117,14 +120,22 @@ async function buildLocalDemoPlan(
       }
     }
   }
-  const meals = applyPersonalizedPortionsToMeals(
-    buildConsumerMealsFromStrategy({
-      strategy,
-      conceptsByCandidateId: composed.result.conceptsByCandidateId,
-      recipesByCandidateId,
-    }),
-    { nutritionTarget },
-  );
+  const mealsBase = buildConsumerMealsFromStrategy({
+    strategy,
+    conceptsByCandidateId: composed.result.conceptsByCandidateId,
+    recipesByCandidateId,
+  });
+  const portionContext = await buildPersonalizedPortionContext({
+    conceptsByCandidateId: composed.result.conceptsByCandidateId,
+    selectedCandidateIds: strategy.uniqueCandidateIds,
+    recipesByCandidateId,
+    useLocalCompleteMeals: true,
+    apis: {},
+  });
+  const meals = applyPersonalizedPortionsToMeals(mealsBase, {
+    nutritionTarget,
+    portionContext,
+  });
   onProgress?.("complete");
   return {
     weekStart,
@@ -278,13 +289,30 @@ async function buildRemotePlan(
     ? resolved.result.recipesByCandidateId
     : (resolved.result?.recipesByCandidateId ?? {});
 
+  const candidateLookupRecord: Record<string, CulinaryDiscoveryCandidate> = {};
+  for (const [id, candidate] of candidateLookup) {
+    candidateLookupRecord[id] = candidate;
+  }
+
+  const portionContext = await buildPersonalizedPortionContext({
+    conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+    selectedCandidateIds: strategyResult.strategy.uniqueCandidateIds,
+    recipesByCandidateId,
+    candidatesById: candidateLookupRecord,
+    apis: {
+      resolveSelectedCompleteMeals: apis.resolveSelectedCompleteMeals,
+      resolveRecipeNutritionBatch: apis.resolveRecipeNutritionBatch,
+    },
+    useLocalCompleteMeals: !apis.resolveSelectedCompleteMeals,
+  });
+
   const meals = applyPersonalizedPortionsToMeals(
     buildConsumerMealsFromStrategy({
       strategy: strategyResult.strategy,
       conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
       recipesByCandidateId,
     }),
-    { nutritionTarget: apis.nutritionTarget },
+    { nutritionTarget: apis.nutritionTarget, portionContext },
   );
 
   onProgress?.("complete");

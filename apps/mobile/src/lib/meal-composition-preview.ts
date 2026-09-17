@@ -2,6 +2,7 @@ import type {
   ComposeMealsResponse,
   MealConcept,
   RankedCulinaryCandidate,
+  ResolvedRecipe,
   WeeklyMealConceptResult,
 } from "@fitness-autopilot/contracts";
 import {
@@ -166,6 +167,69 @@ export async function invokeComposeMeals(
   }
 
   return { ok: true, concepts: data.concepts, meta: data.meta };
+}
+
+/** Selected CompleteMeal resolution (PLAN-009.5) with optional USDA staple identity. */
+export async function invokeComposeSelectedCompleteMeals(
+  invoke: InvokeClient,
+  body: {
+    mealConcepts: Record<string, MealConcept>;
+    selectedCandidateIds: string[];
+    recipes: ResolvedRecipe[];
+    concurrency?: number;
+    targetCalories?: number;
+    resolveAddedComponents?: boolean;
+  },
+): Promise<
+  | {
+      ok: true;
+      result: NonNullable<ComposeMealsResponse["result"]>;
+      meta?: MealCompositionGenerationMeta;
+    }
+  | {
+      ok: false;
+      error: { message: string; code?: string; diagnostics?: string };
+      meta?: MealCompositionGenerationMeta;
+    }
+> {
+  const invoked = await invoke(COMPOSE_MEALS_FUNCTION_NAME, {
+    body: {
+      stage: "selected_resolution",
+      mealConcepts: body.mealConcepts,
+      selectedCandidateIds: body.selectedCandidateIds,
+      recipes: body.recipes,
+      concurrency: body.concurrency ?? DEFAULT_MEAL_COMPOSITION_CONCURRENCY,
+      targetCalories: body.targetCalories,
+      resolveAddedComponents: body.resolveAddedComponents !== false,
+      mealType: "dinner",
+    },
+  });
+
+  if (invoked.error) {
+    const parsedBody = await readFunctionsInvokeErrorBody(invoked.error);
+    const errorPayload =
+      parsedBody && typeof parsedBody === "object" && "error" in parsedBody
+        ? (parsedBody as { error: { message?: string; code?: string } }).error
+        : null;
+    return {
+      ok: false,
+      error: {
+        message: errorPayload?.message ?? invoked.error.message,
+        code: errorPayload?.code,
+        diagnostics: parsedBody ? JSON.stringify(parsedBody).slice(0, 2000) : undefined,
+      },
+    };
+  }
+
+  const data = invoked.data as ComposeMealsResponse | null;
+  if (!data || typeof data !== "object" || !data.result) {
+    return {
+      ok: false,
+      error: { message: "compose-meals selected_resolution returned an empty payload." },
+    };
+  }
+
+  return { ok: true, result: data.result, meta: data.meta };
 }
 
 export function weeklyCompositionSummaryRows(
