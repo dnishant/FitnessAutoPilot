@@ -358,7 +358,7 @@ export function mealCardDisplayModel(meal: ConsumerMealSlot): {
 } {
   const componentNames = meal.components
     .filter((c) => c.displayName !== meal.name)
-    .map((c) => c.displayName);
+    .map((c) => titleCase(c.displayName));
   const nutrition = meal.personalizedNutrition;
   return {
     mealTypeLabel: meal.mealType.toUpperCase(),

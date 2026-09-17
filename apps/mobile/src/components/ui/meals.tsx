@@ -49,7 +49,12 @@ export function MealCard(props: {
   const mainName = props.meal.name;
   const componentNames = props.meal.components
     .filter((c) => c.displayName !== mainName)
-    .map((c) => c.displayName);
+    .map((c) =>
+      c.displayName
+        .split(" ")
+        .map((part) => (part ? part[0]!.toUpperCase() + part.slice(1) : part))
+        .join(" "),
+    );
   const prep = consumerPrepLabel(props.meal.prepIntent, props.meal.finishTimeMinutes);
   const nutrition = props.personalizedNutrition ?? props.meal.personalizedNutrition;
 
