@@ -30,19 +30,19 @@ export const OnboardingGoalTypeSchema = z.enum([
 
 export const ONBOARDING_GOAL_OPTIONS = [
   {
-    type: "muscle_gain",
-    label: "Bulking",
-    detail: "Prioritize building muscle.",
-  },
-  {
     type: "fat_loss",
-    label: "Shredding / Weight Loss",
-    detail: "Prioritize losing body fat.",
+    label: "Lose weight",
+    detail: "Lose body fat while preserving muscle.",
   },
   {
     type: "recomposition",
-    label: "Recomposition / Maintenance",
-    detail: "Hold weight and reshape over time.",
+    label: "Maintain",
+    detail: "Stay around your current weight.",
+  },
+  {
+    type: "muscle_gain",
+    label: "Gain weight",
+    detail: "Build muscle with a controlled surplus.",
   },
 ] as const satisfies ReadonlyArray<{
   type: z.infer<typeof OnboardingGoalTypeSchema>;

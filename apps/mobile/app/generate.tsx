@@ -83,7 +83,8 @@ export default function GenerateScreen() {
 
       {!showProgress && !error ? (
         <View style={styles.readyCard}>
-          <Text style={styles.readyTitle}>Ready with</Text>
+          <Text style={styles.readyTitle}>You're ready</Text>
+          <Text style={styles.readySubtitle}>We'll build your week around:</Text>
           {readyLines.length > 0 ? (
             readyLines.map((line) => (
               <Text key={line} style={styles.readyLine}>
@@ -141,7 +142,7 @@ export default function GenerateScreen() {
         />
       ) : (
         <PrimaryButton
-          label={busy ? "Building…" : "Generate my week"}
+          label={busy ? "Building…" : "Generate My Plan"}
           onPress={() => void submit()}
           loading={busy}
           disabled={busy}
@@ -168,9 +169,13 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   readyTitle: {
-    ...typography.label,
-    color: colors.textMuted,
-    textTransform: "uppercase",
+    ...typography.subheading,
+    color: colors.text,
+  },
+  readySubtitle: {
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.xs,
   },
   readyLine: {
     ...typography.body,

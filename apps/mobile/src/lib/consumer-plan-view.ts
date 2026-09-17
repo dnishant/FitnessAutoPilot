@@ -349,6 +349,53 @@ function titleCase(value: string): string {
     .join(" ");
 }
 
+export function mealCardDisplayModel(meal: ConsumerMealSlot): {
+  mealTypeLabel: string;
+  name: string;
+  componentNames: string[];
+  prepLabel: string | null;
+  nutritionLine: string | null;
+} {
+  const componentNames = meal.components
+    .filter((c) => c.displayName !== meal.name)
+    .map((c) => c.displayName);
+  const nutrition = meal.personalizedNutrition;
+  return {
+    mealTypeLabel: meal.mealType.toUpperCase(),
+    name: meal.name,
+    componentNames,
+    prepLabel: consumerPrepLabel(meal.prepIntent, meal.finishTimeMinutes),
+    nutritionLine: nutrition
+      ? `${Math.round(nutrition.caloriesKcal)} kcal · ${Math.round(nutrition.proteinGrams)}g protein`
+      : null,
+  };
+}
+
+export function nutritionSummaryDisplayModel(input: {
+  calories: number;
+  proteinG: number;
+  carbsG: number;
+  fatG: number;
+  fiberG?: number;
+  paceLabel?: string;
+}): {
+  caloriesLabel: string;
+  proteinLabel: string;
+  carbsLabel: string;
+  fatLabel: string;
+  fiberLabel: string | null;
+  paceLabel?: string;
+} {
+  return {
+    caloriesLabel: Math.round(input.calories).toLocaleString(),
+    proteinLabel: `${Math.round(input.proteinG)}g`,
+    carbsLabel: `${Math.round(input.carbsG)}g`,
+    fatLabel: `${Math.round(input.fatG)}g`,
+    fiberLabel: input.fiberG != null ? `${Math.round(input.fiberG)}g Fiber` : null,
+    paceLabel: input.paceLabel,
+  };
+}
+
 export function orderedWeekDays(): readonly DayOfWeek[] {
   return DAYS;
 }

@@ -16,4 +16,6 @@ export * from "./culinary-discovery.ts";
 export * from "./candidate-ranking.ts";
 export * from "./ranked-weekly-strategy.ts";
 export * from "./plan.ts";
+export * from "./grocery.ts";
+export * from "./consumer-plan.ts";
 export * from "./api.ts";

@@ -42,7 +42,7 @@ export function validateOnboardingGoalType(
   return err({
     code: "invalid_input",
     field: "goalType",
-    message: "Choose Bulking, Shredding / Weight Loss, or Recomposition / Maintenance.",
+    message: "Choose Lose weight, Maintain, or Gain weight.",
   });
 }
 

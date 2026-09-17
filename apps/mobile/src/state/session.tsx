@@ -492,9 +492,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const value = useMemo<SessionValue>(
-    () => (() => {
-    const api = {
+  const value = useMemo<SessionValue>(() => {
+    const api: Omit<SessionValue, "generateWeeklyPlan"> = {
       loading,
       useLocalMode: useLocalPlanner,
       user,
@@ -511,7 +510,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       async clearWeeklyPlan() {
         await persistWeeklyPlan(null);
       },
-      async signIn(email: string, password: string) {
+      async signIn(email, password) {
         if (useLocalPlanner) {
           try {
             const store = ensureLocalUser(email, password);
@@ -1329,9 +1328,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         return result;
       },
     };
-    })(),
-    [loading, user, profile, currentRmr, currentTdee, currentCalorieTarget, goal, nutritionTarget, mealPreferences, cookingPreferences, dailyPlan, weeklyPlan],
-  );
+  }, [loading, user, profile, currentRmr, currentTdee, currentCalorieTarget, goal, nutritionTarget, mealPreferences, cookingPreferences, dailyPlan, weeklyPlan]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

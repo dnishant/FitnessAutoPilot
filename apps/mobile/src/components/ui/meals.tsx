@@ -46,9 +46,6 @@ export function MealCard(props: {
   onPress?: () => void;
   personalizedNutrition?: PersonalizedMealNutrition | null;
 }) {
-  const sides = props.meal.components
-    .filter((c) => c.componentId !== props.meal.components[0]?.componentId || c.role !== "main")
-    .slice(props.meal.components[0]?.role === "main" ? 1 : 0);
   const mainName = props.meal.name;
   const componentNames = props.meal.components
     .filter((c) => c.displayName !== mainName)
@@ -68,10 +65,6 @@ export function MealCard(props: {
             </Text>
           ))}
         </View>
-      ) : sides.length > 0 ? (
-        <Text style={styles.componentLine}>
-          {sides.map((s) => s.displayName).join(" · ")}
-        </Text>
       ) : null}
       {prep ? <Text style={styles.prepMeta}>{prep}</Text> : null}
       {nutrition ? (
