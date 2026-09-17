@@ -75,6 +75,17 @@ export function getLocalStore(userId: string): LocalStore | null {
   return memory.get(userId) ?? null;
 }
 
+export function hydrateLocalStore(store: LocalStore): LocalStore {
+  memory.set(store.userId, store);
+  return store;
+}
+
+export function serializeLocalStore(userId: string): LocalStore | null {
+  const store = memory.get(userId);
+  if (!store) return null;
+  return JSON.parse(JSON.stringify(store)) as LocalStore;
+}
+
 export function ensureLocalUser(email: string, password: string): LocalStore {
   const userId = uuidFromSeed(`user:${email.toLowerCase()}:${password}`);
   const existing = memory.get(userId);

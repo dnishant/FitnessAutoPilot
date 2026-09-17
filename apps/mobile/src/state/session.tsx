@@ -60,6 +60,8 @@ import { generateConsumerWeeklyPlan } from "../lib/consumer-plan-generate";
 import {
   ensureLocalUser,
   getLocalStore,
+  hydrateLocalStore,
+  serializeLocalStore,
   localGeneratePlan,
   localSaveGoal,
   localSaveCookingPreferences,
@@ -70,6 +72,7 @@ import {
   localSaveNutritionTarget,
   localSaveRmrEstimate,
   localSaveTdeeEstimate,
+  type LocalStore,
 } from "../lib/local-planner";
 import {
   mapCalorieTargetRow,
@@ -273,6 +276,17 @@ type SessionValue = {
 
 const SessionContext = createContext<SessionValue | null>(null);
 const LOCAL_USER_KEY = "fa.local.user";
+const LOCAL_STORE_KEY = "fa.local.store";
+
+async function persistLocalStoreSnapshot(userId: string) {
+  try {
+    const snapshot = serializeLocalStore(userId);
+    if (!snapshot) return;
+    await AsyncStorage.setItem(`${LOCAL_STORE_KEY}.${userId}`, JSON.stringify(snapshot));
+  } catch {
+    // Best-effort for local/demo persistence.
+  }
+}
 
 async function composeMealConceptsLocally(input: {
   rankedCandidates: RankedCulinaryCandidate[];
@@ -439,7 +453,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           const raw = await AsyncStorage.getItem(LOCAL_USER_KEY);
           if (raw) {
             const parsed = JSON.parse(raw) as SessionUser;
-            const store = getLocalStore(parsed.id) ?? ensureLocalUser(parsed.email, "restored");
+            let store = getLocalStore(parsed.id);
+            if (!store) {
+              try {
+                const storeRaw = await AsyncStorage.getItem(`${LOCAL_STORE_KEY}.${parsed.id}`);
+                if (storeRaw) {
+                  store = hydrateLocalStore(JSON.parse(storeRaw) as LocalStore);
+                }
+              } catch {
+                store = null;
+              }
+            }
+            store = store ?? ensureLocalUser(parsed.email, "restored");
             if (!cancelled) {
               setUser({ id: store.userId, email: store.email });
               setProfile(store.profile);
@@ -665,6 +690,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             setMealPreferences(savedMealPreferences);
             setCookingPreferences(savedCookingPreferences);
             setGoal(savedGoal);
+            await persistLocalStoreSnapshot(user.id);
             return {
               ok: true,
               rmr: savedRmr,
@@ -728,6 +754,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             }
             const saved = localSaveCookingPreferences(user.id, request);
             setCookingPreferences(saved);
+            await persistLocalStoreSnapshot(user.id);
             return { ok: true, cookingPreferences: saved };
           }
           if (!supabase || !user) {
@@ -757,6 +784,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             }
             const saved = localSaveMealPreferences(user.id, request);
             setMealPreferences(saved);
+            await persistLocalStoreSnapshot(user.id);
             return { ok: true, mealPreferences: saved };
           }
           if (!supabase || !user) {

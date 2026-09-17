@@ -156,12 +156,10 @@ export default function OnboardingScreen() {
             keyboard="numeric"
           />
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable
-            style={styles.primary}
+          <PrimaryButton
+            label="Continue"
             onPress={() => setView((current) => submitOnboardingWearableCalories(current))}
-          >
-            <Text style={styles.primaryText}>Continue</Text>
-          </Pressable>
+          />
         </>
       ) : null}
 
