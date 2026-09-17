@@ -84,6 +84,8 @@ function compoundFixture(name: string, reason: string): ComponentRecipeDefinitio
       kind: "recipe_component",
       name,
       description: reason,
+      baseServings: 4,
+      referenceYieldGrams: 325,
       ingredients: [
         { name: "cucumber", quantity: 150, unit: "g", role: "vegetable" },
         { name: "tomato", quantity: 100, unit: "g", role: "vegetable" },
@@ -99,6 +101,8 @@ function compoundFixture(name: string, reason: string): ComponentRecipeDefinitio
       kind: "recipe_component",
       name,
       description: reason,
+      baseServings: 4,
+      referenceYieldGrams: 155,
       ingredients: [
         { name: "plain yogurt", quantity: 120, unit: "g", role: "sauce" },
         { name: "mint leaves", quantity: 20, unit: "g", role: "herb" },
@@ -111,6 +115,8 @@ function compoundFixture(name: string, reason: string): ComponentRecipeDefinitio
       kind: "recipe_component",
       name,
       description: reason,
+      baseServings: 4,
+      referenceYieldGrams: 245,
       ingredients: [
         { name: "cabbage", quantity: 200, unit: "g", role: "vegetable" },
         { name: "grated coconut", quantity: 40, unit: "g", role: "garnish" },
@@ -123,6 +129,8 @@ function compoundFixture(name: string, reason: string): ComponentRecipeDefinitio
       kind: "recipe_component",
       name,
       description: reason,
+      baseServings: 4,
+      referenceYieldGrams: 250,
       ingredients: [
         { name: "cucumber", quantity: 150, unit: "g", role: "vegetable" },
         { name: "yogurt", quantity: 100, unit: "g", role: "sauce" },
@@ -134,6 +142,8 @@ function compoundFixture(name: string, reason: string): ComponentRecipeDefinitio
       kind: "recipe_component",
       name,
       description: reason,
+      baseServings: 4,
+      referenceYieldGrams: 400,
       ingredients: [
         { name: "long-grain rice", quantity: 200, unit: "g", role: "carbohydrate" },
         { name: "pigeon peas", quantity: 100, unit: "g", role: "legume" },
@@ -146,6 +156,8 @@ function compoundFixture(name: string, reason: string): ComponentRecipeDefinitio
       kind: "recipe_component",
       name,
       description: reason,
+      baseServings: 4,
+      referenceYieldGrams: 270,
       ingredients: [
         { name: "cabbage", quantity: 200, unit: "g", role: "vegetable" },
         { name: "carrot", quantity: 50, unit: "g", role: "vegetable" },
@@ -157,6 +169,8 @@ function compoundFixture(name: string, reason: string): ComponentRecipeDefinitio
     kind: "recipe_component",
     name,
     description: reason,
+    baseServings: 4,
+    referenceYieldGrams: 135,
     ingredients: [
       { name: "primary ingredient", quantity: 120, unit: "g", role: "vegetable" },
       { name: "acid", quantity: 15, unit: "g", role: "acid" },

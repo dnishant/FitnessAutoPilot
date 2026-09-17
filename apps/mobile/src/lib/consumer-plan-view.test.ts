@@ -7,6 +7,7 @@ import type {
   ResolvedRecipe,
 } from "@fitness-autopilot/contracts";
 import {
+  applyPersonalizedPortionsToMeals,
   buildConsumerMealsFromStrategy,
   createEmptyConsumerPlan,
   generateReadySummary,
@@ -300,9 +301,28 @@ describe("generation UX helpers", () => {
     expect(result.plan.meals?.length).toBe(14);
     const tikka = result.plan.meals?.find((m) => m.candidateId === "tikka-chicken");
     expect(tikka?.components.length).toBeGreaterThan(1);
-    expect(tikka?.personalizedNutrition).toBeUndefined();
+    expect(tikka?.personalizedNutrition).toBeDefined();
+    expect(tikka?.personalizedNutrition?.caloriesKcal).toBeGreaterThan(400);
+    expect(tikka?.components.some((c) => c.amount != null && c.unit)).toBe(true);
     expect(result.plan.groceryList).toBeUndefined();
   }, 15000);
+});
+
+describe("PLAN-010 consumer portion wiring", () => {
+  it("applies authoritative portions only when fixture nutrition exists", () => {
+    const meals = applyPersonalizedPortionsToMeals([
+      sampleMeal(),
+      sampleMeal({
+        candidateId: "unknown-dish",
+        name: "Unknown Dish",
+        components: [{ componentId: "main", displayName: "Unknown Dish", role: "main" }],
+      }),
+    ]);
+    expect(meals[0]?.personalizedNutrition).toBeDefined();
+    expect(meals[0]?.components.find((c) => c.displayName === "Basmati Rice")?.unit).toBe("g");
+    expect(meals[1]?.personalizedNutrition).toBeUndefined();
+    expect(meals[1]?.components[0]?.amount).toBeUndefined();
+  });
 });
 
 describe("developer navigation separation", () => {

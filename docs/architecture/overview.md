@@ -26,7 +26,8 @@ Fitness Autopilot is a modular monolith.
    - selected component recipe resolution (`component-recipe-v1`; compound sides after weekly selection)
    - canonical food resolution + deterministic recipe nutrition (`food-resolution-v1`; USDA provider; no user portioning)
    - complete meal assembly (`meal-composition-v1` policy; culinary plate completion; fiber-policy-v1 daily fiber)
-   - portioning
+   - deterministic complete-meal portion solver (`meal-portion-policy-v1` / `meal-portion-solver-v1`; PLAN-010)
+   - legacy catalog portioning (`portionRecipe`; older gram-based planner path)
    - one-day planner
 4. **Infrastructure** (`supabase`) — Postgres + RLS + Edge Functions that call domain logic and persist immutable prescriptions. LLM credentials stay server-side (`generate-recipe`, `culinary-discovery`, `generate-weekly-strategy`, `resolve-recipes`, `compose-meals`). USDA credentials stay server-side (`resolve-recipe-nutrition`). Ranking (`rank-culinary-candidates`) is deterministic and does not call Gemini. `generate-weekly-strategy` dispatches PLAN-007 when ranked lunch/dinner pools are present.
 
