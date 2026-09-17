@@ -9,13 +9,19 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textMuted,
+        tabBarIcon: () => null,
+        tabBarIconStyle: { display: "none" },
         tabBarStyle: {
           backgroundColor: colors.backgroundElevated,
           borderTopColor: colors.border,
+          height: 56,
+          paddingBottom: 8,
+          paddingTop: 8,
         },
         tabBarLabelStyle: {
           ...typography.caption,
           fontWeight: "700",
+          fontSize: 13,
         },
         sceneStyle: { backgroundColor: colors.background },
       }}
