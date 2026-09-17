@@ -10,8 +10,8 @@ import {
 } from "../../../src/components/ui/primitives";
 import { MealComponentRow } from "../../../src/components/ui/meals";
 import {
-  consumerPrepLabel,
   findMealSlot,
+  mealDetailViewModel,
   shortDayLabel,
 } from "../../../src/lib/consumer-plan-view";
 import { useSession } from "../../../src/state/session";
@@ -73,7 +73,7 @@ export default function MealDetailScreen() {
     );
   }
 
-  const prep = consumerPrepLabel(meal.prepIntent, meal.finishTimeMinutes);
+  const detail = mealDetailViewModel(meal);
   const recipesById = weeklyPlan?.recipesByCandidateId ?? {};
   const recipeLinks: Array<{ candidateId: string; name: string }> = [];
   if (recipesById[meal.candidateId]) {
@@ -93,64 +93,58 @@ export default function MealDetailScreen() {
     <ScrollView contentContainerStyle={styles.container}>
       <ScreenHeader
         eyebrow={`${shortDayLabel(day)} · ${mealType.toUpperCase()}`}
-        title={meal.name}
-        subtitle={prep || undefined}
+        title={detail.title}
+        subtitle={detail.prepLabel || undefined}
       />
 
-      {meal.cuisineFamily || meal.flavorTags?.length || meal.experienceTags?.length ? (
-        <Text style={styles.meta}>
-          {[meal.cuisineFamily, ...(meal.flavorTags ?? []), ...(meal.experienceTags ?? [])]
-            .filter(Boolean)
-            .join(" · ")}
-        </Text>
-      ) : null}
+      {detail.metaLine ? <Text style={styles.meta}>{detail.metaLine}</Text> : null}
 
-      <SectionHeader
-        title={
-          meal.components.some((c) => c.amount != null && c.unit)
-            ? "Your plate"
-            : "On the plate"
-        }
-      />
+      <SectionHeader title={detail.plateTitle} />
       <View style={styles.card}>
-        {meal.components.map((component) => (
+        {detail.components.map((component) => (
           <MealComponentRow
             key={component.componentId}
-            displayName={component.displayName}
-            amount={component.amount}
-            unit={component.unit}
+            displayName={component.name}
+            portionLabel={component.portionLabel}
           />
         ))}
       </View>
 
-      {meal.personalizedNutrition ? (
+      {detail.portionMessage ? (
+        <View style={styles.portionStatusCard}>
+          <Text style={styles.portionStatusText}>{detail.portionMessage}</Text>
+        </View>
+      ) : null}
+
+      {detail.nutrition ? (
         <View style={styles.nutritionCard}>
+          <Text style={styles.nutritionSectionLabel}>Nutrition</Text>
           <Text style={styles.nutritionKcal}>
-            {Math.round(meal.personalizedNutrition.caloriesKcal)} kcal
+            {Math.round(detail.nutrition.caloriesKcal)} kcal
           </Text>
           <View style={styles.macroRow}>
             <Text style={styles.macroLine}>
-              Protein {Math.round(meal.personalizedNutrition.proteinGrams)} g
+              Protein {Math.round(detail.nutrition.proteinGrams)} g
             </Text>
             <Text style={styles.macroLine}>
-              Carbs {Math.round(meal.personalizedNutrition.carbsGrams)} g
+              Carbs {Math.round(detail.nutrition.carbsGrams)} g
             </Text>
             <Text style={styles.macroLine}>
-              Fat {Math.round(meal.personalizedNutrition.fatGrams)} g
+              Fat {Math.round(detail.nutrition.fatGrams)} g
             </Text>
-            {meal.personalizedNutrition.fiberGrams != null ? (
+            {detail.nutrition.fiberGrams != null ? (
               <Text style={styles.macroLine}>
-                Fiber {Math.round(meal.personalizedNutrition.fiberGrams)} g
+                Fiber {Math.round(detail.nutrition.fiberGrams)} g
               </Text>
             ) : null}
           </View>
         </View>
       ) : null}
 
-      {prep ? (
+      {detail.prepLabel ? (
         <View style={styles.prepCard}>
           <Text style={styles.prepLabel}>Preparation</Text>
-          <Text style={styles.prepValue}>{prep}</Text>
+          <Text style={styles.prepValue}>{detail.prepLabel}</Text>
         </View>
       ) : null}
 
@@ -162,7 +156,11 @@ export default function MealDetailScreen() {
               key={link.candidateId}
               accessibilityRole="button"
               style={styles.recipeLink}
-              onPress={() => router.push(`/recipe/${link.candidateId}`)}
+              onPress={() =>
+                router.push(
+                  `/recipe/${link.candidateId}?day=${day}&mealType=${mealType}`,
+                )
+              }
             >
               <Text style={styles.recipeLinkTitle}>{link.name}</Text>
               <Text style={styles.recipeLinkAction}>View recipe →</Text>
@@ -195,11 +193,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
   },
+  portionStatusCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+  },
+  portionStatusText: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
   nutritionCard: {
     backgroundColor: colors.surfaceDark,
     borderRadius: radii.lg,
     padding: spacing.lg,
     gap: spacing.sm,
+  },
+  nutritionSectionLabel: {
+    ...typography.label,
+    color: colors.textOnDarkMuted,
+    textTransform: "uppercase",
   },
   nutritionKcal: {
     ...typography.subheading,

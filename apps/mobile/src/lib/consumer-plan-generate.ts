@@ -83,6 +83,7 @@ export type GenerationProgressCallback = (stage: ConsumerPlanGenerationStage) =>
 
 async function buildLocalDemoPlan(
   onProgress?: GenerationProgressCallback,
+  nutritionTarget?: NutritionTarget | null,
 ): Promise<ConsumerWeeklyPlan> {
   const weekStart = startOfWeekMonday();
   onProgress?.("understanding_preferences");
@@ -95,7 +96,7 @@ async function buildLocalDemoPlan(
     rankedCandidates: [...pools.lunchCandidates, ...pools.dinnerCandidates],
     provider: new MockMealCompositionProvider(),
     providerMeta: { provider: "mock", model: "local-fixture" },
-    targetCalories: 2250,
+    targetCalories: nutritionTarget?.targetCalories ?? 2250,
   });
   onProgress?.("creating_week");
   await delay(280);
@@ -122,6 +123,7 @@ async function buildLocalDemoPlan(
       conceptsByCandidateId: composed.result.conceptsByCandidateId,
       recipesByCandidateId,
     }),
+    { nutritionTarget },
   );
   onProgress?.("complete");
   return {
@@ -309,7 +311,7 @@ export async function generateConsumerWeeklyPlan(
   const weekStart = startOfWeekMonday();
   try {
     const plan = apis.useLocalMode
-      ? await buildLocalDemoPlan(onProgress)
+      ? await buildLocalDemoPlan(onProgress, apis.nutritionTarget)
       : await buildRemotePlan(apis, onProgress);
     return { ok: true, plan };
   } catch (error) {

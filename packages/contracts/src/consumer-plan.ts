@@ -6,11 +6,14 @@ import { RankedWeeklyStrategySchema } from "./ranked-weekly-strategy";
 import { GroceryListSchema } from "./grocery";
 
 /**
- * Consumer-facing weekly plan + future PLAN-010 portion shapes.
+ * Consumer-facing weekly plan + PLAN-010 personalized portion shapes.
  *
  * Personalized nutrition/portions are optional so the UI can hide them until
- * the portion solver exists — never invent authoritative values in the client.
+ * an authoritative PLAN-010 result exists — never invent values in the client.
  */
+
+/** Consumer-facing portion readiness — never expose solver diagnostics. */
+export const MealPortionStatusSchema = z.enum(["available", "pending", "blocked"]);
 
 export const PersonalizedMealNutritionSchema = z.object({
   caloriesKcal: z.number().finite().nonnegative(),
@@ -49,6 +52,14 @@ export const ConsumerMealSlotSchema = z.object({
   components: z.array(ConsumerMealComponentSchema).max(16),
   /** Hide in UI until personalized / authoritative. */
   personalizedNutrition: PersonalizedMealNutritionSchema.optional(),
+  /**
+   * PLAN-010 readiness for this meal slot.
+   * - available: authoritative portions + nutrition attached
+   * - pending: solve still in progress (async); do not invent quantities
+   * - blocked: solver could not produce portions; show graceful empty state
+   * Absent means no PLAN-010 attempt / no trusted coefficients for this meal.
+   */
+  portionStatus: MealPortionStatusSchema.optional(),
 });
 
 export const ConsumerWeeklyPlanStatusSchema = z.enum([
@@ -85,6 +96,7 @@ export const ConsumerWeeklyPlanSchema = z.object({
 export type PersonalizedMealNutrition = z.infer<typeof PersonalizedMealNutritionSchema>;
 export type PersonalizedMealComponent = z.infer<typeof PersonalizedMealComponentSchema>;
 export type ConsumerMealComponent = z.infer<typeof ConsumerMealComponentSchema>;
+export type MealPortionStatus = z.infer<typeof MealPortionStatusSchema>;
 export type ConsumerMealSlot = z.infer<typeof ConsumerMealSlotSchema>;
 export type ConsumerWeeklyPlanStatus = z.infer<typeof ConsumerWeeklyPlanStatusSchema>;
 export type ConsumerPlanGenerationStage = z.infer<typeof ConsumerPlanGenerationStageSchema>;

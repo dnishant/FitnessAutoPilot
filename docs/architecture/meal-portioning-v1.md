@@ -57,6 +57,25 @@ Coarse-to-fine deterministic search over 2–5 portion variables:
 - Fixtures: Chicken Tikka, Jerk Chicken, Thai Green Curry, Shrimp Tacos
 - Manual `MealNutritionIntent` is labeled developer/test — not production allocation
 
+## Consumer UI (UI-001 integration)
+
+Authoritative PLAN-010 results flow into the existing consumer plan:
+
+```
+Generate Plan → applyPersonalizedPortionsToMeals → ConsumerMealSlot
+  → MealCard / Today (kcal · protein)
+  → Meal Detail (Your plate + nutrition)
+  → Recipe (optional Your portion when opened from a meal)
+```
+
+- Portions/nutrition are flattened onto `ConsumerMealSlot` for display — React never solves.
+- Compound culinary units stay whole on Meal Detail (e.g. Kachumber), not ingredientized.
+- `best_feasible` renders as a normal consumer meal; diagnostics stay in developer preview.
+- `blocked` sets `portionStatus` with no invented quantities.
+- Production intents today are **developer-test shares** of daily targets
+  (`developerTestMealIntentFromDaily`). Legitimate meal-level allocation is **PLAN-011**.
+- Without trusted coefficients for a candidate, the meal concept still shows; no fake macros.
+
 ## Non-goals
 
 Daily allocation, grocery aggregation, prep scheduling, meal replacement, LLM portioning.

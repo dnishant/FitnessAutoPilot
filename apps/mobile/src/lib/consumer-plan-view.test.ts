@@ -10,11 +10,15 @@ import {
   applyPersonalizedPortionsToMeals,
   buildConsumerMealsFromStrategy,
   createEmptyConsumerPlan,
+  formatPortionAmount,
+  formatPortionDisplay,
   generateReadySummary,
   humanizePlanGenerationError,
   mealCardDisplayModel,
+  mealDetailViewModel,
   mealsForDay,
   nutritionSummaryDisplayModel,
+  recipeYourPortionFromMeal,
 } from "./consumer-plan-view";
 import { generateConsumerWeeklyPlan } from "./consumer-plan-generate";
 import { plan008SimpleWeeklyStrategy } from "@fitness-autopilot/domain";
@@ -319,9 +323,167 @@ describe("PLAN-010 consumer portion wiring", () => {
       }),
     ]);
     expect(meals[0]?.personalizedNutrition).toBeDefined();
+    expect(meals[0]?.portionStatus).toBe("available");
     expect(meals[0]?.components.find((c) => c.displayName === "Basmati Rice")?.unit).toBe("g");
     expect(meals[1]?.personalizedNutrition).toBeUndefined();
+    expect(meals[1]?.portionStatus).toBeUndefined();
     expect(meals[1]?.components[0]?.amount).toBeUndefined();
+  });
+
+  it("MealCard display shows compact PLAN-010 kcal · protein when available", () => {
+    const [tikka] = applyPersonalizedPortionsToMeals([sampleMeal()]);
+    const model = mealCardDisplayModel(tikka!);
+    expect(model.nutritionLine).toMatch(/^\d+ kcal · \d+g protein$/);
+    expect(model.prepLabel).toBe("Meal prepped");
+  });
+
+  it("MealCard display hides nutrition without PLAN-010 data", () => {
+    const model = mealCardDisplayModel(
+      sampleMeal({
+        candidateId: "unknown-dish",
+        personalizedNutrition: undefined,
+        portionStatus: undefined,
+      }),
+    );
+    expect(model.nutritionLine).toBeNull();
+  });
+
+  it("Meal Detail view model renders exact personalized component portions", () => {
+    const [tikka] = applyPersonalizedPortionsToMeals([sampleMeal()]);
+    const detail = mealDetailViewModel(tikka!);
+    expect(detail.plateTitle).toBe("Your plate");
+    expect(detail.portionStatus).toBe("available");
+    expect(detail.nutrition?.caloriesKcal).toBeGreaterThan(400);
+    expect(detail.nutrition?.proteinGrams).toBeGreaterThan(30);
+    expect(detail.nutrition?.carbsGrams).toBeGreaterThan(0);
+    expect(detail.nutrition?.fatGrams).toBeGreaterThan(0);
+
+    const kachumber = detail.components.find((c) => c.name === "Kachumber");
+    expect(kachumber?.portionLabel).toMatch(/^\d+ g$/);
+    // Compound culinary unit — never explode into cucumber/tomato/onion rows.
+    expect(detail.components.map((c) => c.name).join(" ")).not.toMatch(/Cucumber|Tomato|Onion/i);
+  });
+
+  it("formats discrete count portions without trailing decimals", () => {
+    expect(formatPortionAmount(2)).toBe("2");
+    expect(formatPortionAmount(2.0)).toBe("2");
+    expect(formatPortionDisplay(2, "tortillas")).toBe("2 tortillas");
+    expect(formatPortionDisplay(185, "g")).toBe("185 g");
+    expect(formatPortionAmount(1.5)).toBe("1.5");
+  });
+
+  it("applies shrimp taco discrete tortilla portions from PLAN-010", () => {
+    const meals = applyPersonalizedPortionsToMeals([
+      sampleMeal({
+        candidateId: "chile-lime-shrimp-tacos",
+        name: "Shrimp Tacos",
+        components: [
+          { componentId: "main", displayName: "Chile Lime Shrimp", role: "main" },
+          { componentId: "tortillas", displayName: "Corn Tortillas", role: "carbohydrate" },
+          { componentId: "slaw", displayName: "Cabbage Slaw", role: "vegetable" },
+          { componentId: "salsa", displayName: "Salsa", role: "sauce_condiment" },
+        ],
+      }),
+    ]);
+    const taco = meals[0]!;
+    expect(taco.portionStatus).toBe("available");
+    const tortillas = taco.components.find(
+      (c) => c.componentId === "tortillas" || /tortilla/i.test(c.displayName),
+    );
+    expect(tortillas?.amount).toBeDefined();
+    expect(Number.isInteger(tortillas!.amount)).toBe(true);
+    expect(formatPortionDisplay(tortillas!.amount!, tortillas!.unit!)).not.toMatch(/\.0 /);
+  });
+
+  it("uses final rounded PLAN-010 nutrition on the detail model", () => {
+    const [tikka] = applyPersonalizedPortionsToMeals([sampleMeal()]);
+    const detail = mealDetailViewModel(tikka!);
+    expect(detail.nutrition).toEqual(tikka!.personalizedNutrition);
+    expect(Number.isInteger(detail.nutrition!.caloriesKcal)).toBe(true);
+  });
+
+  it("best_feasible results render as normal available consumer meals", () => {
+    // Solver may return best_feasible for fixture intents; consumer status is still available.
+    const [meal] = applyPersonalizedPortionsToMeals([
+      sampleMeal({ candidateId: "jamaican-jerk-chicken", name: "Jamaican Jerk Chicken" }),
+    ]);
+    expect(meal?.portionStatus).toBe("available");
+    expect(meal?.personalizedNutrition).toBeDefined();
+    const card = mealCardDisplayModel(meal!);
+    expect(card.nutritionLine).toMatch(/kcal · .+protein/);
+    expect(card.nutritionLine).not.toMatch(/best_feasible|OPTIMIZATION/i);
+  });
+
+  it("blocked meals never invent portions and surface a graceful message", () => {
+    const blocked = sampleMeal({
+      portionStatus: "blocked",
+      personalizedNutrition: undefined,
+      components: sampleMeal().components.map((c) => ({
+        componentId: c.componentId,
+        displayName: c.displayName,
+        role: c.role,
+      })),
+    });
+    const detail = mealDetailViewModel(blocked);
+    expect(detail.portionStatus).toBe("blocked");
+    expect(detail.nutrition).toBeNull();
+    expect(detail.components.every((c) => c.portionLabel == null)).toBe(true);
+    expect(detail.portionMessage).toMatch(/finalizing the portions/i);
+    expect(mealCardDisplayModel(blocked).nutritionLine).toBeNull();
+  });
+
+  it("pending meals show a subtle portion-loading message without fake quantities", () => {
+    const pending = sampleMeal({
+      portionStatus: "pending",
+      personalizedNutrition: undefined,
+    });
+    const detail = mealDetailViewModel(pending);
+    expect(detail.portionMessage).toMatch(/Personalizing/i);
+    expect(detail.nutrition).toBeNull();
+    expect(mealCardDisplayModel(pending).nutritionLine).toBeNull();
+  });
+
+  it("Recipe context shows personalized serving when opened from a meal", () => {
+    const [tikka] = applyPersonalizedPortionsToMeals([sampleMeal()]);
+    const yours = recipeYourPortionFromMeal({
+      meal: tikka!,
+      recipeCandidateId: "tikka-chicken",
+    });
+    expect(yours?.label).toMatch(/^\d+ g prepared /);
+    expect(yours?.componentName).toMatch(/Chicken Tikka/i);
+  });
+
+  it("Recipe standalone works without personalized meal context", () => {
+    const meal = sampleMeal(); // no amounts
+    const yours = recipeYourPortionFromMeal({
+      meal,
+      recipeCandidateId: "tikka-chicken",
+    });
+    expect(yours).toBeNull();
+  });
+
+  it("hides fiber on detail when PLAN-010 omits fiber completeness", () => {
+    const detail = mealDetailViewModel(
+      sampleMeal({
+        portionStatus: "available",
+        personalizedNutrition: {
+          caloriesKcal: 612,
+          proteinGrams: 54,
+          carbsGrams: 63,
+          fatGrams: 16,
+        },
+        components: [
+          {
+            componentId: "main",
+            displayName: "Chicken Tikka",
+            role: "main",
+            amount: 185,
+            unit: "g",
+          },
+        ],
+      }),
+    );
+    expect(detail.nutrition?.fiberGrams).toBeUndefined();
   });
 });
 

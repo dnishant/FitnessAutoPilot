@@ -6,6 +6,7 @@ import type {
   CookingPreferences,
   DayOfWeek,
   MealConcept,
+  MealPortionStatus,
   MealPreferences,
   NutritionTarget,
   PrepIntent,
@@ -240,8 +241,14 @@ export function buildConsumerMealsFromStrategy(input: {
 
 /**
  * Apply authoritative PLAN-010 portions when trusted fixture/nutrition coefficients exist.
- * Uses a clearly labeled developer test meal intent derived from daily targets when provided.
+ *
+ * Production meal intents: only labeled developer/test shares derived from daily targets
+ * (see `developerTestMealIntentFromDaily`). Legitimate unlabeled MealNutritionIntent
+ * allocation is PLAN-011 — do not invent a production allocation policy here.
+ *
  * Does not invent portions for meals without trusted nutrition data.
+ * `best_feasible` is treated as a normal consumer plate (no diagnostic chrome).
+ * `blocked` never invents quantities; sets portionStatus for a graceful empty state.
  */
 export function applyPersonalizedPortionsToMeals(
   meals: readonly ConsumerMealSlot[],
@@ -282,7 +289,12 @@ export function applyPersonalizedPortionsToMeals(
       });
       cache.set(cacheKey, plan);
     }
-    if (plan.status === "blocked") return meal;
+    if (plan.status === "blocked") {
+      return {
+        ...meal,
+        portionStatus: "blocked" as const,
+      };
+    }
 
     const byId = new Map(plan.portions.map((p) => [p.componentId, p]));
     const byName = new Map(
@@ -305,6 +317,7 @@ export function applyPersonalizedPortionsToMeals(
     });
 
     // Prefer solver portion order when the plate matches fixture components.
+    // Compound culinary units stay whole (e.g. Kachumber 130 g) — never explode ingredients.
     const mergedComponents =
       components.some((c) => c.amount != null) && plan.portions.length >= components.length
         ? plan.portions.map((portion) => {
@@ -327,6 +340,7 @@ export function applyPersonalizedPortionsToMeals(
       ...meal,
       components: mergedComponents,
       personalizedNutrition: plan.nutrition,
+      portionStatus: "available" as const,
     };
   });
 }
@@ -458,16 +472,156 @@ export function mealCardDisplayModel(meal: ConsumerMealSlot): {
   const componentNames = meal.components
     .filter((c) => c.displayName !== meal.name)
     .map((c) => titleCase(c.displayName));
-  const nutrition = meal.personalizedNutrition;
+  const nutrition =
+    meal.portionStatus === "available" || meal.portionStatus == null
+      ? meal.personalizedNutrition
+      : undefined;
   return {
     mealTypeLabel: meal.mealType.toUpperCase(),
     name: meal.name,
     componentNames,
     prepLabel: consumerPrepLabel(meal.prepIntent, meal.finishTimeMinutes),
-    nutritionLine: nutrition
-      ? `${Math.round(nutrition.caloriesKcal)} kcal · ${Math.round(nutrition.proteinGrams)}g protein`
-      : null,
+    nutritionLine:
+      nutrition != null
+        ? `${Math.round(nutrition.caloriesKcal)} kcal · ${Math.round(nutrition.proteinGrams)}g protein`
+        : null,
   };
+}
+
+/**
+ * Format an authoritative PLAN-010 amount for consumer display.
+ * Preserves discrete counts (`2 tortillas`) — never `2.0 tortillas`.
+ */
+export function formatPortionAmount(amount: number): string {
+  if (!Number.isFinite(amount)) return "";
+  const nearest = Math.round(amount);
+  if (Math.abs(amount - nearest) < 1e-6) {
+    return String(nearest);
+  }
+  const oneDecimal = Math.round(amount * 10) / 10;
+  if (Math.abs(oneDecimal - Math.round(oneDecimal)) < 1e-6) {
+    return String(Math.round(oneDecimal));
+  }
+  return String(oneDecimal);
+}
+
+export function formatPortionDisplay(amount: number, unit: string): string {
+  return `${formatPortionAmount(amount)} ${unit}`;
+}
+
+export function resolveMealPortionStatus(meal: ConsumerMealSlot): MealPortionStatus | null {
+  if (meal.portionStatus) return meal.portionStatus;
+  if (meal.personalizedNutrition) return "available";
+  if (meal.components.some((c) => c.amount != null && c.unit)) return "available";
+  return null;
+}
+
+export function mealDetailViewModel(meal: ConsumerMealSlot): {
+  title: string;
+  metaLine: string | null;
+  plateTitle: string;
+  components: Array<{
+    componentId: string;
+    name: string;
+    portionLabel: string | null;
+  }>;
+  nutrition: {
+    caloriesKcal: number;
+    proteinGrams: number;
+    carbsGrams: number;
+    fatGrams: number;
+    fiberGrams?: number;
+  } | null;
+  portionStatus: MealPortionStatus | null;
+  portionMessage: string | null;
+  prepLabel: string | null;
+} {
+  const portionStatus = resolveMealPortionStatus(meal);
+  const showPortions = portionStatus === "available";
+  const hasAnyPortion = meal.components.some((c) => c.amount != null && c.unit);
+
+  let portionMessage: string | null = null;
+  if (portionStatus === "blocked") {
+    portionMessage = "We're still finalizing the portions for this meal.";
+  } else if (portionStatus === "pending") {
+    portionMessage = "Personalizing your portions…";
+  }
+
+  const nutrition =
+    showPortions && meal.personalizedNutrition
+      ? {
+          caloriesKcal: meal.personalizedNutrition.caloriesKcal,
+          proteinGrams: meal.personalizedNutrition.proteinGrams,
+          carbsGrams: meal.personalizedNutrition.carbsGrams,
+          fatGrams: meal.personalizedNutrition.fatGrams,
+          ...(meal.personalizedNutrition.fiberGrams != null
+            ? { fiberGrams: meal.personalizedNutrition.fiberGrams }
+            : {}),
+        }
+      : null;
+
+  const metaParts = [
+    meal.cuisineFamily,
+    ...(meal.flavorTags ?? []),
+    ...(meal.experienceTags ?? []),
+  ].filter(Boolean);
+
+  return {
+    title: meal.name,
+    metaLine: metaParts.length ? metaParts.join(" · ") : null,
+    plateTitle: showPortions && hasAnyPortion ? "Your plate" : "On the plate",
+    components: meal.components.map((component) => ({
+      componentId: component.componentId,
+      name: component.displayName,
+      portionLabel:
+        showPortions && component.amount != null && component.unit
+          ? formatPortionDisplay(component.amount, component.unit)
+          : null,
+    })),
+    nutrition,
+    portionStatus,
+    portionMessage,
+    prepLabel: consumerPrepLabel(meal.prepIntent, meal.finishTimeMinutes),
+  };
+}
+
+/**
+ * Contextual "Your portion" for a recipe opened from a personalized meal.
+ * Reference recipe batch sizes remain unchanged — this is display-only context.
+ */
+export function recipeYourPortionFromMeal(input: {
+  meal: ConsumerMealSlot;
+  recipeCandidateId: string;
+}): { label: string; amountLabel: string; componentName: string } | null {
+  const status = resolveMealPortionStatus(input.meal);
+  if (status === "blocked" || status === "pending") return null;
+
+  const component = findComponentForRecipe(input.meal, input.recipeCandidateId);
+  if (!component || component.amount == null || !component.unit) return null;
+
+  const amountLabel = formatPortionDisplay(component.amount, component.unit);
+  return {
+    label: `${amountLabel} prepared ${component.displayName}`,
+    amountLabel,
+    componentName: component.displayName,
+  };
+}
+
+function findComponentForRecipe(
+  meal: ConsumerMealSlot,
+  recipeCandidateId: string,
+): ConsumerMealComponent | undefined {
+  const byId = meal.components.find((c) => c.componentId === recipeCandidateId);
+  if (byId) return byId;
+
+  if (recipeCandidateId === meal.candidateId) {
+    return (
+      meal.components.find((c) => c.role === "main") ??
+      meal.components.find((c) => c.displayName === meal.name) ??
+      meal.components[0]
+    );
+  }
+  return undefined;
 }
 
 export function nutritionSummaryDisplayModel(input: {

@@ -4,7 +4,10 @@ import type {
   PersonalizedMealNutrition,
 } from "@fitness-autopilot/contracts";
 import { colors, radii, spacing, typography } from "../../theme/tokens";
-import { consumerPrepLabel } from "../../lib/consumer-plan-view";
+import {
+  formatPortionDisplay,
+  mealCardDisplayModel,
+} from "../../lib/consumer-plan-view";
 
 export function NutritionSummary(props: {
   calories: number;
@@ -46,37 +49,27 @@ export function MealCard(props: {
   onPress?: () => void;
   personalizedNutrition?: PersonalizedMealNutrition | null;
 }) {
-  const mainName = props.meal.name;
-  const componentNames = props.meal.components
-    .filter((c) => c.displayName !== mainName)
-    .map((c) =>
-      c.displayName
-        .split(" ")
-        .map((part) => (part ? part[0]!.toUpperCase() + part.slice(1) : part))
-        .join(" "),
-    );
-  const prep = consumerPrepLabel(props.meal.prepIntent, props.meal.finishTimeMinutes);
-  const nutrition = props.personalizedNutrition ?? props.meal.personalizedNutrition;
+  const model = mealCardDisplayModel(props.meal);
+  const nutritionLine =
+    props.personalizedNutrition != null
+      ? `${Math.round(props.personalizedNutrition.caloriesKcal)} kcal · ${Math.round(props.personalizedNutrition.proteinGrams)}g protein`
+      : model.nutritionLine;
 
   const content = (
     <View style={styles.mealCard}>
-      <Text style={styles.mealType}>{props.meal.mealType.toUpperCase()}</Text>
-      <Text style={styles.mealName}>{mainName}</Text>
-      {componentNames.length > 0 ? (
+      <Text style={styles.mealType}>{model.mealTypeLabel}</Text>
+      <Text style={styles.mealName}>{model.name}</Text>
+      {model.componentNames.length > 0 ? (
         <View style={styles.componentList}>
-          {componentNames.map((name) => (
+          {model.componentNames.map((name) => (
             <Text key={name} style={styles.componentLine}>
               {name}
             </Text>
           ))}
         </View>
       ) : null}
-      {prep ? <Text style={styles.prepMeta}>{prep}</Text> : null}
-      {nutrition ? (
-        <Text style={styles.nutritionMeta}>
-          {Math.round(nutrition.caloriesKcal)} kcal · {Math.round(nutrition.proteinGrams)}g protein
-        </Text>
-      ) : null}
+      {nutritionLine ? <Text style={styles.nutritionMeta}>{nutritionLine}</Text> : null}
+      {model.prepLabel ? <Text style={styles.prepMeta}>{model.prepLabel}</Text> : null}
     </View>
   );
 
@@ -87,7 +80,7 @@ export function MealCard(props: {
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`${props.meal.mealType}: ${mainName}`}
+      accessibilityLabel={`${props.meal.mealType}: ${model.name}`}
       onPress={props.onPress}
     >
       {content}
@@ -99,15 +92,18 @@ export function MealComponentRow(props: {
   displayName: string;
   amount?: number;
   unit?: string;
+  portionLabel?: string | null;
 }) {
+  const amountLabel =
+    props.portionLabel ??
+    (props.amount != null && props.unit
+      ? formatPortionDisplay(props.amount, props.unit)
+      : null);
+
   return (
     <View style={styles.componentRow}>
       <Text style={styles.componentRowName}>{props.displayName}</Text>
-      {props.amount != null && props.unit ? (
-        <Text style={styles.componentRowAmount}>
-          {props.amount} {props.unit}
-        </Text>
-      ) : null}
+      {amountLabel ? <Text style={styles.componentRowAmount}>{amountLabel}</Text> : null}
     </View>
   );
 }
@@ -238,14 +234,14 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
   },
-  prepMeta: {
-    ...typography.caption,
-    color: colors.primary,
-    marginTop: spacing.sm,
-  },
   nutritionMeta: {
     ...typography.caption,
     color: colors.textMuted,
+    marginTop: spacing.sm,
+  },
+  prepMeta: {
+    ...typography.caption,
+    color: colors.primary,
     marginTop: spacing.xs,
   },
   componentRow: {
