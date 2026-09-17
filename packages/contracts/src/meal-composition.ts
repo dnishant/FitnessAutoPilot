@@ -112,13 +112,6 @@ export const ComponentRecipeDefinitionSchema = z.object({
   description: z.string().trim().min(1).max(400).optional(),
   ingredients: z.array(ComponentRecipeIngredientSchema).min(1).max(20),
   instructions: z.array(z.string().trim().min(1).max(400)).max(12).optional(),
-  /**
-   * Culinary reference batch size (not a personalized serving).
-   * PLAN-010 requires baseServings and/or referenceYieldGrams to scale compounds as units.
-   */
-  baseServings: z.number().finite().positive().max(24).optional(),
-  /** Total edible yield grams of the reference batch when reliably known. */
-  referenceYieldGrams: z.number().finite().positive().optional(),
 });
 
 export const AtomicFoodDefinitionSchema = z.object({

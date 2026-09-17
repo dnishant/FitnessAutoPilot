@@ -13,13 +13,7 @@ import type {
   ResolvedRecipe,
 } from "@fitness-autopilot/contracts";
 import { WEEK_DAYS as DAYS } from "@fitness-autopilot/contracts";
-import {
-  developerTestMealIntentFromDaily,
-  formatMacroGrams,
-  formatNutritionCalories,
-  plan010FixtureRequestForCandidate,
-  solveMealPortions,
-} from "@fitness-autopilot/domain";
+import { formatMacroGrams, formatNutritionCalories } from "@fitness-autopilot/domain";
 import { prepIntentLabel as domainPrepIntentLabel } from "./weekly-strategy-preview";
 
 export const CONSUMER_PLAN_STORAGE_KEY = "fa.consumer.weeklyPlan";
@@ -231,104 +225,11 @@ export function buildConsumerMealsFromStrategy(input: {
             ].filter(Boolean)
           : undefined,
         components: componentsFromConcept(concept, slot.name),
-        // personalizedNutrition applied by applyPersonalizedPortionsToMeals (PLAN-010)
+        // personalizedNutrition intentionally omitted until PLAN-010
       });
     }
   }
   return meals;
-}
-
-/**
- * Apply authoritative PLAN-010 portions when trusted fixture/nutrition coefficients exist.
- * Uses a clearly labeled developer test meal intent derived from daily targets when provided.
- * Does not invent portions for meals without trusted nutrition data.
- */
-export function applyPersonalizedPortionsToMeals(
-  meals: readonly ConsumerMealSlot[],
-  options?: {
-    nutritionTarget?: NutritionTarget | null;
-  },
-): ConsumerMealSlot[] {
-  const cache = new Map<string, ReturnType<typeof solveMealPortions>>();
-  const daily = options?.nutritionTarget;
-
-  return meals.map((meal) => {
-    const intent = daily
-      ? developerTestMealIntentFromDaily({
-          dailyCalories: daily.targetCalories,
-          dailyProteinGrams: daily.proteinG,
-          dailyCarbsGrams: daily.carbohydrateG,
-          dailyFatGrams: daily.fatG ?? daily.fatMinG,
-          dailyFiberGrams: daily.fiberG,
-          mealType: meal.mealType,
-        })
-      : {
-          targetCaloriesKcal: 600,
-          targetProteinGrams: 48,
-          isDeveloperTestIntent: true,
-          label: "Developer test intent (default) — not PLAN-011",
-        };
-
-    const request = plan010FixtureRequestForCandidate(meal.candidateId, intent);
-    if (!request) return meal;
-
-    const cacheKey = `${meal.candidateId}:${intent.targetCaloriesKcal}:${intent.targetProteinGrams ?? ""}`;
-    let plan = cache.get(cacheKey);
-    if (!plan) {
-      plan = solveMealPortions({
-        ...request,
-        mealId: `${meal.candidateId}:${meal.day}:${meal.mealType}`,
-        mealName: meal.name,
-      });
-      cache.set(cacheKey, plan);
-    }
-    if (plan.status === "blocked") return meal;
-
-    const byId = new Map(plan.portions.map((p) => [p.componentId, p]));
-    const byName = new Map(
-      plan.portions.map((p) => [p.displayName.toLowerCase(), p]),
-    );
-
-    const components = meal.components.map((component) => {
-      const match =
-        byId.get(component.componentId) ??
-        byName.get(component.displayName.toLowerCase()) ??
-        (component.role === "main"
-          ? plan!.portions.find((p) => p.role === "main")
-          : undefined);
-      if (!match) return component;
-      return {
-        ...component,
-        amount: match.amount,
-        unit: match.unit,
-      };
-    });
-
-    // Prefer solver portion order when the plate matches fixture components.
-    const mergedComponents =
-      components.some((c) => c.amount != null) && plan.portions.length >= components.length
-        ? plan.portions.map((portion) => {
-            const existing = components.find(
-              (c) =>
-                c.componentId === portion.componentId ||
-                c.displayName.toLowerCase() === portion.displayName.toLowerCase(),
-            );
-            return {
-              componentId: existing?.componentId ?? portion.componentId,
-              displayName: existing?.displayName ?? portion.displayName,
-              role: existing?.role ?? portion.role,
-              amount: portion.amount,
-              unit: portion.unit,
-            };
-          })
-        : components;
-
-    return {
-      ...meal,
-      components: mergedComponents,
-      personalizedNutrition: plan.nutrition,
-    };
-  });
 }
 
 export function createEmptyConsumerPlan(weekStart = startOfWeekMonday()): ConsumerWeeklyPlan {

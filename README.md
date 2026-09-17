@@ -138,16 +138,6 @@ Offline fixture QA (no Gemini):
 pnpm --filter @fitness-autopilot/llm plan0095:qa:fixture
 ```
 
-### Dev-only meal portion solver (PLAN-010)
-
-Deterministic complete-meal portioning (`meal-portion-policy-v1`). No Gemini / USDA calls — uses trusted nutrition coefficients + an explicit `MealNutritionIntent`.
-
-Developer preview: `/meal-portion-preview` (also listed under Developer hub). Manual intent fields are labeled developer/test and are **not** production daily allocation (PLAN-011).
-
-```bash
-pnpm --filter @fitness-autopilot/domain test meal-portioning
-```
-
 ### Dev-only candidate ranking (PLAN-006)
 
 Deterministic ranking + culinary deduplication. No Gemini call.
