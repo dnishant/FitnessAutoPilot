@@ -7,9 +7,9 @@ Turn PLAN-008 structured recipe ingredients into **canonical foods** and **deter
 ```
 Selected PLAN-008 recipes (+ selected component recipes)
         ↓
-    PLAN-009 Food resolution + nutrition
+PLAN-009 Food resolution + nutrition
         ↓
-    PLAN-010 Portion solver
+future PLAN-010 Portion solver
 ```
 
 PLAN-009 answers: *What food is this, and what nutrition does this quantity contribute?*  

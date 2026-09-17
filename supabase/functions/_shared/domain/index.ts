@@ -20,7 +20,6 @@ export * from "./recipes/recipe-resolution.ts";
 export * from "./recipes/recipe-resolution-fixtures.ts";
 export * from "./food-resolution/index.ts";
 export * from "./meal-composition/index.ts";
-export * from "./meal-portioning/index.ts";
 export * from "./planning/portioning.ts";
 export * from "./planning/planner.ts";
 export * from "./planning/weekly-strategy.ts";

@@ -24,7 +24,6 @@ import {
 } from "@fitness-autopilot/domain";
 import {
   addDaysIso,
-  applyPersonalizedPortionsToMeals,
   buildConsumerMealsFromStrategy,
   createEmptyConsumerPlan,
   humanizePlanGenerationError,
@@ -116,13 +115,11 @@ async function buildLocalDemoPlan(
       }
     }
   }
-  const meals = applyPersonalizedPortionsToMeals(
-    buildConsumerMealsFromStrategy({
-      strategy,
-      conceptsByCandidateId: composed.result.conceptsByCandidateId,
-      recipesByCandidateId,
-    }),
-  );
+  const meals = buildConsumerMealsFromStrategy({
+    strategy,
+    conceptsByCandidateId: composed.result.conceptsByCandidateId,
+    recipesByCandidateId,
+  });
   onProgress?.("complete");
   return {
     weekStart,
@@ -276,14 +273,11 @@ async function buildRemotePlan(
     ? resolved.result.recipesByCandidateId
     : (resolved.result?.recipesByCandidateId ?? {});
 
-  const meals = applyPersonalizedPortionsToMeals(
-    buildConsumerMealsFromStrategy({
-      strategy: strategyResult.strategy,
-      conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
-      recipesByCandidateId,
-    }),
-    { nutritionTarget: apis.nutritionTarget },
-  );
+  const meals = buildConsumerMealsFromStrategy({
+    strategy: strategyResult.strategy,
+    conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+    recipesByCandidateId,
+  });
 
   onProgress?.("complete");
   return {

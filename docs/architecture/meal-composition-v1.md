@@ -19,7 +19,7 @@ Selected component recipe resolution (`component-recipe-v1`)
         ↓
 PLAN-009 Canonical USDA nutrition
         ↓
-PLAN-010 Deterministic portion solver
+future PLAN-010 Portion solver
 ```
 
 Composition answers: *What belongs on this plate?*  
@@ -37,7 +37,7 @@ Policy version remains `meal-composition-v1`. Prompt version is `meal-compositio
 | PLAN-008 | Detailed main recipes for selected candidates |
 | Selected component resolution | Compound side recipes + atomic staple identities (PLAN-009.5 HOW path) |
 | PLAN-009 | Canonical USDA nutrition for selected detailed recipes |
-| PLAN-010 | Personalized quantities / solver bounds (`meal-portioning-v1`) |
+| PLAN-010 | Personalized quantities / solver bounds |
 
 ## What vs how
 
