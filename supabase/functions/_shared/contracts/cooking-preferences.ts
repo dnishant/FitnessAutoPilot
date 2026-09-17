@@ -32,18 +32,18 @@ export const MaxFinishMinutesSchema = z.union([z.literal(0), FreshFinishMinutesS
 export const PREP_FREQUENCY_OPTIONS = [
   {
     value: "once_weekly",
-    label: "One main prep session",
-    detail: "Do most prep in one session.",
+    label: "Once a week",
+    detail: "One dedicated prep session for the week.",
   },
   {
     value: "twice_weekly",
-    label: "Two smaller prep sessions",
-    detail: "Fresher food, shorter sessions.",
+    label: "Twice a week",
+    detail: "Two shorter prep sessions.",
   },
   {
     value: "throughout_week",
-    label: "Prep ingredients and cook as I go",
-    detail: "Less batch cooking.",
+    label: "Throughout the week",
+    detail: "Prep ingredients and cook as you go.",
   },
 ] as const satisfies ReadonlyArray<{
   value: z.infer<typeof PrepFrequencySchema>;
@@ -65,20 +65,20 @@ export const PREP_SESSION_TIME_OPTIONS = [
 export const WEEKLY_COOKING_STYLE_OPTIONS = [
   {
     value: "mostly_ready",
-    label: "Mostly ready to eat",
-    detail: "Prepare most lunches/dinners ahead; minimal weekday cooking.",
+    label: "Mostly ready",
+    detail: "Cook ahead and keep weekday cooking minimal.",
     recommended: false,
   },
   {
     value: "ready_lunch_fresh_dinner",
-    label: "Ready lunches + quick fresh dinners",
-    detail: "Keep lunches convenient; finish some dinners fresh in a few minutes.",
+    label: "Balanced",
+    detail: "Prep ahead, but finish some meals fresh.",
     recommended: true,
   },
   {
     value: "fresh_focused",
-    label: "Prep ingredients, cook more fresh",
-    detail: "Less batch cooking; more meals made from prepped components.",
+    label: "Fresh focused",
+    detail: "Cook more meals fresh during the week.",
     recommended: false,
   },
 ] as const satisfies ReadonlyArray<{

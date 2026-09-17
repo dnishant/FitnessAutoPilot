@@ -36,5 +36,5 @@ export default function Index() {
   if (!cookingPreferences) {
     return <Redirect href="/cooking-preferences" />;
   }
-  return <Redirect href="/today" />;
+  return <Redirect href="/(tabs)/today" />;
 }

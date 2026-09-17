@@ -29,7 +29,7 @@ export default function CookingPreferencesScreen() {
       setPersistError(saved.error);
       return;
     }
-    router.replace("/today");
+    router.replace("/(tabs)/today");
   }
 
   return (
@@ -48,5 +48,5 @@ export default function CookingPreferencesScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, gap: 12 },
+  container: { padding: 24, gap: 12, backgroundColor: "#F6F3EE" },
 });

@@ -220,15 +220,15 @@ const sampleStats: WeeklyStrategyStats = {
 };
 
 describe("weekly strategy preview route", () => {
-  it("registers a reachable Weekly Strategy Preview route and Today entry", () => {
+  it("registers a reachable Weekly Strategy Preview route and Developer entry", () => {
     const layout = readFileSync(join(mobileRoot, "app/_layout.tsx"), "utf8");
-    const today = readFileSync(join(mobileRoot, "app/today.tsx"), "utf8");
+    const developer = readFileSync(join(mobileRoot, "app/developer/index.tsx"), "utf8");
     const screen = readFileSync(join(mobileRoot, "app/weekly-strategy-preview.tsx"), "utf8");
     expect(WEEKLY_STRATEGY_PREVIEW_ROUTE).toBe("/weekly-strategy-preview");
     expect(WEEKLY_STRATEGY_PREVIEW_TITLE).toBe("Dev: Weekly Strategy Preview");
     expect(layout).toContain("weekly-strategy-preview");
-    expect(today).toContain(WEEKLY_STRATEGY_PREVIEW_ROUTE);
-    expect(today).toContain(WEEKLY_STRATEGY_PREVIEW_TITLE);
+    expect(developer).toContain(WEEKLY_STRATEGY_PREVIEW_ROUTE);
+    expect(developer).toContain(WEEKLY_STRATEGY_PREVIEW_TITLE);
     expect(screen).toContain("WEEKLY_STRATEGY_PREVIEW_TITLE");
     expect(screen).toContain("RANKED_WEEKLY_STRATEGY_PREVIEW_LOADING");
     expect(screen).toContain("Generate Weekly Strategy");
@@ -436,7 +436,7 @@ describe("weekly strategy preview rendering model", () => {
     );
     expect(context.find((row) => row.label === "Allergies")?.value).toBe("Peanuts");
     expect(context.find((row) => row.label === "Prep frequency")?.value).toContain(
-      "One main prep session",
+      "Once a week",
     );
     expect(context.find((row) => row.label === "Shared prep optimization")?.value).toBe(
       "Automatic (planner-owned)",

@@ -79,13 +79,13 @@ describe("culinary discovery preview", () => {
       "utf8",
     );
     const layout = readFileSync(join(appRoot, "app/_layout.tsx"), "utf8");
-    const today = readFileSync(join(appRoot, "app/today.tsx"), "utf8");
+    const developer = readFileSync(join(appRoot, "app/developer/index.tsx"), "utf8");
     expect(screen).toContain("CULINARY_DISCOVERY_PREVIEW_TITLE");
     expect(screen).toContain("Discover Again");
     expect(screen).toContain("Discovery Details");
     expect(CULINARY_DISCOVERY_PREVIEW_TITLE).toBe("Dev: Culinary Discovery");
     expect(layout).toContain("culinary-discovery-preview");
-    expect(today).toContain("/culinary-discovery-preview");
+    expect(developer).toContain("/culinary-discovery-preview");
     expect(CULINARY_DISCOVERY_PREVIEW_ROUTE).toBe("/culinary-discovery-preview");
   });
 
