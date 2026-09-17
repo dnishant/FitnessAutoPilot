@@ -1,0 +1,91 @@
+import { z } from "zod";
+import { DayOfWeekSchema, PrepIntentSchema } from "./weekly-strategy";
+import { MealConceptSchema } from "./meal-composition";
+import { ResolvedRecipeSchema } from "./recipe-resolution";
+import { RankedWeeklyStrategySchema } from "./ranked-weekly-strategy";
+import { GroceryListSchema } from "./grocery";
+
+/**
+ * Consumer-facing weekly plan + future PLAN-010 portion shapes.
+ *
+ * Personalized nutrition/portions are optional so the UI can hide them until
+ * the portion solver exists — never invent authoritative values in the client.
+ */
+
+export const PersonalizedMealNutritionSchema = z.object({
+  caloriesKcal: z.number().finite().nonnegative(),
+  proteinGrams: z.number().finite().nonnegative(),
+  carbsGrams: z.number().finite().nonnegative(),
+  fatGrams: z.number().finite().nonnegative(),
+  fiberGrams: z.number().finite().nonnegative().optional(),
+});
+
+export const PersonalizedMealComponentSchema = z.object({
+  componentId: z.string().trim().min(1).max(80),
+  displayName: z.string().trim().min(1).max(160),
+  amount: z.number().finite().positive().optional(),
+  unit: z.string().trim().min(1).max(40).optional(),
+});
+
+export const ConsumerMealComponentSchema = z.object({
+  componentId: z.string().trim().min(1).max(80),
+  displayName: z.string().trim().min(1).max(160),
+  role: z.string().trim().min(1).max(40).optional(),
+  /** Present only when PLAN-010 (or equivalent) provides authoritative amounts. */
+  amount: z.number().finite().positive().optional(),
+  unit: z.string().trim().min(1).max(40).optional(),
+});
+
+export const ConsumerMealSlotSchema = z.object({
+  day: DayOfWeekSchema,
+  mealType: z.enum(["lunch", "dinner"]),
+  candidateId: z.string().trim().min(1).max(80),
+  name: z.string().trim().min(1).max(160),
+  prepIntent: PrepIntentSchema,
+  finishTimeMinutes: z.number().int().nonnegative().max(180).optional(),
+  cuisineFamily: z.string().trim().min(1).max(80).optional(),
+  flavorTags: z.array(z.string().trim().min(1).max(80)).max(12).optional(),
+  experienceTags: z.array(z.string().trim().min(1).max(80)).max(12).optional(),
+  components: z.array(ConsumerMealComponentSchema).max(16),
+  /** Hide in UI until personalized / authoritative. */
+  personalizedNutrition: PersonalizedMealNutritionSchema.optional(),
+});
+
+export const ConsumerWeeklyPlanStatusSchema = z.enum([
+  "idle",
+  "generating",
+  "ready",
+  "failed",
+]);
+
+export const ConsumerPlanGenerationStageSchema = z.enum([
+  "understanding_preferences",
+  "finding_meals",
+  "building_complete_meals",
+  "creating_week",
+  "finalizing_recipes",
+  "complete",
+]);
+
+export const ConsumerWeeklyPlanSchema = z.object({
+  weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  weekEnd: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  status: ConsumerWeeklyPlanStatusSchema,
+  generatedAt: z.string().optional(),
+  errorMessage: z.string().trim().min(1).max(600).optional(),
+  generationStage: ConsumerPlanGenerationStageSchema.optional(),
+  strategy: RankedWeeklyStrategySchema.optional(),
+  conceptsByCandidateId: z.record(z.string(), MealConceptSchema).optional(),
+  recipesByCandidateId: z.record(z.string(), ResolvedRecipeSchema).optional(),
+  meals: z.array(ConsumerMealSlotSchema).max(14).optional(),
+  /** Grocery aggregation is future — usually absent / unavailable. */
+  groceryList: GroceryListSchema.optional(),
+});
+
+export type PersonalizedMealNutrition = z.infer<typeof PersonalizedMealNutritionSchema>;
+export type PersonalizedMealComponent = z.infer<typeof PersonalizedMealComponentSchema>;
+export type ConsumerMealComponent = z.infer<typeof ConsumerMealComponentSchema>;
+export type ConsumerMealSlot = z.infer<typeof ConsumerMealSlotSchema>;
+export type ConsumerWeeklyPlanStatus = z.infer<typeof ConsumerWeeklyPlanStatusSchema>;
+export type ConsumerPlanGenerationStage = z.infer<typeof ConsumerPlanGenerationStageSchema>;
+export type ConsumerWeeklyPlan = z.infer<typeof ConsumerWeeklyPlanSchema>;

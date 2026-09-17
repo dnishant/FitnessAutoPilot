@@ -253,7 +253,7 @@ describe("recipe preview formatting", () => {
     );
     expect(context.find((row) => row.label === "Cuisine preferences")?.value).toContain("Indian");
     expect(context.find((row) => row.label === "Allergies")?.value).toBe("Peanuts");
-    expect(context.find((row) => row.label === "Cooking style")?.value).toContain("Ready lunches");
+    expect(context.find((row) => row.label === "Cooking style")?.value).toContain("Balanced");
 
     const ai = buildAiDetailsRows(sampleRecipe, {
       requestId: "req_1",

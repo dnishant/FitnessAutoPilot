@@ -15,9 +15,9 @@ describe("TdeeValidationPolicy", () => {
 
 describe("onboarding goal labels", () => {
   it("maps stored goal types to the V1 labels", () => {
-    expect(onboardingGoalLabel("muscle_gain")).toBe("Bulking");
-    expect(onboardingGoalLabel("fat_loss")).toBe("Shredding / Weight Loss");
-    expect(onboardingGoalLabel("recomposition")).toBe("Recomposition / Maintenance");
+    expect(onboardingGoalLabel("muscle_gain")).toBe("Gain weight");
+    expect(onboardingGoalLabel("fat_loss")).toBe("Lose weight");
+    expect(onboardingGoalLabel("recomposition")).toBe("Maintain");
   });
 });
 

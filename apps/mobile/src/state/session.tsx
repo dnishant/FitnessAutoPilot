@@ -42,6 +42,8 @@ import type {
   RankedCulinaryCandidate,
   ComposeMealsResponse,
   WeeklyMealConceptResult,
+  ConsumerWeeklyPlan,
+  ConsumerPlanGenerationStage,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
@@ -50,6 +52,11 @@ import {
   MockMealCompositionProvider,
 } from "@fitness-autopilot/domain";
 import { supabase, useLocalPlanner } from "../lib/supabase";
+import {
+  CONSUMER_PLAN_STORAGE_KEY,
+  createEmptyConsumerPlan,
+} from "../lib/consumer-plan-view";
+import { generateConsumerWeeklyPlan } from "../lib/consumer-plan-generate";
 import {
   ensureLocalUser,
   getLocalStore,
@@ -112,6 +119,12 @@ type SessionValue = {
   mealPreferences: MealPreferences | null;
   cookingPreferences: CookingPreferences | null;
   dailyPlan: DailyPlan | null;
+  weeklyPlan: ConsumerWeeklyPlan | null;
+  generateWeeklyPlan: () => Promise<
+    | { ok: true; plan: ConsumerWeeklyPlan }
+    | { ok: false; error: string; plan: ConsumerWeeklyPlan }
+  >;
+  clearWeeklyPlan: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signUp: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => Promise<void>;
@@ -403,6 +416,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [mealPreferences, setMealPreferences] = useState<MealPreferences | null>(null);
   const [cookingPreferences, setCookingPreferences] = useState<CookingPreferences | null>(null);
   const [dailyPlan, setDailyPlan] = useState<DailyPlan | null>(null);
+  const [weeklyPlan, setWeeklyPlan] = useState<ConsumerWeeklyPlan | null>(null);
+
+  async function persistWeeklyPlan(plan: ConsumerWeeklyPlan | null) {
+    setWeeklyPlan(plan);
+    try {
+      if (!plan) {
+        await AsyncStorage.removeItem(CONSUMER_PLAN_STORAGE_KEY);
+        return;
+      }
+      await AsyncStorage.setItem(CONSUMER_PLAN_STORAGE_KEY, JSON.stringify(plan));
+    } catch {
+      // Persistence is best-effort; in-memory state still drives the UI.
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -446,6 +473,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             }
           }
         }
+        try {
+          const planRaw = await AsyncStorage.getItem(CONSUMER_PLAN_STORAGE_KEY);
+          if (planRaw && !cancelled) {
+            setWeeklyPlan(JSON.parse(planRaw) as ConsumerWeeklyPlan);
+          }
+        } catch {
+          // Ignore corrupt cache.
+        }
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -458,7 +493,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SessionValue>(
-    () => ({
+    () => (() => {
+    const api = {
       loading,
       useLocalMode: useLocalPlanner,
       user,
@@ -471,7 +507,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       mealPreferences,
       cookingPreferences,
       dailyPlan,
-      async signIn(email, password) {
+      weeklyPlan,
+      async clearWeeklyPlan() {
+        await persistWeeklyPlan(null);
+      },
+      async signIn(email: string, password: string) {
         if (useLocalPlanner) {
           try {
             const store = ensureLocalUser(email, password);
@@ -1254,8 +1294,43 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           };
         }
       },
-    }),
-    [loading, user, profile, currentRmr, currentTdee, currentCalorieTarget, goal, nutritionTarget, mealPreferences, cookingPreferences, dailyPlan],
+    };
+
+    return {
+      ...api,
+      async generateWeeklyPlan() {
+        const generating: ConsumerWeeklyPlan = {
+          ...createEmptyConsumerPlan(),
+          status: "generating",
+          generationStage: "understanding_preferences",
+        };
+        await persistWeeklyPlan(generating);
+        const result = await generateConsumerWeeklyPlan(
+          {
+            useLocalMode: useLocalPlanner,
+            nutritionTarget,
+            mealPreferences,
+            cookingPreferences,
+            discoverCulinaryCandidates: api.discoverCulinaryCandidates,
+            rankCulinaryCandidates: api.rankCulinaryCandidates,
+            composeMealConcepts: api.composeMealConcepts,
+            generateRankedWeeklyStrategy: api.generateRankedWeeklyStrategy,
+            resolveWeeklyRecipes: api.resolveWeeklyRecipes,
+          },
+          async (stage: ConsumerPlanGenerationStage) => {
+            await persistWeeklyPlan({
+              ...generating,
+              status: "generating",
+              generationStage: stage,
+            });
+          },
+        );
+        await persistWeeklyPlan(result.plan);
+        return result;
+      },
+    };
+    })(),
+    [loading, user, profile, currentRmr, currentTdee, currentCalorieTarget, goal, nutritionTarget, mealPreferences, cookingPreferences, dailyPlan, weeklyPlan],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

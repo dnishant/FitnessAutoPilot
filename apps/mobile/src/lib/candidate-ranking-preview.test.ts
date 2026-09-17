@@ -93,14 +93,14 @@ describe("candidate ranking preview", () => {
   it("preview route and screen exist", () => {
     const screen = readFileSync(join(appRoot, "app/candidate-ranking-preview.tsx"), "utf8");
     const layout = readFileSync(join(appRoot, "app/_layout.tsx"), "utf8");
-    const today = readFileSync(join(appRoot, "app/today.tsx"), "utf8");
+    const developer = readFileSync(join(appRoot, "app/developer/index.tsx"), "utf8");
     expect(screen).toContain("CANDIDATE_RANKING_PREVIEW_TITLE");
     expect(screen).toContain("Rank Candidates");
     expect(screen).toContain("Discover then Rank");
     expect(screen).toContain("Validation fixtures");
     expect(CANDIDATE_RANKING_PREVIEW_TITLE).toBe("Dev: Candidate Ranking");
     expect(layout).toContain("candidate-ranking-preview");
-    expect(today).toContain("/candidate-ranking-preview");
+    expect(developer).toContain("/candidate-ranking-preview");
     expect(CANDIDATE_RANKING_PREVIEW_ROUTE).toBe("/candidate-ranking-preview");
   });
 

@@ -78,7 +78,7 @@ describe("energy onboarding flow", () => {
     expect(view.result?.tdeeSource).toBe("apple_watch_active_plus_rmr");
     expect(view.result?.tdeeSourceLabel).toBe("Active calories + your RMR");
     expect(view.result?.goalType).toBe("muscle_gain");
-    expect(view.result?.goalLabel).toBe("Bulking");
+    expect(view.result?.goalLabel).toBe("Gain weight");
   });
 
   it("walks Whoop + DEXA RMR and uses daily calories as TDEE", () => {
@@ -102,14 +102,14 @@ describe("energy onboarding flow", () => {
     expect(view.result?.tdeeKcal).toBe(2800);
     expect(view.result?.tdeeSource).toBe("whoop_daily_calories");
     expect(view.result?.tdeeSourceLabel).toBe("From your Whoop average daily calories");
-    expect(view.result?.goalLabel).toBe("Shredding / Weight Loss");
+    expect(view.result?.goalLabel).toBe("Lose weight");
   });
 
   it("surfaces a missing goal", () => {
     let view = createOnboardingView();
     view = submitOnboardingGoal(view, "general_fitness" as never);
     expect(view.step).toBe("goal");
-    expect(view.error).toMatch(/Bulking|Shredding|Recomposition/);
+    expect(view.error).toMatch(/Lose weight|Maintain|Gain weight/);
   });
 
   it("surfaces wearable calorie validation errors", () => {

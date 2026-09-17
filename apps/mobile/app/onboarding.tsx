@@ -36,6 +36,12 @@ import {
 import { useSession } from "../src/state/session";
 import { CookingPreferenceSteps } from "../src/components/cooking-preference-steps";
 import { MealPreferenceSteps } from "../src/components/meal-preference-steps";
+import {
+  PrimaryButton,
+  SelectionCard,
+} from "../src/components/ui/primitives";
+import { NutritionSummary } from "../src/components/ui/meals";
+import { colors, spacing, typography } from "../src/theme/tokens";
 
 export default function OnboardingScreen() {
   const { completeOnboarding, user } = useSession();
@@ -89,7 +95,7 @@ export default function OnboardingScreen() {
       setPersistError(saved.error);
       return;
     }
-    router.replace("/today");
+    router.replace("/(tabs)/today");
   }
 
   return (
@@ -253,6 +259,7 @@ export default function OnboardingScreen() {
 
       {view.step === "result" && view.result ? (
         <>
+          <Text style={styles.title}>Your energy baseline</Text>
           <Text style={styles.kicker}>Your goal</Text>
           <Text style={styles.goalValue}>{view.result.goalLabel}</Text>
           <Text style={styles.kicker}>Resting Metabolic Rate</Text>
@@ -264,12 +271,10 @@ export default function OnboardingScreen() {
           <Text style={styles.source}>{view.result.tdeeSourceLabel}</Text>
           <Text style={styles.help}>{view.result.tdeeExplanation}</Text>
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable
-            style={styles.primary}
+          <PrimaryButton
+            label="Continue"
             onPress={() => setView((current) => continueFromEnergyResult(current))}
-          >
-            <Text style={styles.primaryText}>Continue</Text>
-          </Pressable>
+          />
         </>
       ) : null}
 
@@ -277,16 +282,14 @@ export default function OnboardingScreen() {
         <>
           <Text style={styles.title}>{pacePromptForGoal(view.result.goalType)}</Text>
           {paceOptionsForGoal(view.result.goalType).map((option) => (
-            <Pressable
+            <SelectionCard
               key={option.pace}
-              style={styles.option}
+              title={option.label}
+              detail={option.detail}
               onPress={() =>
                 setView((current) => chooseOnboardingPace(current, option.pace as WeightChangePace))
               }
-            >
-              <Text style={styles.optionLabel}>{option.label}</Text>
-              <Text style={styles.optionDetail}>{option.detail}</Text>
-            </Pressable>
+            />
           ))}
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
         </>
@@ -295,19 +298,23 @@ export default function OnboardingScreen() {
       {view.step === "calorie_target" && view.calorieTarget ? (
         <>
           <Text style={styles.title}>Your Starting Calorie Target</Text>
-          <Text style={styles.kicker}>Estimated maintenance</Text>
-          <Text style={styles.goalValue}>{view.calorieTarget.formattedMaintenance}</Text>
-          <Text style={styles.kicker}>Goal</Text>
-          <Text style={styles.goalValue}>{view.calorieTarget.goalLabel}</Text>
-          <Text style={styles.kicker}>Pace</Text>
-          <Text style={styles.goalValue}>{view.calorieTarget.paceLabel}</Text>
-          <Text style={styles.kicker}>Target rate</Text>
-          <Text style={styles.goalValue}>{view.calorieTarget.formattedTargetRate}</Text>
-          <Text style={styles.kicker}>Daily calorie target</Text>
-          <Text style={styles.rmrValue}>{view.calorieTarget.formattedTargetCalories}</Text>
-          <Pressable style={styles.secondary} onPress={() => setShowCalculation((open) => !open)}>
-            <Text style={styles.secondaryText}>How was this calculated?</Text>
-          </Pressable>
+          <View style={styles.summaryBlock}>
+            <Text style={styles.kicker}>Estimated maintenance</Text>
+            <Text style={styles.goalValue}>{view.calorieTarget.formattedMaintenance}</Text>
+            <Text style={styles.kicker}>Goal</Text>
+            <Text style={styles.goalValue}>{view.calorieTarget.goalLabel}</Text>
+            <Text style={styles.kicker}>Pace</Text>
+            <Text style={styles.goalValue}>{view.calorieTarget.paceLabel}</Text>
+            <Text style={styles.kicker}>Target rate</Text>
+            <Text style={styles.goalValue}>{view.calorieTarget.formattedTargetRate}</Text>
+            <Text style={styles.kicker}>Daily calorie target</Text>
+            <Text style={styles.rmrValue}>{view.calorieTarget.formattedTargetCalories}</Text>
+          </View>
+          <PrimaryButton
+            label="How was this calculated?"
+            variant="ghost"
+            onPress={() => setShowCalculation((open) => !open)}
+          />
           {showCalculation
             ? view.calorieTarget.explanationRows.map((row) => (
                 <View key={row.label} style={styles.explainRow}>
@@ -317,29 +324,33 @@ export default function OnboardingScreen() {
               ))
             : null}
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable
-            style={styles.primary}
+          <PrimaryButton
+            label="Continue"
             onPress={() => setView((current) => continueFromCalorieTarget(current))}
-          >
-            <Text style={styles.primaryText}>Continue</Text>
-          </Pressable>
+          />
         </>
       ) : null}
 
       {view.step === "nutrition_target" && view.nutritionTarget ? (
         <>
           <Text style={styles.title}>Your Daily Nutrition Target</Text>
-          <Text style={styles.kicker}>Calories</Text>
-          <Text style={styles.rmrValue}>{view.nutritionTarget.formattedCalories}</Text>
-          <Text style={styles.kicker}>Protein</Text>
-          <Text style={styles.goalValue}>{view.nutritionTarget.formattedProtein}</Text>
-          <Text style={styles.kicker}>Fat</Text>
-          <Text style={styles.goalValue}>{view.nutritionTarget.formattedFat}</Text>
-          <Text style={styles.kicker}>Carbohydrates</Text>
-          <Text style={styles.goalValue}>{view.nutritionTarget.formattedCarbohydrates}</Text>
-          <Pressable style={styles.secondary} onPress={() => setShowCalculation((open) => !open)}>
-            <Text style={styles.secondaryText}>How was this calculated?</Text>
-          </Pressable>
+          <NutritionSummary
+            calories={view.nutritionTarget.draft.targetCalories}
+            proteinG={view.nutritionTarget.draft.proteinGrams}
+            carbsG={view.nutritionTarget.draft.carbohydrateGrams}
+            fatG={view.nutritionTarget.draft.fatGrams}
+            fiberG={view.nutritionTarget.draft.fiberGrams}
+          />
+          <Text style={styles.help}>
+            Protein {view.nutritionTarget.formattedProtein} · Fat{" "}
+            {view.nutritionTarget.formattedFat} · Carbs{" "}
+            {view.nutritionTarget.formattedCarbohydrates}
+          </Text>
+          <PrimaryButton
+            label="How was this calculated?"
+            variant="ghost"
+            onPress={() => setShowCalculation((open) => !open)}
+          />
           {showCalculation
             ? view.nutritionTarget.explanationRows.map((row) => (
                 <View key={row.label} style={styles.explainRow}>
@@ -349,12 +360,10 @@ export default function OnboardingScreen() {
               ))
             : null}
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable
-            style={styles.primary}
+          <PrimaryButton
+            label="Continue"
             onPress={() => setView((current) => continueFromNutritionTarget(current))}
-          >
-            <Text style={styles.primaryText}>Continue</Text>
-          </Pressable>
+          />
         </>
       ) : null}
 
@@ -397,55 +406,57 @@ function Field(props: {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 24, gap: 12 },
-  title: { fontSize: 24, fontWeight: "800", color: "#0B1F17" },
-  help: { color: "#3D5A4C", marginBottom: 8 },
-  label: { fontWeight: "600", color: "#0B1F17" },
+  container: { padding: spacing.xl, gap: spacing.md, backgroundColor: colors.background },
+  title: { ...typography.heading, color: colors.text },
+  help: { ...typography.body, color: colors.textSecondary, marginBottom: spacing.sm },
+  label: { ...typography.bodyStrong, color: colors.text },
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#C9D9CF",
+    borderColor: colors.border,
     borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    color: colors.text,
   },
-  row: { flexDirection: "row", gap: 8 },
+  row: { flexDirection: "row", gap: spacing.sm },
   choice: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#C9D9CF",
+    borderColor: colors.border,
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: spacing.md,
     alignItems: "center",
   },
-  choiceSelected: { borderColor: "#1F6F4A", backgroundColor: "#E4F0E8" },
-  choiceText: { fontWeight: "700", color: "#0B1F17", textTransform: "capitalize" },
+  choiceSelected: { borderColor: colors.primary, backgroundColor: colors.primarySoft },
+  choiceText: { fontWeight: "700", color: colors.text, textTransform: "capitalize" },
   option: {
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#C9D9CF",
+    borderColor: colors.border,
     borderRadius: 8,
-    padding: 14,
+    padding: spacing.lg,
   },
-  optionLabel: { fontWeight: "700", color: "#0B1F17", fontSize: 16 },
-  optionDetail: { color: "#3D5A4C", marginTop: 4 },
+  optionLabel: { fontWeight: "700", color: colors.text, fontSize: 16 },
+  optionDetail: { color: colors.textSecondary, marginTop: 4 },
   primary: {
-    marginTop: 8,
-    backgroundColor: "#1F6F4A",
+    marginTop: spacing.sm,
+    backgroundColor: colors.primary,
     paddingVertical: 14,
     borderRadius: 8,
     alignItems: "center",
   },
-  primaryText: { color: "#fff", fontWeight: "700" },
-  error: { color: "#9B1C1C" },
-  kicker: { fontSize: 16, fontWeight: "700", color: "#3D5A4C" },
-  rmrValue: { fontSize: 36, fontWeight: "800", color: "#0B1F17" },
-  goalValue: { fontSize: 24, fontWeight: "800", color: "#0B1F17", marginBottom: 8 },
-  source: { fontSize: 16, color: "#1F6F4A", fontWeight: "600" },
-  secondary: { paddingVertical: 8 },
-  secondaryText: { color: "#1F6F4A", fontWeight: "700" },
+  primaryText: { color: colors.textOnDark, fontWeight: "700" },
+  error: { color: colors.error },
+  kicker: { ...typography.label, color: colors.textMuted, textTransform: "uppercase" },
+  rmrValue: { ...typography.metric, color: colors.text, fontSize: 36, lineHeight: 42 },
+  goalValue: { ...typography.subheading, color: colors.text, marginBottom: spacing.sm },
+  source: { ...typography.bodyStrong, color: colors.primary },
+  secondary: { paddingVertical: spacing.sm },
+  secondaryText: { color: colors.primary, fontWeight: "700" },
   explainRow: { gap: 2 },
-  explainLabel: { color: "#3D5A4C", fontWeight: "600" },
-  explainValue: { color: "#0B1F17" },
+  explainLabel: { color: colors.textSecondary, fontWeight: "600" },
+  explainValue: { color: colors.text },
+  summaryBlock: { gap: spacing.sm },
 });

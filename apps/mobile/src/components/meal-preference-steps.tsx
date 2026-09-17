@@ -1,7 +1,5 @@
 import type { ReactNode } from "react";
 import {
-  ActivityIndicator,
-  Pressable,
   StyleSheet,
   Text,
   TextInput,
@@ -35,6 +33,12 @@ import {
   toggleOnboardingProtein,
   type OnboardingView,
 } from "@fitness-autopilot/domain";
+import {
+  ChoiceChip,
+  PrimaryButton,
+  SelectionCard,
+} from "./ui/primitives";
+import { colors, radii, spacing, typography } from "../theme/tokens";
 
 export function MealPreferenceSteps(props: {
   view: OnboardingView;
@@ -63,7 +67,7 @@ export function MealPreferenceSteps(props: {
           </Text>
           <ChipGroup>
             {CUISINE_OPTIONS.map((option) => (
-              <Chip
+              <ChoiceChip
                 key={option.value}
                 label={option.label}
                 selected={view.draft.cuisines.includes(option.value)}
@@ -74,9 +78,7 @@ export function MealPreferenceSteps(props: {
             ))}
           </ChipGroup>
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable style={styles.primary} onPress={() => onChange(continueFromCuisine(view))}>
-            <Text style={styles.primaryText}>Continue</Text>
-          </Pressable>
+          <PrimaryButton label="Continue" onPress={() => onChange(continueFromCuisine(view))} />
         </>
       ) : null}
 
@@ -88,7 +90,7 @@ export function MealPreferenceSteps(props: {
           </Text>
           <ChipGroup>
             {PROTEIN_OPTIONS.map((option) => (
-              <Chip
+              <ChoiceChip
                 key={option.value}
                 label={option.label}
                 selected={view.draft.proteinPreferences.includes(option.value)}
@@ -99,9 +101,7 @@ export function MealPreferenceSteps(props: {
             ))}
           </ChipGroup>
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable style={styles.primary} onPress={() => onChange(continueFromProteins(view))}>
-            <Text style={styles.primaryText}>Continue</Text>
-          </Pressable>
+          <PrimaryButton label="Continue" onPress={() => onChange(continueFromProteins(view))} />
         </>
       ) : null}
 
@@ -149,9 +149,10 @@ export function MealPreferenceSteps(props: {
             onRemove={(tag) => onChange(removeOnboardingDislike(view, tag))}
           />
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable style={styles.primary} onPress={() => onChange(continueFromExclusions(view))}>
-            <Text style={styles.primaryText}>Continue</Text>
-          </Pressable>
+          <PrimaryButton
+            label="Continue"
+            onPress={() => onChange(continueFromExclusions(view))}
+          />
         </>
       ) : null}
 
@@ -161,7 +162,7 @@ export function MealPreferenceSteps(props: {
           <Text style={styles.help}>Soft preferences so later meals can stay flavorful.</Text>
           <ChipGroup>
             {EXPERIENCE_OPTIONS.map((option) => (
-              <Chip
+              <ChoiceChip
                 key={option.value}
                 label={option.label}
                 selected={view.draft.experiencePreferences.includes(option.value)}
@@ -172,9 +173,10 @@ export function MealPreferenceSteps(props: {
             ))}
           </ChipGroup>
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable style={styles.primary} onPress={() => onChange(continueFromExperience(view))}>
-            <Text style={styles.primaryText}>Continue</Text>
-          </Pressable>
+          <PrimaryButton
+            label="Continue"
+            onPress={() => onChange(continueFromExperience(view))}
+          />
         </>
       ) : null}
 
@@ -183,25 +185,19 @@ export function MealPreferenceSteps(props: {
           <Text style={styles.title}>How much variety do you want during the week?</Text>
           <Text style={styles.help}>This is intent only. We will not turn it into recipe counts yet.</Text>
           {VARIETY_OPTIONS.map((option) => (
-            <Pressable
+            <SelectionCard
               key={option.value}
-              style={[
-                styles.option,
-                view.draft.varietyLevel === option.value && styles.optionSelected,
-              ]}
+              title={option.label}
+              detail={option.detail}
+              selected={view.draft.varietyLevel === option.value}
               onPress={() =>
                 onChange(chooseOnboardingVariety(view, option.value as VarietyLevel))
               }
-            >
-              <Text style={styles.optionLabel}>{option.label}</Text>
-              <Text style={styles.optionDetail}>{option.detail}</Text>
-            </Pressable>
+            />
           ))}
           {persistError ? <Text style={styles.error}>{persistError}</Text> : null}
           {view.error ? <Text style={styles.error}>{view.error}</Text> : null}
-          <Pressable style={styles.primary} disabled={busy} onPress={finish}>
-            {busy ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Continue</Text>}
-          </Pressable>
+          <PrimaryButton label="Continue" disabled={busy} loading={busy} onPress={finish} />
         </>
       ) : null}
     </>
@@ -210,19 +206,6 @@ export function MealPreferenceSteps(props: {
 
 function ChipGroup({ children }: { children: ReactNode }) {
   return <View style={styles.chipWrap}>{children}</View>;
-}
-
-function Chip(props: { label: string; selected: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      style={[styles.chip, props.selected && styles.chipSelected]}
-      onPress={props.onPress}
-    >
-      <Text style={[styles.chipText, props.selected && styles.chipTextSelected]}>
-        {props.label}
-      </Text>
-    </Pressable>
-  );
 }
 
 function TagSection(props: {
@@ -242,18 +225,21 @@ function TagSection(props: {
           style={styles.input}
           value={props.value}
           placeholder={props.placeholder}
+          placeholderTextColor={colors.textMuted}
           onChangeText={props.onChangeText}
           onSubmitEditing={props.onAdd}
         />
-        <Pressable style={styles.addButton} onPress={props.onAdd}>
-          <Text style={styles.addButtonText}>Add</Text>
-        </Pressable>
+        <PrimaryButton label="Add" onPress={props.onAdd} style={styles.addButton} />
       </View>
       <ChipGroup>
         {props.tags.map((tag) => (
-          <Pressable key={tag} style={styles.chipSelected} onPress={() => props.onRemove(tag)}>
-            <Text style={styles.chipTextSelected}>{tag} ×</Text>
-          </Pressable>
+          <ChoiceChip
+            key={tag}
+            label={`${tag} ×`}
+            selected
+            tone="caution"
+            onPress={() => props.onRemove(tag)}
+          />
         ))}
       </ChipGroup>
     </View>
@@ -261,63 +247,49 @@ function TagSection(props: {
 }
 
 const styles = StyleSheet.create({
-  title: { fontSize: 24, fontWeight: "800", color: "#0B1F17" },
-  help: { color: "#3D5A4C", marginBottom: 8 },
-  label: { fontWeight: "600", color: "#0B1F17" },
-  chipWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  chip: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#C9D9CF",
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  title: {
+    ...typography.heading,
+    color: colors.text,
   },
-  chipSelected: {
-    borderColor: "#1F6F4A",
-    backgroundColor: "#E4F0E8",
-    borderWidth: 1,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+  help: {
+    ...typography.body,
+    color: colors.textSecondary,
+    marginBottom: spacing.sm,
   },
-  chipText: { fontWeight: "700", color: "#0B1F17" },
-  chipTextSelected: { fontWeight: "700", color: "#1F6F4A" },
+  label: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  chipWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
   input: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#C9D9CF",
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    color: colors.text,
+    ...typography.body,
   },
-  tagSection: { gap: 8 },
-  tagRow: { flexDirection: "row", gap: 8, alignItems: "center" },
-  addButton: {
-    backgroundColor: "#1F6F4A",
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+  tagSection: {
+    gap: spacing.sm,
   },
-  addButtonText: { color: "#fff", fontWeight: "700" },
-  option: {
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#C9D9CF",
-    borderRadius: 8,
-    padding: 14,
-  },
-  optionSelected: { borderColor: "#1F6F4A", backgroundColor: "#E4F0E8" },
-  optionLabel: { fontWeight: "700", color: "#0B1F17", fontSize: 16 },
-  optionDetail: { color: "#3D5A4C", marginTop: 4 },
-  primary: {
-    marginTop: 8,
-    backgroundColor: "#1F6F4A",
-    paddingVertical: 14,
-    borderRadius: 8,
+  tagRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
     alignItems: "center",
   },
-  primaryText: { color: "#fff", fontWeight: "700" },
-  error: { color: "#9B1C1C" },
+  addButton: {
+    paddingHorizontal: spacing.lg,
+    minHeight: 44,
+  },
+  error: {
+    ...typography.body,
+    color: colors.error,
+  },
 });
