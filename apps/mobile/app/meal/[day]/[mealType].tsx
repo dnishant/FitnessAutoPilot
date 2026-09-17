@@ -105,7 +105,13 @@ export default function MealDetailScreen() {
         </Text>
       ) : null}
 
-      <SectionHeader title="On the plate" />
+      <SectionHeader
+        title={
+          meal.components.some((c) => c.amount != null && c.unit)
+            ? "Your plate"
+            : "On the plate"
+        }
+      />
       <View style={styles.card}>
         {meal.components.map((component) => (
           <MealComponentRow
@@ -116,6 +122,30 @@ export default function MealDetailScreen() {
           />
         ))}
       </View>
+
+      {meal.personalizedNutrition ? (
+        <View style={styles.nutritionCard}>
+          <Text style={styles.nutritionKcal}>
+            {Math.round(meal.personalizedNutrition.caloriesKcal)} kcal
+          </Text>
+          <View style={styles.macroRow}>
+            <Text style={styles.macroLine}>
+              Protein {Math.round(meal.personalizedNutrition.proteinGrams)} g
+            </Text>
+            <Text style={styles.macroLine}>
+              Carbs {Math.round(meal.personalizedNutrition.carbsGrams)} g
+            </Text>
+            <Text style={styles.macroLine}>
+              Fat {Math.round(meal.personalizedNutrition.fatGrams)} g
+            </Text>
+            {meal.personalizedNutrition.fiberGrams != null ? (
+              <Text style={styles.macroLine}>
+                Fiber {Math.round(meal.personalizedNutrition.fiberGrams)} g
+              </Text>
+            ) : null}
+          </View>
+        </View>
+      ) : null}
 
       {prep ? (
         <View style={styles.prepCard}>
@@ -164,6 +194,23 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+  },
+  nutritionCard: {
+    backgroundColor: colors.surfaceDark,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  nutritionKcal: {
+    ...typography.subheading,
+    color: colors.textOnDark,
+  },
+  macroRow: {
+    gap: spacing.xs,
+  },
+  macroLine: {
+    ...typography.body,
+    color: colors.textOnDarkMuted,
   },
   prepCard: {
     backgroundColor: colors.primarySoft,
