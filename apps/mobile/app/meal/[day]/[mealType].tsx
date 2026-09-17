@@ -74,6 +74,9 @@ export default function MealDetailScreen() {
   }
 
   const prep = consumerPrepLabel(meal.prepIntent, meal.finishTimeMinutes);
+  const nutrition = meal.personalizedNutrition;
+  const blocked = meal.personalizationStatus === "blocked";
+  const hasPortions = meal.components.some((c) => c.amount != null && c.unit);
   const recipesById = weeklyPlan?.recipesByCandidateId ?? {};
   const recipeLinks: Array<{ candidateId: string; name: string }> = [];
   if (recipesById[meal.candidateId]) {
@@ -105,7 +108,16 @@ export default function MealDetailScreen() {
         </Text>
       ) : null}
 
-      <SectionHeader title="On the plate" />
+      <SectionHeader title="Your plate" />
+      {blocked && !hasPortions ? (
+        <View style={styles.blockedCard}>
+          <Text style={styles.blockedTitle}>Portions unavailable</Text>
+          <Text style={styles.blockedBody}>
+            We couldn&apos;t personalize this meal yet. The plate composition is still available
+            below — try regenerating your plan.
+          </Text>
+        </View>
+      ) : null}
       <View style={styles.card}>
         {meal.components.map((component) => (
           <MealComponentRow
@@ -116,6 +128,21 @@ export default function MealDetailScreen() {
           />
         ))}
       </View>
+
+      {nutrition ? (
+        <View style={styles.nutritionCard}>
+          <SectionHeader title="Nutrition" />
+          <Text style={styles.calories}>{Math.round(nutrition.caloriesKcal)} kcal</Text>
+          <View style={styles.macroGrid}>
+            <MacroLine label="Protein" value={`${Math.round(nutrition.proteinGrams)} g`} />
+            <MacroLine label="Carbs" value={`${Math.round(nutrition.carbsGrams)} g`} />
+            <MacroLine label="Fat" value={`${Math.round(nutrition.fatGrams)} g`} />
+            {nutrition.fiberGrams != null ? (
+              <MacroLine label="Fiber" value={`${Math.round(nutrition.fiberGrams)} g`} />
+            ) : null}
+          </View>
+        </View>
+      ) : null}
 
       {prep ? (
         <View style={styles.prepCard}>
@@ -132,7 +159,12 @@ export default function MealDetailScreen() {
               key={link.candidateId}
               accessibilityRole="button"
               style={styles.recipeLink}
-              onPress={() => router.push(`/recipe/${link.candidateId}`)}
+              onPress={() =>
+                router.push({
+                  pathname: `/recipe/${link.candidateId}`,
+                  params: { day, mealType },
+                })
+              }
             >
               <Text style={styles.recipeLinkTitle}>{link.name}</Text>
               <Text style={styles.recipeLinkAction}>View recipe →</Text>
@@ -141,6 +173,15 @@ export default function MealDetailScreen() {
         </View>
       ) : null}
     </ScrollView>
+  );
+}
+
+function MacroLine(props: { label: string; value: string }) {
+  return (
+    <View style={styles.macroLine}>
+      <Text style={styles.macroLabel}>{props.label}</Text>
+      <Text style={styles.macroValue}>{props.value}</Text>
+    </View>
   );
 }
 
@@ -164,6 +205,49 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
+  },
+  nutritionCard: {
+    gap: spacing.sm,
+  },
+  calories: {
+    ...typography.title,
+    color: colors.text,
+  },
+  macroGrid: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
+  },
+  macroLine: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  macroLabel: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  macroValue: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  blockedCard: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.xs,
+  },
+  blockedTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  blockedBody: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
   prepCard: {
     backgroundColor: colors.primarySoft,

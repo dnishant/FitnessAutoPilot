@@ -11,11 +11,13 @@ import { useSession } from "../../src/state/session";
 import { colors, radii, spacing, typography } from "../../src/theme/tokens";
 
 export default function RecipeDetailScreen() {
-  const params = useLocalSearchParams<{ candidateId: string }>();
+  const params = useLocalSearchParams<{ candidateId: string; day?: string; mealType?: string }>();
   const { weeklyPlan, loading } = useSession();
   const candidateId = Array.isArray(params.candidateId)
     ? params.candidateId[0]
     : params.candidateId;
+  const day = Array.isArray(params.day) ? params.day[0] : params.day;
+  const mealType = Array.isArray(params.mealType) ? params.mealType[0] : params.mealType;
 
   if (loading) {
     return (
@@ -43,6 +45,18 @@ export default function RecipeDetailScreen() {
     );
   }
 
+  const personalizedPortion =
+    day && mealType && weeklyPlan?.meals
+      ? weeklyPlan.meals
+          .find((m) => m.day === day && m.mealType === mealType)
+          ?.components.find(
+            (c) =>
+              c.componentId === candidateId ||
+              c.role === "main" ||
+              c.displayName.toLowerCase() === recipe.name.toLowerCase(),
+          )
+      : undefined;
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <ScreenHeader
@@ -51,13 +65,22 @@ export default function RecipeDetailScreen() {
         subtitle={recipe.description}
       />
 
+      {personalizedPortion?.amount != null && personalizedPortion.unit ? (
+        <View style={styles.portionCard}>
+          <Text style={styles.portionLabel}>Your portion</Text>
+          <Text style={styles.portionValue}>
+            {personalizedPortion.amount} {personalizedPortion.unit} prepared {recipe.name}
+          </Text>
+        </View>
+      ) : null}
+
       <View style={styles.metaRow}>
         <MetaStat label="Prep" value={`${recipe.prepTimeMinutes} min`} />
         <MetaStat label="Cook" value={`${recipe.cookTimeMinutes} min`} />
         <MetaStat label="Reference" value={`${recipe.baseServings} servings`} />
       </View>
       <Text style={styles.servingsNote}>
-        Serving count is the reference recipe yield — not your personalized meal portion.
+        Recipe batch below is the reference yield — not rewritten as one personalized meal.
       </Text>
 
       <SectionHeader title="Ingredients" />
@@ -126,6 +149,21 @@ const styles = StyleSheet.create({
     ...typography.caption,
     color: colors.textMuted,
     marginTop: -spacing.sm,
+  },
+  portionCard: {
+    backgroundColor: colors.primarySoft,
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.xs,
+  },
+  portionLabel: {
+    ...typography.label,
+    color: colors.primary,
+    textTransform: "uppercase",
+  },
+  portionValue: {
+    ...typography.bodyStrong,
+    color: colors.text,
   },
   card: {
     backgroundColor: colors.surface,

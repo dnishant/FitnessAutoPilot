@@ -1311,7 +1311,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           }
           return {
             ok: true,
-            concepts: result.concepts,
+            concepts: result.concepts!,
             meta: result.meta,
           };
         } catch (e) {
@@ -1343,6 +1343,65 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             composeMealConcepts: api.composeMealConcepts,
             generateRankedWeeklyStrategy: api.generateRankedWeeklyStrategy,
             resolveWeeklyRecipes: api.resolveWeeklyRecipes,
+            resolveRecipeNutrition: api.resolveRecipeNutrition,
+            resolveSelectedCompleteMeals: async (input) => {
+              try {
+                if (useLocalPlanner) {
+                  return {
+                    ok: false,
+                    error: "Selected resolution uses local domain path in local planner mode.",
+                  };
+                }
+                if (!supabase || !user) {
+                  return { ok: false, error: "Not signed in" };
+                }
+                const client = supabase;
+                const result = await invokeComposeMeals(
+                  async (functionName, options) => {
+                    const invoked = await client.functions.invoke(functionName, {
+                      body: options.body,
+                    });
+                    return {
+                      data: invoked.data,
+                      error: invoked.error
+                        ? {
+                            message: invoked.error.message,
+                            context:
+                              "context" in invoked.error
+                                ? (invoked.error as { context?: unknown }).context
+                                : undefined,
+                          }
+                        : null,
+                    };
+                  },
+                  {
+                    stage: "selected_resolution",
+                    mealConcepts: input.mealConcepts,
+                    selectedCandidateIds: input.selectedCandidateIds,
+                    recipes: input.recipes,
+                    targetCalories: input.targetCalories,
+                    resolveAddedComponents: true,
+                  },
+                );
+                if (!result.ok) {
+                  return {
+                    ok: false,
+                    error: result.error.message,
+                    code: result.error.code,
+                  };
+                }
+                if (!result.composition) {
+                  return { ok: false, error: "Selected resolution returned no complete meals." };
+                }
+                return { ok: true, result: result.composition };
+              } catch (e) {
+                return {
+                  ok: false,
+                  error:
+                    e instanceof Error ? e.message : "Failed to resolve selected complete meals",
+                };
+              }
+            },
           },
           async (stage: ConsumerPlanGenerationStage) => {
             await persistWeeklyPlan({

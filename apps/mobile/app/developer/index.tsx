@@ -39,6 +39,11 @@ const PREVIEW_ROUTES: Array<{ href: string; label: string; detail: string }> = [
     label: "Dev: Meal Composition",
     detail: "Complete-meal composition sandbox",
   },
+  {
+    href: "/meal-portion-preview",
+    label: "Dev: Meal Portion Preview",
+    detail: "PLAN-010 portion solver diagnostics",
+  },
 ];
 
 export default function DeveloperHubScreen() {

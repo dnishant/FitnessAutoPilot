@@ -55,6 +55,10 @@ export default function RootLayout() {
           name="meal-composition-preview"
           options={{ title: "Meal Composition" }}
         />
+        <Stack.Screen
+          name="meal-portion-preview"
+          options={{ title: "Meal Portion Preview" }}
+        />
       </Stack>
     </SessionProvider>
   );

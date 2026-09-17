@@ -107,18 +107,24 @@ type InvokeClient = (
 export async function invokeComposeMeals(
   invoke: InvokeClient,
   body: {
-    rankedCandidates: RankedCulinaryCandidate[];
+    stage?: "concepts" | "selected_resolution";
+    rankedCandidates?: RankedCulinaryCandidate[];
     uniqueCandidateIds?: string[];
+    mealConcepts?: MealConcept[];
+    selectedCandidateIds?: string[];
+    recipes?: import("@fitness-autopilot/contracts").ResolvedRecipe[];
     concurrency?: number;
     targetCalories?: number;
     allergies?: string[];
     dietaryRestrictions?: string[];
     dislikes?: string[];
+    resolveAddedComponents?: boolean;
   },
 ): Promise<
   | {
       ok: true;
-      concepts: WeeklyMealConceptResult;
+      concepts?: WeeklyMealConceptResult;
+      composition?: import("@fitness-autopilot/contracts").WeeklyMealCompositionResult;
       meta?: MealCompositionGenerationMeta;
     }
   | {
@@ -127,16 +133,21 @@ export async function invokeComposeMeals(
       meta?: MealCompositionGenerationMeta;
     }
 > {
+  const stage = body.stage ?? "concepts";
   const invoked = await invoke(COMPOSE_MEALS_FUNCTION_NAME, {
     body: {
-      stage: "concepts",
+      stage,
       rankedCandidates: body.rankedCandidates,
       uniqueCandidateIds: body.uniqueCandidateIds,
+      mealConcepts: body.mealConcepts,
+      selectedCandidateIds: body.selectedCandidateIds,
+      recipes: body.recipes,
       concurrency: body.concurrency ?? DEFAULT_MEAL_COMPOSITION_CONCURRENCY,
       targetCalories: body.targetCalories,
       allergies: body.allergies ?? [],
       dietaryRestrictions: body.dietaryRestrictions ?? [],
       dislikes: body.dislikes ?? [],
+      resolveAddedComponents: body.resolveAddedComponents ?? false,
       mealType: "dinner",
     },
   });
@@ -158,7 +169,24 @@ export async function invokeComposeMeals(
   }
 
   const data = invoked.data as ComposeMealsResponse | null;
-  if (!data || typeof data !== "object" || !data.concepts) {
+  if (!data || typeof data !== "object") {
+    return {
+      ok: false,
+      error: { message: "compose-meals returned an empty payload." },
+    };
+  }
+
+  if (stage === "selected_resolution") {
+    if (!data.result) {
+      return {
+        ok: false,
+        error: { message: "compose-meals selected_resolution returned no result." },
+      };
+    }
+    return { ok: true, composition: data.result, meta: data.meta };
+  }
+
+  if (!data.concepts) {
     return {
       ok: false,
       error: { message: "compose-meals returned an empty concept payload." },
