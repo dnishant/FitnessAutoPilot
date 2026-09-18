@@ -271,15 +271,54 @@ export function coerceResolvedRecipePayload(value: unknown): unknown {
       if (typeof component.required !== "boolean") {
         component.required = component.relationship === "intrinsic";
       }
-      if (typeof component.purpose !== "string" || component.purpose.trim() === "") {
-        component.purpose = "Completes the meal.";
-      }
       const rawName = typeof component.name === "string" ? component.name.trim() : "";
-      if (!rawName || /^component[_\s-]?\d+$/i.test(rawName)) {
-        // Prefer a short culinary label derived from purpose when the model omits a name.
-        const purpose = String(component.purpose);
-        component.name = purpose.split(/[.—,:]/)[0]?.trim().slice(0, 80) || `Component ${index + 1}`;
+      const purpose =
+        typeof component.purpose === "string" && component.purpose.trim()
+          ? component.purpose.trim()
+          : "Completes the meal.";
+      component.purpose = purpose;
+
+      // Never promote purpose prose into a food name — that created PLAN-010 phantoms.
+      const looksLikeNeed =
+        !rawName ||
+        /^component[_\s-]?\d+$/i.test(rawName) ||
+        /^(absorbs?|complements?|provides?|adds?|balances?|brings?|creates?|offers?|delivers?|pairs?|finishes?|rounds?|enhances?|supplies?|gives?|contributes?)\b/i.test(
+          rawName,
+        ) ||
+        (/^(something|anything|a side|an accompaniment)\b/i.test(rawName) &&
+          rawName.split(/\s+/).length >= 2);
+
+      const explicitKind =
+        typeof component.kind === "string"
+          ? component.kind.trim().toLowerCase().replace(/[\s-]+/g, "_")
+          : "";
+
+      if (explicitKind === "culinary_need" || explicitKind === "need") {
+        component.kind = "culinary_need";
+        if (!rawName || /^component[_\s-]?\d+$/i.test(rawName)) {
+          component.name =
+            coerceMealComponentType(component.type) === "carb_side"
+              ? "carbohydrate accompaniment"
+              : coerceMealComponentType(component.type) === "vegetable_side"
+                ? "vegetable accompaniment"
+                : "culinary accompaniment";
+        } else {
+          component.name = rawName;
+        }
+      } else if (looksLikeNeed) {
+        component.kind = "culinary_need";
+        // Keep purpose as the need description; use a role label, not the sentence, as name.
+        component.name =
+          coerceMealComponentType(component.type) === "carb_side"
+            ? "carbohydrate accompaniment"
+            : coerceMealComponentType(component.type) === "vegetable_side"
+              ? "vegetable accompaniment"
+              : coerceMealComponentType(component.type) === "sauce" ||
+                  coerceMealComponentType(component.type) === "condiment"
+                ? "sauce accompaniment"
+                : "culinary accompaniment";
       } else {
+        component.kind = "edible_component";
         component.name = rawName;
       }
       return component;

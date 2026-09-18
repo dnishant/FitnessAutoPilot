@@ -59,7 +59,10 @@ export function buildMealCompositionPrompt(
     "Culinary completeness is semantic. Many dishes are already standalone meals (grain bowls, pasta, biryani, curry-and-rice composites, loaded tacos, substantial salads, sandwiches, casseroles, stews, etc.). Reason about arbitrary dishes — do not use an allowlist.",
     "",
     "Distinguish integrated parts of ONE recipe from separately eaten companions.",
-    "Existing recommended_side / required_companion components already count — do not add a semantic duplicate with a slightly different name.",
+    "culinaryNeeds are abstract recommendations (purpose text) — NOT edible food.",
+    "When fulfilling a need, emit a concrete edible food name in addedComponents and leave the need itself out of the edible plate.",
+    "One edible addition may satisfy multiple culinaryNeeds. Optional/recommended needs may remain unused.",
+    "Existing recommended_side / required_companion edible components already count — do not add a semantic duplicate with a slightly different name.",
     "Do not treat ingredient overlap as automatic duplication (yogurt marinade ≠ cucumber raita; cooked tomatoes in curry ≠ fresh tomato salad).",
     "",
     "Nutrition / calorie / macro targets must NEVER drive additions. Culinary structure first; personalized nutrition is a separate downstream stage.",
@@ -96,13 +99,20 @@ export function buildMealCompositionPrompt(
       },
       deterministicRoleHints: {
         profile,
-        // Real detected components only — never invented placeholders.
+        // Real detected edible components only — never purpose-text needs.
         existingComponents: detected.existingComponents.map((c) => ({
           name: c.name,
           role: c.role,
           relationship: c.relationship,
           source: c.source,
           purpose: c.reason,
+        })),
+        culinaryNeeds: detected.culinaryNeeds.map((n) => ({
+          needId: n.needId,
+          role: n.role,
+          purpose: n.purpose,
+          required: n.required,
+          relationship: n.relationship,
         })),
       },
       knownRecipeStructure: request.recipe

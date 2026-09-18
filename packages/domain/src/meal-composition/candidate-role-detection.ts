@@ -10,6 +10,7 @@ import {
 } from "./component-identity";
 import {
   detectExistingMealRoles,
+  type DetectedCulinaryNeed,
   type DetectedExistingComponent,
 } from "./role-detection";
 
@@ -47,6 +48,7 @@ function emptyProfile(): Omit<MealCompositionProfile, "addedComponentRoles"> {
 export type DetectedCandidateRoles = {
   profile: MealCompositionProfile;
   existingComponents: MealConceptComponent[];
+  culinaryNeeds: DetectedCulinaryNeed[];
 };
 
 /**
@@ -75,6 +77,7 @@ export function detectExistingCandidateRoles(
   return {
     profile: { ...profile, addedComponentRoles: [] },
     existingComponents,
+    culinaryNeeds: [],
   };
 }
 
@@ -131,12 +134,14 @@ export function detectRolesForCompositionRequest(input: {
 }): {
   profile: MealCompositionProfile;
   existingComponents: MealConceptComponent[];
+  culinaryNeeds: DetectedCulinaryNeed[];
 } {
   if (input.recipe) {
     const detected = detectExistingMealRoles(input.recipe);
     return {
       profile: detected.profile,
       existingComponents: detectedRecipeComponentsToConcepts(detected.existingComponents),
+      culinaryNeeds: detected.culinaryNeeds,
     };
   }
   return detectExistingCandidateRoles(input.candidate);

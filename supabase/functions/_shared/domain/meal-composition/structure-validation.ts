@@ -8,6 +8,7 @@ import type {
 } from "../../contracts/index.ts";
 import { err, ok, type Result } from "../../validation/index.ts";
 import { namesLikelyEquivalent, normalizeComponentName } from "./component-identity.ts";
+import { isEdibleFoodIdentity } from "./edible-identity.ts";
 import { isUnresolvedPlaceholderName } from "./placeholders.ts";
 import {
   mealCompositionError,
@@ -124,11 +125,11 @@ export function validateMealArchitectProposalStructure(
   ];
 
   for (const added of proposal.addedComponents) {
-    if (isUnresolvedPlaceholderName(added.name)) {
+    if (isUnresolvedPlaceholderName(added.name) || !isEdibleFoodIdentity(added.name)) {
       return err(
         mealCompositionError(
           "UNRESOLVED_COMPONENT_IDENTITY",
-          `Added component "${added.name}" is a planning placeholder, not edible food.`,
+          `Added component "${added.name}" is not an edible food identity.`,
           { component: added.name },
         ),
       );
@@ -201,11 +202,11 @@ export function validateCompleteMealStructure(
   let independentMainCount = 0;
 
   for (const component of meal.components) {
-    if (isUnresolvedPlaceholderName(component.name)) {
+    if (isUnresolvedPlaceholderName(component.name) || !isEdibleFoodIdentity(component.name)) {
       return err(
         mealCompositionError(
           "UNRESOLVED_COMPONENT_IDENTITY",
-          `Placeholder "${component.name}" cannot proceed to authoritative nutrition.`,
+          `Non-edible label "${component.name}" cannot proceed to authoritative nutrition.`,
           { componentId: component.componentId, mealId: meal.mealId },
         ),
       );
@@ -281,7 +282,9 @@ export function validateCompleteMealStructure(
 export function filterPlaceholdersFromComponents<T extends { name: string }>(
   components: readonly T[],
 ): T[] {
-  return components.filter((c) => !isUnresolvedPlaceholderName(c.name));
+  return components.filter(
+    (c) => isEdibleFoodIdentity(c.name) && !isUnresolvedPlaceholderName(c.name),
+  );
 }
 
 export function assertIndependentOwnersHaveStableIds(

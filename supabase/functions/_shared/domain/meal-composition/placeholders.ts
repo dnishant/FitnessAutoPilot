@@ -4,6 +4,9 @@ import { normalizeComponentName } from "./component-identity.ts";
  * Planning-concept placeholders are not edible food. They must never reach
  * authoritative nutrition / PLAN-010. Detection is generic (role/form language),
  * not dish-name matching.
+ *
+ * Purpose-sentence culinary needs ("Absorbs pan sauce") are handled by
+ * `edible-identity.ts` — keep this module focused on role/form stubs.
  */
 const PLACEHOLDER_EXACT = new Set([
   "bowl base",

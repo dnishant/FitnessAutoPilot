@@ -8,6 +8,7 @@ import type {
   ResolvedRecipe,
 } from "@fitness-autopilot/contracts";
 import { isUnresolvedPlaceholderName } from "../meal-composition/placeholders";
+import { isEdibleFoodIdentity } from "../meal-composition/edible-identity";
 import { matchDiscreteStapleEstimate } from "./staple-estimates";
 import {
   roleStructuralEstimateForComponent,
@@ -143,12 +144,15 @@ function coefficientForComponent(
     return { ok: true, components: [] };
   }
 
-  if (isUnresolvedPlaceholderName(component.name)) {
+  if (
+    isUnresolvedPlaceholderName(component.name) ||
+    !isEdibleFoodIdentity(component.name)
+  ) {
     return {
       ok: false,
       error: {
         code: "unquantifiable_component",
-        message: `Placeholder "${component.name}" cannot enter PLAN-010 portioning.`,
+        message: `Non-edible label "${component.name}" cannot enter PLAN-010 portioning.`,
         componentId: component.componentId,
       },
     };
@@ -605,12 +609,12 @@ export function buildCoefficientsFromCompleteMeal(input: {
     if ((component.nutritionOwnership ?? "independent") === "parent_owned") {
       continue;
     }
-    if (isUnresolvedPlaceholderName(component.name)) {
+    if (isUnresolvedPlaceholderName(component.name) || !isEdibleFoodIdentity(component.name)) {
       return {
         ok: false,
         error: {
           code: "unquantifiable_component",
-          message: `Placeholder "${component.name}" blocked before portioning.`,
+          message: `Non-edible label "${component.name}" blocked before portioning.`,
           componentId: component.componentId,
         },
       };

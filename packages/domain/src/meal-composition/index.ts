@@ -12,5 +12,6 @@ export * from "./repertoire";
 export * from "./component-recipe";
 export * from "./selected-resolution";
 export * from "./placeholders";
+export * from "./edible-identity";
 export * from "./nutrition-ownership";
 export * from "./structure-validation";

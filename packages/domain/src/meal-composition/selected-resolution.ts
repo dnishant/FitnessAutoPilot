@@ -30,6 +30,7 @@ import {
   applyOwnershipToCompleteMeal,
   resolveNutritionOwnership,
 } from "./nutrition-ownership";
+import { isEdibleFoodIdentity } from "./edible-identity";
 import { isUnresolvedPlaceholderName } from "./placeholders";
 import { summarizeMealConceptRepertoire } from "./repertoire";
 import { validateCompleteMealStructure } from "./structure-validation";
@@ -158,7 +159,9 @@ function mergeRecipeCompanions(
   const next = [...complete];
   for (const mc of recipe.mealComponents) {
     if (mc.type === "main") continue;
-    if (isUnresolvedPlaceholderName(mc.name)) continue;
+    // Culinary needs / purpose prose are never edible CompleteMeal companions.
+    if (mc.kind === "culinary_need") continue;
+    if (!isEdibleFoodIdentity(mc.name) || isUnresolvedPlaceholderName(mc.name)) continue;
     const role =
       mc.type === "carb_side"
         ? "carbohydrate"
@@ -203,7 +206,7 @@ function mergeRecipeCompanions(
       }),
       resolution: {
         status: "skipped_intrinsic",
-        note: "PLAN-008 meal component retained.",
+        note: "PLAN-008 edible meal component retained.",
       },
     });
   }
@@ -282,7 +285,12 @@ export async function resolveSelectedCompleteMeals(
       conceptComponentToComplete(concept.main, concept.mealUnderstanding),
     ];
     for (const component of concept.components) {
-      if (isUnresolvedPlaceholderName(component.name)) continue;
+      if (
+        !isEdibleFoodIdentity(component.name) ||
+        isUnresolvedPlaceholderName(component.name)
+      ) {
+        continue;
+      }
       if (
         complete.some(
           (c) =>
