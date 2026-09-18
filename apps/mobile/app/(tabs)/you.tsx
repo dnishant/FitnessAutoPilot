@@ -45,10 +45,14 @@ export default function YouTabScreen() {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <ScreenHeader eyebrow="YOU" title="Your plan" subtitle="Goals, nutrition, and preferences." />
+      <ScreenHeader
+        eyebrow="YOU"
+        title="Your profile"
+        subtitle="Goals, nutrition, and preferences saved to your account."
+      />
 
       <View style={styles.section}>
-        <SectionHeader title="Goal" actionLabel="Edit" onAction={() => router.push("/goal")} />
+        <SectionHeader title="Your Goal" actionLabel="Edit" onAction={() => router.push("/goal")} />
         <View style={styles.card}>
           <Text style={styles.cardTitle}>
             {goalType ? onboardingGoalLabel(goalType) : goal?.goalType?.replace(/_/g, " ") ?? "Not set"}
@@ -63,7 +67,7 @@ export default function YouTabScreen() {
       </View>
 
       <View style={styles.section}>
-        <SectionHeader title="Nutrition" />
+        <SectionHeader title="Nutrition Targets" />
         {nutritionTarget ? (
           <NutritionSummary
             calories={nutritionTarget.targetCalories}
@@ -82,7 +86,7 @@ export default function YouTabScreen() {
 
       <View style={styles.section}>
         <SectionHeader
-          title="Preferences"
+          title="Food Preferences"
           actionLabel="Edit"
           onAction={() => router.push("/preferences")}
         />
@@ -93,7 +97,7 @@ export default function YouTabScreen() {
 
       <View style={styles.section}>
         <SectionHeader
-          title="Cooking"
+          title="Cooking & Meal Prep"
           actionLabel="Edit"
           onAction={() => router.push("/cooking-preferences")}
         />

@@ -1,6 +1,11 @@
 import { Redirect } from "expo-router";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import {
+  authenticatedBootstrapHref,
+  resolveAuthenticatedBootstrapRoute,
+} from "../src/lib/consumer-setup";
 import { useSession } from "../src/state/session";
+import { colors, typography } from "../src/theme/tokens";
 
 export default function Index() {
   const {
@@ -18,8 +23,9 @@ export default function Index() {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}>
-        <ActivityIndicator color="#1F6F4A" />
+      <View style={styles.loading}>
+        <ActivityIndicator color={colors.primary} />
+        <Text style={styles.loadingText}>Getting things ready…</Text>
       </View>
     );
   }
@@ -27,14 +33,31 @@ export default function Index() {
   if (!user) {
     return <Redirect href="/auth" />;
   }
-  if (!profile || !currentRmr || !currentTdee || !currentCalorieTarget || !nutritionTarget || !goal) {
-    return <Redirect href="/onboarding" />;
-  }
-  if (!mealPreferences) {
-    return <Redirect href="/preferences" />;
-  }
-  if (!cookingPreferences) {
-    return <Redirect href="/cooking-preferences" />;
-  }
-  return <Redirect href="/(tabs)/today" />;
+
+  const route = resolveAuthenticatedBootstrapRoute({
+    profile,
+    currentRmr,
+    currentTdee,
+    currentCalorieTarget,
+    nutritionTarget,
+    goal,
+    mealPreferences,
+    cookingPreferences,
+  });
+
+  return <Redirect href={authenticatedBootstrapHref(route)} />;
 }
+
+const styles = StyleSheet.create({
+  loading: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+    backgroundColor: colors.background,
+  },
+  loadingText: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+});

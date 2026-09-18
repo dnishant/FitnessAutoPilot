@@ -427,6 +427,40 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
       goal: null,
     };
   }
+
+  const first = await fetchRemoteOnboardingStateOnce(userId);
+  const looksEmpty = !first.profile && !first.currentRmr && !first.goal;
+  // Retry once when everything came back empty — transient PostgREST/RLS races
+  // should not force a completed user through blank onboarding.
+  if (looksEmpty) {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    return fetchRemoteOnboardingStateOnce(userId);
+  }
+  return first;
+}
+
+async function fetchRemoteOnboardingStateOnce(userId: string): Promise<{
+  profile: ProfileBasics | null;
+  currentRmr: RmrEstimate | null;
+  currentTdee: TdeeEstimate | null;
+  currentCalorieTarget: CalorieTarget | null;
+  currentNutritionTarget: NutritionTarget | null;
+  mealPreferences: MealPreferences | null;
+  cookingPreferences: CookingPreferences | null;
+  goal: Goal | null;
+}> {
+  if (!supabase) {
+    return {
+      profile: null,
+      currentRmr: null,
+      currentTdee: null,
+      currentCalorieTarget: null,
+      currentNutritionTarget: null,
+      mealPreferences: null,
+      cookingPreferences: null,
+      goal: null,
+    };
+  }
   const [profileRes, rmrRes, tdeeRes, calorieRes, nutritionRes, goalRes] = await Promise.all([
     supabase
       .from("user_profiles")
@@ -473,15 +507,46 @@ async function loadRemoteOnboardingState(userId: string): Promise<{
       .maybeSingle(),
   ]);
 
+  for (const [label, res] of [
+    ["user_profiles", profileRes],
+    ["rmr_estimates", rmrRes],
+    ["tdee_estimates", tdeeRes],
+    ["calorie_targets", calorieRes],
+    ["nutrition_targets", nutritionRes],
+    ["goals", goalRes],
+  ] as const) {
+    if (res.error) {
+      console.warn(`[session] loadRemoteOnboardingState ${label} error:`, res.error.message);
+    }
+  }
+
   return {
-    profile: profileRes.data ? mapProfileRow(profileRes.data) : null,
-    currentRmr: rmrRes.data ? mapRmrRow(rmrRes.data) : null,
-    currentTdee: tdeeRes.data ? mapTdeeRow(tdeeRes.data) : null,
-    currentCalorieTarget: calorieRes.data ? mapCalorieTargetRow(calorieRes.data) : null,
-    currentNutritionTarget: nutritionRes.data ? mapNutritionTargetRow(nutritionRes.data) : null,
-    mealPreferences: profileRes.data ? mapMealPreferencesRow(profileRes.data) : null,
-    cookingPreferences: profileRes.data ? mapCookingPreferencesRow(profileRes.data) : null,
-    goal: goalRes.data ? mapGoalRow(goalRes.data) : null,
+    profile: profileRes.error
+      ? null
+      : profileRes.data
+        ? mapProfileRow(profileRes.data)
+        : null,
+    currentRmr: rmrRes.error ? null : rmrRes.data ? mapRmrRow(rmrRes.data) : null,
+    currentTdee: tdeeRes.error ? null : tdeeRes.data ? mapTdeeRow(tdeeRes.data) : null,
+    currentCalorieTarget: calorieRes.error
+      ? null
+      : calorieRes.data
+        ? mapCalorieTargetRow(calorieRes.data)
+        : null,
+    currentNutritionTarget: nutritionRes.error
+      ? null
+      : nutritionRes.data
+        ? mapNutritionTargetRow(nutritionRes.data)
+        : null,
+    mealPreferences:
+      profileRes.error || !profileRes.data
+        ? null
+        : mapMealPreferencesRow(profileRes.data),
+    cookingPreferences:
+      profileRes.error || !profileRes.data
+        ? null
+        : mapCookingPreferencesRow(profileRes.data),
+    goal: goalRes.error ? null : goalRes.data ? mapGoalRow(goalRes.data) : null,
   };
 }
 
@@ -535,18 +600,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
                 store = null;
               }
             }
-            store = store ?? ensureLocalUser(parsed.email, "restored");
+            // Never invent an empty user via password "restored" — that changes userId
+            // and wipes a returning local user's completed setup.
             if (!cancelled) {
-              setUser({ id: store.userId, email: store.email });
-              setProfile(store.profile);
-              setCurrentRmr(store.currentRmr);
-              setCurrentTdee(store.currentTdee);
-              setCurrentCalorieTarget(store.currentCalorieTarget);
-              setGoal(store.goal);
-              setNutritionTarget(store.nutritionTarget);
-              setMealPreferences(store.mealPreferences);
-              setCookingPreferences(store.cookingPreferences);
-              setDailyPlan(store.dailyPlan);
+              if (store) {
+                setUser({ id: store.userId, email: store.email });
+                setProfile(store.profile);
+                setCurrentRmr(store.currentRmr);
+                setCurrentTdee(store.currentTdee);
+                setCurrentCalorieTarget(store.currentCalorieTarget);
+                setGoal(store.goal);
+                setNutritionTarget(store.nutritionTarget);
+                setMealPreferences(store.mealPreferences);
+                setCookingPreferences(store.cookingPreferences);
+                setDailyPlan(store.dailyPlan);
+              } else {
+                setUser(parsed);
+              }
             }
           }
         } else if (supabase) {
@@ -686,7 +756,23 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       async signIn(email, password) {
         if (useLocalPlanner) {
           try {
-            const store = ensureLocalUser(email, password);
+            const userId = (() => {
+              // Match ensureLocalUser id derivation without inventing empty state first.
+              const storeProbe = ensureLocalUser(email, password);
+              return storeProbe.userId;
+            })();
+            let store = getLocalStore(userId);
+            if (!store?.profile && !store?.goal) {
+              try {
+                const storeRaw = await AsyncStorage.getItem(`${LOCAL_STORE_KEY}.${userId}`);
+                if (storeRaw) {
+                  store = hydrateLocalStore(JSON.parse(storeRaw) as LocalStore);
+                }
+              } catch {
+                // fall through
+              }
+            }
+            store = store ?? ensureLocalUser(email, password);
             const next = { id: store.userId, email: store.email };
             try {
               await AsyncStorage.setItem(LOCAL_USER_KEY, JSON.stringify(next));
@@ -703,6 +789,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             setMealPreferences(store.mealPreferences);
             setCookingPreferences(store.cookingPreferences);
             setDailyPlan(store.dailyPlan);
+            try {
+              const planRaw = await AsyncStorage.getItem(CONSUMER_PLAN_STORAGE_KEY);
+              if (planRaw) {
+                setWeeklyPlan(JSON.parse(planRaw) as ConsumerWeeklyPlan);
+              }
+            } catch {
+              // ignore
+            }
             return { ok: true };
           } catch (e) {
             return {
@@ -1489,12 +1583,20 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     return {
       ...api,
       async generateWeeklyPlan() {
+        const previousReadyPlan =
+          weeklyPlan?.status === "ready" ? weeklyPlan : null;
         const generating: ConsumerWeeklyPlan = {
           ...createEmptyConsumerPlan(),
           status: "generating",
           generationStage: "understanding_preferences",
         };
-        await persistWeeklyPlan(generating);
+        // UI-only generating state — do not overwrite the remote ready plan yet.
+        setWeeklyPlan(generating);
+        try {
+          await AsyncStorage.setItem(CONSUMER_PLAN_STORAGE_KEY, JSON.stringify(generating));
+        } catch {
+          // best-effort
+        }
         const result = await generateConsumerWeeklyPlan(
           {
             useLocalMode: useLocalPlanner,
@@ -1567,19 +1669,24 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             },
           },
           async (stage: ConsumerPlanGenerationStage) => {
-            await persistWeeklyPlan({
+            setWeeklyPlan({
               ...generating,
               status: "generating",
               generationStage: stage,
             });
           },
         );
+        if (!result.ok || result.plan.status !== "ready") {
+          // Keep previous active plan when regeneration fails.
+          if (previousReadyPlan) {
+            await persistWeeklyPlan(previousReadyPlan);
+          } else {
+            await persistWeeklyPlan(result.plan);
+          }
+          return result;
+        }
         await persistWeeklyPlan(result.plan);
-        if (
-          !useLocalPlanner &&
-          result.plan &&
-          (result.plan.status === "ready" || result.plan.status === "failed")
-        ) {
+        if (!useLocalPlanner && result.plan) {
           await saveRemoteWeeklyPlan(result.plan);
         }
         return result;

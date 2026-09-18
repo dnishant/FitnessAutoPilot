@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -33,6 +33,7 @@ import {
   wearableCaloriesFieldLabel,
   type OnboardingView,
 } from "@fitness-autopilot/domain";
+import { isConsumerSetupComplete } from "../src/lib/consumer-setup";
 import { useSession } from "../src/state/session";
 import { CookingPreferenceSteps } from "../src/components/cooking-preference-steps";
 import { MealPreferenceSteps } from "../src/components/meal-preference-steps";
@@ -44,11 +45,52 @@ import { NutritionSummary } from "../src/components/ui/meals";
 import { colors, spacing, typography } from "../src/theme/tokens";
 
 export default function OnboardingScreen() {
-  const { completeOnboarding, user } = useSession();
+  const {
+    completeOnboarding,
+    user,
+    profile,
+    currentRmr,
+    currentTdee,
+    currentCalorieTarget,
+    nutritionTarget,
+    mealPreferences,
+    cookingPreferences,
+    goal,
+    loading,
+  } = useSession();
   const [view, setView] = useState(() => createOnboardingView());
   const [busy, setBusy] = useState(false);
   const [persistError, setPersistError] = useState<string | null>(null);
   const [showCalculation, setShowCalculation] = useState(false);
+
+  // Returning configured users must never re-run the blank wizard.
+  useEffect(() => {
+    if (loading) return;
+    if (
+      isConsumerSetupComplete({
+        profile,
+        currentRmr,
+        currentTdee,
+        currentCalorieTarget,
+        nutritionTarget,
+        goal,
+        mealPreferences,
+        cookingPreferences,
+      })
+    ) {
+      router.replace("/(tabs)/today");
+    }
+  }, [
+    loading,
+    profile,
+    currentRmr,
+    currentTdee,
+    currentCalorieTarget,
+    nutritionTarget,
+    goal,
+    mealPreferences,
+    cookingPreferences,
+  ]);
 
   function updateDraft<K extends keyof typeof view.draft>(key: K, value: (typeof view.draft)[K]) {
     setView((current) => ({
