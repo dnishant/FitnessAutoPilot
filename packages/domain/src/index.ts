@@ -28,3 +28,4 @@ export * from "./planning/weekly-strategy";
 export * from "./planning/ranked-weekly-strategy";
 export * from "./planning/ranked-weekly-strategy-fixtures";
 export * from "./planning/meal-planning-pipeline";
+export * from "./planning/executable-candidate-recovery";

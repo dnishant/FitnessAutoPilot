@@ -610,6 +610,10 @@ export function buildCoefficientsFromCompleteMeal(input: {
       continue;
     }
     if (isUnresolvedPlaceholderName(component.name) || !isEdibleFoodIdentity(component.name)) {
+      // Recommended companions may be omitted; they must not sink the plate.
+      if (component.relationship === "recommended") {
+        continue;
+      }
       return {
         ok: false,
         error: {

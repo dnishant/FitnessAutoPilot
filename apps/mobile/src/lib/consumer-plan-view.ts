@@ -169,6 +169,13 @@ export function humanizePlanGenerationError(message: string, code?: string): str
   if (lower.includes("preference") || lower.includes("allergy")) {
     return "Something in your preferences blocked planning. Review food preferences, then try again.";
   }
+  if (
+    code === "EXECUTABLE_REPLACEMENT_EXHAUSTED" ||
+    code === "PLAN_NOT_EXECUTABLE" ||
+    lower.includes("not executable")
+  ) {
+    return "We couldn't build a complete executable meal plan from the available recipes. Your preferences are saved — try generating again.";
+  }
   return "We couldn't finish your meal plan. Your preferences are saved. Try generating it again.";
 }
 
