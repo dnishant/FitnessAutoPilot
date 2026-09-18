@@ -11,22 +11,22 @@ export const GENERATED_RECIPE_NUTRITION_SOURCE = "llm_estimate" as const;
 export const GENERATED_RECIPE_NUTRITION_POLICY_VERSION =
   "generated-recipe-nutrition-v1" as const;
 
-/** Canonical macro bag used across recipe totals, per-serving, and scaled portions. */
-export const NutritionMacrosSchema = z.object({
+/** Macro bag for recipe totals / per-serving (IngredientNutrition field names). */
+export const RecipeMacroTotalsSchema = z.object({
   caloriesKcal: z.number().finite().nonnegative(),
   proteinGrams: z.number().finite().nonnegative(),
   carbohydrateGrams: z.number().finite().nonnegative(),
   fatGrams: z.number().finite().nonnegative(),
   fiberGrams: z.number().finite().nonnegative().optional(),
 });
-export type NutritionMacros = z.infer<typeof NutritionMacrosSchema>;
+export type RecipeMacroTotals = z.infer<typeof RecipeMacroTotalsSchema>;
 
 export const GeneratedNutritionConfidenceSchema = z.enum(["low", "medium", "high"]);
 
 export const GeneratedRecipeNutritionSchema = z.object({
   source: z.literal(GENERATED_RECIPE_NUTRITION_SOURCE),
-  total: NutritionMacrosSchema,
-  perServing: NutritionMacrosSchema,
+  total: RecipeMacroTotalsSchema,
+  perServing: RecipeMacroTotalsSchema,
   confidence: GeneratedNutritionConfidenceSchema.optional(),
   /** Optional free-text note from the model about estimation approach. */
   estimationNotes: z.string().trim().min(1).max(600).optional(),

@@ -1,7 +1,7 @@
 import type {
   GeneratedRecipeNutrition,
   IngredientNutrition,
-  NutritionMacros,
+  RecipeMacroTotals,
   RecipeNutrition,
   RecipeNutritionResult,
   RecipeOptimization,
@@ -10,7 +10,6 @@ import type {
 } from "@fitness-autopilot/contracts";
 import {
   FOOD_RESOLUTION_POLICY_VERSION,
-  GENERATED_RECIPE_NUTRITION_POLICY_VERSION,
   GENERATED_RECIPE_NUTRITION_SOURCE,
   GeneratedRecipeNutritionSchema,
   NUTRITION_CALCULATION_POLICY_VERSION,
@@ -61,15 +60,15 @@ export const TASTE_FIRST_NUTRITION_OPTIMIZATION_INSTRUCTIONS = [
   "Do not reverse-engineer ingredient quantities to hit a requested macro target unless explicitly asked.",
 ].join(" ");
 
-export function estimatedCaloriesFromMacros(macros: NutritionMacros): number {
+export function estimatedCaloriesFromMacros(macros: RecipeMacroTotals): number {
   return macros.proteinGrams * 4 + macros.carbohydrateGrams * 4 + macros.fatGrams * 9;
 }
 
-export function scaleMacros(macros: NutritionMacros, multiplier: number): NutritionMacros {
+export function scaleMacros(macros: RecipeMacroTotals, multiplier: number): RecipeMacroTotals {
   if (!Number.isFinite(multiplier) || multiplier < 0) {
     throw new Error("multiplier must be a finite non-negative number");
   }
-  const scaled: NutritionMacros = {
+  const scaled: RecipeMacroTotals = {
     caloriesKcal: macros.caloriesKcal * multiplier,
     proteinGrams: macros.proteinGrams * multiplier,
     carbohydrateGrams: macros.carbohydrateGrams * multiplier,
@@ -88,7 +87,7 @@ export function scaleMacros(macros: NutritionMacros, multiplier: number): Nutrit
 export function macrosForServings(
   recipe: Pick<ResolvedRecipe, "nutrition">,
   personalServings: number,
-): NutritionMacros {
+): RecipeMacroTotals {
   const perServing = recipe.nutrition?.perServing;
   if (!perServing) {
     throw new Error("recipe.nutrition.perServing is required to scale macros");
@@ -141,7 +140,7 @@ export function ingredientQuantityForServings(
   };
 }
 
-function macrosNonNegative(macros: NutritionMacros): boolean {
+function macrosNonNegative(macros: RecipeMacroTotals): boolean {
   return (
     macros.caloriesKcal >= 0 &&
     macros.proteinGrams >= 0 &&
@@ -162,7 +161,7 @@ function approximatelyEqual(a: number, b: number, toleranceFraction: number): bo
  */
 function checkIngredientPlausibility(
   ingredients: readonly ResolvedRecipeIngredient[],
-  total: NutritionMacros,
+  total: RecipeMacroTotals,
 ): GeneratedNutritionValidationError | null {
   const names = ingredients.map((i) => i.name.toLowerCase()).join(" ");
   const hasSubstantialOil = ingredients.some((i) => {
@@ -365,7 +364,9 @@ export function recipeNutritionResultFromGenerated(
     nutrition,
     resolutionQuality: nutrition.resolutionQuality,
     policyVersions: {
-      foodResolution: GENERATED_RECIPE_NUTRITION_POLICY_VERSION,
+      // Bridge into PLAN-009 RecipeNutritionResult shape for the portion solver.
+      // Active source is llm_estimate on ResolvedRecipe; this adapter is not USDA.
+      foodResolution: FOOD_RESOLUTION_POLICY_VERSION,
       nutritionCalculation: NUTRITION_CALCULATION_POLICY_VERSION,
       quantityNormalization: QUANTITY_NORMALIZATION_POLICY_VERSION,
     },

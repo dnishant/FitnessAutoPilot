@@ -213,8 +213,8 @@ describe("generated recipe nutrition helpers", () => {
 
     const bridged = recipeNutritionResultFromGenerated(paneerKathiRoll);
     expect(bridged).not.toBeNull();
-    expect(bridged!.nutrition.perBaseServing.caloriesKcal).toBe(500);
-    expect(bridged!.resolutionQuality.status).toBe("complete");
+    expect(bridged?.nutrition?.perBaseServing?.caloriesKcal).toBe(500);
+    expect(bridged?.resolutionQuality.status).toBe("complete");
   });
 
   it("flags implausible near-zero carbs when paratha is present", () => {
