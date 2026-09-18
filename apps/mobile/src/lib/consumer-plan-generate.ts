@@ -23,6 +23,7 @@ import {
   attachPersonalizedWeeklyPlan,
   buildComponentNutritionByKeyFromCompleteMeals,
   buildLocalDemoNutritionMaps,
+  buildNutritionMapsFromGeneratedRecipes,
   composeMealConcepts,
   personalizeWeeklyNutritionPlan,
   plan008SimpleCandidateLookup,
@@ -258,10 +259,15 @@ async function buildLocalDemoPlan(
   const completeMeals = completeMealsByCandidateId(completeResult);
 
   onProgress?.("personalizing_portions");
+  // Prefer LLM-generated recipe.nutrition; fall back to structural demo maps.
+  let nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
   const demoNutrition = buildLocalDemoNutritionMaps({
     completeMealsByCandidateId: completeMeals,
     recipesByCandidateId,
   });
+  if (Object.keys(nutritionByCandidateId).length === 0) {
+    nutritionByCandidateId = demoNutrition.nutritionByCandidateId;
+  }
 
   return personalizeGeneratedPlan({
     generatedPlanId,
@@ -271,7 +277,7 @@ async function buildLocalDemoPlan(
     conceptsByCandidateId: composed.result.conceptsByCandidateId,
     recipesByCandidateId,
     completeMeals,
-    nutritionByCandidateId: demoNutrition.nutritionByCandidateId,
+    nutritionByCandidateId,
     componentNutritionByKey: demoNutrition.componentNutritionByKey,
     nutritionTarget: apis.nutritionTarget,
     generatedAt,
@@ -447,22 +453,36 @@ async function buildRemotePlan(
   }
 
   onProgress?.("personalizing_portions");
-  let nutritionByCandidateId: Record<string, RecipeNutritionResult> | undefined;
+  // Active architecture: recipe.nutrition (llm_estimate) is the planning source of truth.
+  // USDA resolveRecipeNutrition is optional verification only — never blocks planning.
+  let nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
 
   if (apis.resolveRecipeNutrition && Object.keys(recipesByCandidateId).length > 0) {
-    const nutrition = await apis.resolveRecipeNutrition({
-      recipes: Object.values(recipesByCandidateId),
-      uniqueCandidateIds: strategyResult.strategy.uniqueCandidateIds,
-    });
-    if (nutrition.ok) {
-      nutritionByCandidateId = nutrition.result.recipesByCandidateId;
-    } else if (nutrition.result?.recipesByCandidateId) {
-      nutritionByCandidateId = nutrition.result.recipesByCandidateId;
+    try {
+      const nutrition = await apis.resolveRecipeNutrition({
+        recipes: Object.values(recipesByCandidateId),
+        uniqueCandidateIds: strategyResult.strategy.uniqueCandidateIds,
+      });
+      // Merge USDA results only for candidates still missing generated nutrition.
+      const usdaMap =
+        nutrition.ok || nutrition.result?.recipesByCandidateId
+          ? nutrition.result?.recipesByCandidateId ??
+            (nutrition.ok ? nutrition.result.recipesByCandidateId : undefined)
+          : undefined;
+      if (usdaMap) {
+        for (const [candidateId, result] of Object.entries(usdaMap)) {
+          if (!nutritionByCandidateId[candidateId]) {
+            nutritionByCandidateId[candidateId] = result;
+          }
+        }
+      }
+    } catch {
+      // USDA is non-blocking — continue with generated nutrition.
     }
   }
 
-  // Plate nutrition from CompleteMeal resolutions (USDA when enriched). Role/staple
-  // estimates live inside the coefficient builder — do not prefill demo maps remotely.
+  // Plate nutrition from CompleteMeal resolutions (sides). Role/staple estimates
+  // live inside the coefficient builder.
   const fromMeals = buildComponentNutritionByKeyFromCompleteMeals(completeMeals);
   const componentNutritionByKey: Record<
     string,
@@ -476,8 +496,8 @@ async function buildRemotePlan(
     };
   }
 
-  if (!nutritionByCandidateId || Object.keys(nutritionByCandidateId).length === 0) {
-    // Offline / failed nutrition: structural main nutrition only for local fallback.
+  if (Object.keys(nutritionByCandidateId).length === 0) {
+    // Last-resort structural maps when neither LLM nor USDA nutrition is available.
     const structural = buildLocalDemoNutritionMaps({
       completeMealsByCandidateId: completeMeals,
       recipesByCandidateId,

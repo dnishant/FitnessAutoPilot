@@ -154,7 +154,16 @@ export const PersonalizedMealPortionSchema = z.object({
   role: MealComponentRoleSchema,
   amount: z.number().finite().positive(),
   unit: z.string().trim().min(1).max(40),
-  /** Internal scale relative to reference (recipe_scale); diagnostic / provenance. */
+  /**
+   * Authored servings of this recipe/component the user eats.
+   * 1.0 = one authored serving (NOT the full batch, NOT × baseServings).
+   * Preferred over ambiguous `internalScale` for UI and grocery/prep math.
+   */
+  personalServings: z.number().finite().positive().optional(),
+  /**
+   * @deprecated Prefer personalServings. Same numeric meaning for recipe_scale
+   * (multiplier vs one reference serving). Kept for diagnostics / older payloads.
+   */
   internalScale: z.number().finite().positive().optional(),
   nutrition: IngredientNutritionSchema,
 });

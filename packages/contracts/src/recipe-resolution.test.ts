@@ -132,8 +132,8 @@ function sampleResolvedRecipe(overrides: Record<string, unknown> = {}) {
 }
 
 describe("recipe-resolution contracts", () => {
-  it("exports recipe-resolution-v1 prompt version and default concurrency", () => {
-    expect(RECIPE_RESOLUTION_PROMPT_VERSION).toBe("recipe-resolution-v1");
+  it("exports recipe-resolution-v2 prompt version and default concurrency", () => {
+    expect(RECIPE_RESOLUTION_PROMPT_VERSION).toBe("recipe-resolution-v2");
     expect(DEFAULT_RECIPE_RESOLUTION_CONCURRENCY).toBe(2);
   });
 
@@ -169,11 +169,34 @@ describe("recipe-resolution contracts", () => {
     );
   });
 
-  it("does not model authoritative nutrition fields on ResolvedRecipe", () => {
+  it("models structured llm_estimate nutrition on ResolvedRecipe (not loose macros)", () => {
     const shape = ResolvedRecipeSchema.shape;
     expect(shape).not.toHaveProperty("calories");
     expect(shape).not.toHaveProperty("proteinGrams");
     expect(shape).not.toHaveProperty("macros");
-    expect(shape).not.toHaveProperty("nutrition");
+    expect(shape).toHaveProperty("nutrition");
+    expect(shape).toHaveProperty("optimization");
+    expect(
+      ResolvedRecipeSchema.safeParse(
+        sampleResolvedRecipe({
+          nutrition: {
+            source: "llm_estimate",
+            total: {
+              caloriesKcal: 1920,
+              proteinGrams: 152,
+              carbohydrateGrams: 112,
+              fatGrams: 88,
+            },
+            perServing: {
+              caloriesKcal: 480,
+              proteinGrams: 38,
+              carbohydrateGrams: 28,
+              fatGrams: 22,
+            },
+            confidence: "medium",
+          },
+        }),
+      ).success,
+    ).toBe(true);
   });
 });

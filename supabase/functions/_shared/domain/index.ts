@@ -18,6 +18,7 @@ export * from "./recipes/candidate-ranking.ts";
 export * from "./recipes/candidate-ranking-fixtures.ts";
 export * from "./recipes/recipe-resolution.ts";
 export * from "./recipes/recipe-resolution-fixtures.ts";
+export * from "./recipes/generated-nutrition.ts";
 export * from "./food-resolution/index.ts";
 export * from "./meal-composition/index.ts";
 export * from "./meal-portioning/index.ts";

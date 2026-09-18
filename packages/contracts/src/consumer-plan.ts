@@ -59,6 +59,11 @@ export const ConsumerMealSlotSchema = z.object({
   flavorTags: z.array(z.string().trim().min(1).max(80)).max(12).optional(),
   experienceTags: z.array(z.string().trim().min(1).max(80)).max(12).optional(),
   components: z.array(ConsumerMealComponentSchema).max(16),
+  /**
+   * Authored servings of the main recipe for this slot.
+   * 1.0 = one recipe serving (never batch size × scale).
+   */
+  personalServings: z.number().finite().positive().optional(),
   /** Hide in UI until personalized / authoritative. */
   personalizedNutrition: PersonalizedMealNutritionSchema.optional(),
   personalizationStatus: z.enum(["solved", "best_feasible", "blocked"]).optional(),

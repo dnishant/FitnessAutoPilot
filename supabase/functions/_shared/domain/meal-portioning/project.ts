@@ -127,6 +127,7 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
       let personalizationBlockReason = personalized?.blockReason;
       let personalizationMessage = personalized?.message;
 
+      let personalServings: number | undefined;
       if (personalized?.personalizedPlan && personalized.status !== "blocked") {
         const plan = personalized.personalizedPlan;
         personalizedNutrition = plan.nutrition;
@@ -164,6 +165,14 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
             components.push(base);
           }
         }
+        const mainPortion =
+          plan.portions.find((p) => p.role === "main") ?? plan.portions[0];
+        personalServings =
+          mainPortion?.personalServings ??
+          mainPortion?.internalScale ??
+          (mainPortion?.unit === "servings" || mainPortion?.unit === "serving"
+            ? mainPortion.amount
+            : undefined);
       }
 
       meals.push({
@@ -183,6 +192,7 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
             ].filter(Boolean)
           : undefined,
         components,
+        personalServings,
         personalizedNutrition,
         personalizationStatus,
         personalizationBlockReason,

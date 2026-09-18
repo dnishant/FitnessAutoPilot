@@ -1,14 +1,19 @@
 import { z } from "zod";
 import { CulinaryDiscoveryCandidateSchema, CulinaryDiscoverySourceSchema } from "./culinary-discovery";
+import {
+  GeneratedRecipeNutritionSchema,
+  RecipeOptimizationSchema,
+} from "./generated-recipe-nutrition";
 import { IngredientRoleSchema } from "./recipe";
 import { PrepIntentSchema } from "./weekly-strategy";
 
 /**
- * PLAN-008: Source-grounded recipe resolution contracts.
- * Culinary identity + structured cooking detail only — never authoritative nutrition.
+ * PLAN-008 → nutrition-complete resolution contracts.
+ * Culinary identity + structured cooking detail + LLM-estimated macros (active source of truth).
+ * USDA food-resolution is optional verification — not required for planning.
  */
 
-export const RECIPE_RESOLUTION_PROMPT_VERSION = "recipe-resolution-v1" as const;
+export const RECIPE_RESOLUTION_PROMPT_VERSION = "recipe-resolution-v2" as const;
 
 /** Default bounded concurrency for unique-candidate weekly resolution. */
 export const DEFAULT_RECIPE_RESOLUTION_CONCURRENCY = 2;
@@ -147,11 +152,19 @@ export const ResolvedRecipeSchema = z.object({
   flavorProfile: FlavorProfileSchema,
   experienceProfile: RecipeExperienceSchema,
   resolutionMetadata: RecipeResolutionMetadataSchema,
+  /**
+   * LLM-estimated macros for the FINAL optimized recipe.
+   * Required for recipes accepted into the weekly plan (validated at resolution boundary).
+   * Optional only for legacy fixtures / transitional payloads.
+   */
+  nutrition: GeneratedRecipeNutritionSchema.optional(),
+  /** Structured record of taste-preserving nutrition optimizations, when any were applied. */
+  optimization: RecipeOptimizationSchema.optional(),
 });
 
 /**
  * Input for resolving one unique culinary candidate into a structured recipe.
- * Nutrition targets are intentionally omitted — taste and identity first.
+ * Taste and culinary identity first; nutrition optimization is constrained.
  */
 export const RecipeResolutionRequestSchema = z.object({
   candidate: CulinaryDiscoveryCandidateSchema,

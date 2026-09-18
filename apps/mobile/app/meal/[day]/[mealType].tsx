@@ -121,6 +121,11 @@ export default function MealDetailScreen() {
       ) : null}
 
       <SectionHeader title="Your plate" />
+      {meal.personalServings != null ? (
+        <Text style={styles.portionSummary}>
+          Your portion · {Number(meal.personalServings.toFixed(2))} servings
+        </Text>
+      ) : null}
       {blocked && !hasPortions ? (
         <View style={styles.blockedCard}>
           <Text style={styles.blockedTitle}>Portions unavailable</Text>
@@ -219,6 +224,11 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginTop: -spacing.md,
+  },
+  portionSummary: {
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginTop: -spacing.sm,
   },
   card: {
     backgroundColor: colors.surface,

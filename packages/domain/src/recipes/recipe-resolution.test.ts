@@ -22,8 +22,8 @@ import {
 import { CHICKEN_TIKKA } from "./candidate-ranking-fixtures";
 
 describe("PLAN-008 recipe resolution domain", () => {
-  it("exports prompt version recipe-resolution-v1", () => {
-    expect(RECIPE_RESOLUTION_PROMPT_VERSION).toBe("recipe-resolution-v1");
+  it("exports prompt version recipe-resolution-v2", () => {
+    expect(RECIPE_RESOLUTION_PROMPT_VERSION).toBe("recipe-resolution-v2");
     expect(DEFAULT_RECIPE_RESOLUTION_CONCURRENCY).toBe(2);
   });
 
@@ -35,15 +35,16 @@ describe("PLAN-008 recipe resolution domain", () => {
     expect(unique).toEqual([...PLAN008_SIMPLE_UNIQUE_IDS]);
   });
 
-  it("builds a taste-first identity-preserving prompt", () => {
+  it("builds a taste-first nutrition-complete prompt", () => {
     const prompt = buildRecipeResolutionPrompt({ candidate: CHICKEN_TIKKA });
-    expect(prompt.version).toBe("recipe-resolution-v1");
-    expect(prompt.systemInstruction).toContain("Taste first");
-    expect(prompt.systemInstruction).toContain("Do NOT optimize for low calorie");
+    expect(prompt.version).toBe("recipe-resolution-v2");
+    expect(prompt.systemInstruction).toContain("Taste, cuisine identity");
+    expect(prompt.systemInstruction).toContain("Do NOT transform the meal into diet food");
     expect(prompt.systemInstruction).toContain("Do NOT copy source prose");
-    expect(prompt.systemInstruction).toContain("Do NOT invent or output calories, protein, carbs, fat, macros, or nutrition totals.");
+    expect(prompt.systemInstruction).toContain("Estimate by ingredient-aware arithmetic");
     expect(prompt.userPrompt).toContain("tikka-chicken");
     expect(prompt.userPrompt).toContain("Serious Eats");
+    expect(prompt.userPrompt).toContain('nutrition.source MUST be "llm_estimate"');
   });
 
   it("validates a well-formed resolved recipe and forces candidateId", () => {
@@ -138,13 +139,43 @@ describe("PLAN-008 recipe resolution domain", () => {
     expect(validateResolvedRecipe({ ...base, baseServings: 0 }, request).ok).toBe(false);
   });
 
-  it("rejects authoritative nutrition fields", () => {
+  it("strips loose macro fields but accepts structured llm_estimate nutrition", () => {
     const request = { candidate: CHICKEN_TIKKA };
     const base = makeResolvedRecipeFixture(CHICKEN_TIKKA);
-    const result = validateResolvedRecipe({ ...base, calories: 550, proteinGrams: 55 }, request);
-    expect(result.ok).toBe(false);
-    if (!result.ok) {
-      expect(result.error.message).toMatch(/nutrition/i);
+    const withLoose = validateResolvedRecipe(
+      { ...base, calories: 550, proteinGrams: 55 },
+      request,
+    );
+    expect(withLoose.ok).toBe(true);
+    if (withLoose.ok) {
+      expect(withLoose.value.nutrition?.source).toBe("llm_estimate");
+      expect((withLoose.value as { calories?: number }).calories).toBeUndefined();
+    }
+
+    const inconsistent = validateResolvedRecipe(
+      {
+        ...base,
+        nutrition: {
+          source: "llm_estimate",
+          total: {
+            caloriesKcal: 500,
+            proteinGrams: 100,
+            carbohydrateGrams: 100,
+            fatGrams: 100,
+          },
+          perServing: {
+            caloriesKcal: 125,
+            proteinGrams: 25,
+            carbohydrateGrams: 25,
+            fatGrams: 25,
+          },
+        },
+      },
+      request,
+    );
+    expect(inconsistent.ok).toBe(false);
+    if (!inconsistent.ok) {
+      expect(inconsistent.error.message).toMatch(/inconsistent|macros/i);
     }
   });
 
