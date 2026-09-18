@@ -10,4 +10,7 @@ export * from "./reconcile.ts";
 export * from "./personalize.ts";
 export * from "./project.ts";
 export * from "./arbitrary-meals.ts";
+export * from "./staple-estimates.ts";
+export * from "./role-structural-estimates.ts";
+export * from "./complete-meal-nutrition.ts";
 export * from "./local-demo-nutrition.ts";

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   allocateDailyNutritionBudget,
+  applyDiscretePortionAdjustment,
   attachPersonalizedWeeklyPlan,
   blackenedSalmonTacosCompleteMeal,
   buildCoefficientsFromCompleteMeal,
@@ -11,7 +12,11 @@ import {
   solveMealPortions,
 } from "./index";
 import { plan008SimpleWeeklyStrategy } from "../recipes/recipe-resolution-fixtures";
-import type { RankedWeeklyStrategy } from "@fitness-autopilot/contracts";
+import type {
+  CompleteMeal,
+  ConsumerMealSlot,
+  RankedWeeklyStrategy,
+} from "@fitness-autopilot/contracts";
 
 const DAILY = {
   caloriesKcal: 2200,
@@ -591,5 +596,547 @@ describe("consumer projection", () => {
     );
     expect(attached.personalizedWeeklyPlan?.generatedPlanId).toBe("plan_proj");
     expect(attached.meals?.[0]?.personalizedNutrition).toBeTruthy();
+  });
+});
+
+describe("discrete-staple-estimate-v1", () => {
+  it("portions tortillas with a versioned estimate when USDA nutrition is missing", () => {
+    const meal: CompleteMeal = {
+      mealId: "complete-tortilla-estimate",
+      candidateId: "cand-tortilla-estimate",
+      name: "Tacos de Guisado",
+      mainRecipeId: "recipe-guisado",
+      components: [
+        {
+          componentId: "main",
+          role: "main",
+          name: "Beef Guisado",
+          relationship: "intrinsic",
+          source: "main_recipe",
+          reason: "main",
+          quantityMode: "solver_determined",
+          definitionKind: "recipe_component",
+          normalizedComponentKey: "main:beef guisado",
+          definition: {
+            kind: "recipe_component",
+            name: "Beef Guisado",
+            baseServings: 1,
+            referenceYieldGrams: 180,
+            ingredients: [{ name: "beef", quantity: 180, unit: "g" }],
+          },
+          resolution: {
+            status: "component_recipe_resolved",
+            definition: {
+              kind: "recipe_component",
+              name: "Beef Guisado",
+              baseServings: 1,
+              referenceYieldGrams: 180,
+              ingredients: [{ name: "beef", quantity: 180, unit: "g" }],
+            },
+            ingredientNutrition: {
+              caloriesKcal: 280,
+              proteinGrams: 32,
+              carbohydrateGrams: 8,
+              fatGrams: 14,
+            },
+          },
+        },
+        {
+          componentId: "tortillas",
+          role: "carbohydrate",
+          name: "Warm Corn Tortillas",
+          relationship: "required_companion",
+          source: "composition_engine",
+          reason: "taco vehicle",
+          quantityMode: "solver_determined",
+          definitionKind: "atomic_food",
+          normalizedComponentKey: "carbohydrate:warm corn tortillas",
+          definition: {
+            kind: "atomic_food",
+            name: "Warm Corn Tortillas",
+            measurementState: "cooked",
+          },
+          resolution: {
+            status: "unresolved",
+            definition: {
+              kind: "atomic_food",
+              name: "Warm Corn Tortillas",
+              measurementState: "cooked",
+            },
+          },
+        },
+      ],
+      compositionProfile: {
+        hasPrimaryProtein: true,
+        hasMeaningfulCarbohydrate: true,
+        hasMeaningfulVegetableOrFruit: false,
+        hasMeaningfulFiberSource: false,
+        hasSauceOrMoistureComponent: false,
+        addedComponentRoles: ["carbohydrate"],
+      },
+      metadata: {
+        promptVersion: "meal-composition-v2",
+        policyVersion: "meal-composition-v1",
+        createdAt: "2026-09-17T12:00:00.000Z",
+      },
+    };
+
+    const coeffs = buildCoefficientsFromCompleteMeal({
+      meal,
+      nutritionByCandidateId: {
+        [meal.candidateId]: {
+          recipeId: meal.mainRecipeId,
+          candidateId: meal.candidateId,
+          recipeName: meal.name,
+          baseServings: 1,
+          ingredients: [],
+          mealComponents: [],
+          nutrition: {
+            total: {
+              caloriesKcal: 280,
+              proteinGrams: 32,
+              carbohydrateGrams: 8,
+              fatGrams: 14,
+            },
+            perBaseServing: {
+              caloriesKcal: 280,
+              proteinGrams: 32,
+              carbohydrateGrams: 8,
+              fatGrams: 14,
+              fiberGrams: 0,
+            },
+            ingredientBreakdown: [
+              {
+                ingredientId: "main",
+                ingredientName: "Beef Guisado",
+                grams: 180,
+                status: "resolved",
+              },
+            ],
+            resolutionQuality: {
+              status: "complete",
+              totalIngredientCount: 1,
+              resolvedIngredientCount: 1,
+              ambiguousIngredientCount: 0,
+              unresolvedIngredientCount: 0,
+              highConfidenceCount: 1,
+              mediumConfidenceCount: 0,
+              directMassConversionCount: 1,
+              providerMeasureConversionCount: 0,
+              lowConfidenceConversionCount: 0,
+              pendingPortioningComponentCount: 0,
+            },
+          },
+          resolutionQuality: {
+            status: "complete",
+            totalIngredientCount: 1,
+            resolvedIngredientCount: 1,
+            ambiguousIngredientCount: 0,
+            unresolvedIngredientCount: 0,
+            highConfidenceCount: 1,
+            mediumConfidenceCount: 0,
+            directMassConversionCount: 1,
+            providerMeasureConversionCount: 0,
+            lowConfidenceConversionCount: 0,
+            pendingPortioningComponentCount: 0,
+          },
+          policyVersions: {
+            foodResolution: "food-resolution-v1",
+            nutritionCalculation: "nutrition-calculation-v1",
+            quantityNormalization: "quantity-normalization-v1",
+          },
+        },
+      },
+    });
+    expect(coeffs.ok).toBe(true);
+    if (!coeffs.ok) return;
+    const tortillaCoeff = coeffs.components.find((c) => c.kind === "count");
+    expect(tortillaCoeff).toBeTruthy();
+    if (tortillaCoeff?.kind !== "count") return;
+    expect(tortillaCoeff.unitLabel).toBe("tortilla");
+    expect(tortillaCoeff.nutritionPerUnit.caloriesKcal).toBe(65);
+
+    const solved = solveMealPortions({
+      mealId: "instance-estimate",
+      mealName: meal.name,
+      sourceCompleteMealId: meal.mealId,
+      components: coeffs.components,
+      nutritionIntent: {
+        targetCaloriesKcal: 650,
+        targetProteinGrams: 45,
+      },
+      generatedAt: "2026-09-17T12:00:00.000Z",
+    });
+    expect(solved.status).not.toBe("blocked");
+    const tortilla = solved.portions.find((p) => /tortilla/i.test(p.displayName));
+    expect(tortilla).toBeTruthy();
+    expect(Number.isInteger(tortilla!.amount)).toBe(true);
+  });
+
+  it("skips recommended discrete companions that still cannot be estimated", () => {
+    const meal: CompleteMeal = {
+      mealId: "complete-skip-recommended",
+      candidateId: "cand-skip-recommended",
+      name: "Chicken Plate",
+      mainRecipeId: "recipe-chicken",
+      components: [
+        {
+          componentId: "main",
+          role: "main",
+          name: "Roasted Chicken",
+          relationship: "intrinsic",
+          source: "main_recipe",
+          reason: "main",
+          quantityMode: "solver_determined",
+          definitionKind: "recipe_component",
+          normalizedComponentKey: "main:roasted chicken",
+          definition: {
+            kind: "recipe_component",
+            name: "Roasted Chicken",
+            baseServings: 1,
+            referenceYieldGrams: 170,
+            ingredients: [{ name: "chicken", quantity: 170, unit: "g" }],
+          },
+          resolution: {
+            status: "component_recipe_resolved",
+            definition: {
+              kind: "recipe_component",
+              name: "Roasted Chicken",
+              baseServings: 1,
+              referenceYieldGrams: 170,
+              ingredients: [{ name: "chicken", quantity: 170, unit: "g" }],
+            },
+            ingredientNutrition: {
+              caloriesKcal: 260,
+              proteinGrams: 40,
+              carbohydrateGrams: 0,
+              fatGrams: 10,
+            },
+          },
+        },
+        {
+          componentId: "mystery",
+          role: "carbohydrate",
+          name: "Mystery Flatbread Disk",
+          relationship: "recommended",
+          source: "composition_engine",
+          reason: "optional",
+          quantityMode: "solver_determined",
+          definitionKind: "atomic_food",
+          normalizedComponentKey: "carbohydrate:mystery flatbread disk",
+          definition: {
+            kind: "atomic_food",
+            name: "Mystery Flatbread Disk",
+            measurementState: "cooked",
+          },
+          resolution: {
+            status: "unresolved",
+            definition: {
+              kind: "atomic_food",
+              name: "Mystery Flatbread Disk",
+              measurementState: "cooked",
+            },
+          },
+        },
+      ],
+      compositionProfile: {
+        hasPrimaryProtein: true,
+        hasMeaningfulCarbohydrate: false,
+        hasMeaningfulVegetableOrFruit: false,
+        hasMeaningfulFiberSource: false,
+        hasSauceOrMoistureComponent: false,
+        addedComponentRoles: ["carbohydrate"],
+      },
+      metadata: {
+        promptVersion: "meal-composition-v2",
+        policyVersion: "meal-composition-v1",
+        createdAt: "2026-09-17T12:00:00.000Z",
+      },
+    };
+
+    const coeffs = buildCoefficientsFromCompleteMeal({
+      meal,
+      nutritionByCandidateId: {
+        [meal.candidateId]: {
+          recipeId: meal.mainRecipeId,
+          candidateId: meal.candidateId,
+          recipeName: meal.name,
+          baseServings: 1,
+          ingredients: [],
+          mealComponents: [],
+          nutrition: {
+            total: {
+              caloriesKcal: 260,
+              proteinGrams: 40,
+              carbohydrateGrams: 0,
+              fatGrams: 10,
+            },
+            perBaseServing: {
+              caloriesKcal: 260,
+              proteinGrams: 40,
+              carbohydrateGrams: 0,
+              fatGrams: 10,
+              fiberGrams: 0,
+            },
+            ingredientBreakdown: [
+              {
+                ingredientId: "main",
+                ingredientName: "Roasted Chicken",
+                grams: 170,
+                status: "resolved",
+              },
+            ],
+            resolutionQuality: {
+              status: "complete",
+              totalIngredientCount: 1,
+              resolvedIngredientCount: 1,
+              ambiguousIngredientCount: 0,
+              unresolvedIngredientCount: 0,
+              highConfidenceCount: 1,
+              mediumConfidenceCount: 0,
+              directMassConversionCount: 1,
+              providerMeasureConversionCount: 0,
+              lowConfidenceConversionCount: 0,
+              pendingPortioningComponentCount: 0,
+            },
+          },
+          resolutionQuality: {
+            status: "complete",
+            totalIngredientCount: 1,
+            resolvedIngredientCount: 1,
+            ambiguousIngredientCount: 0,
+            unresolvedIngredientCount: 0,
+            highConfidenceCount: 1,
+            mediumConfidenceCount: 0,
+            directMassConversionCount: 1,
+            providerMeasureConversionCount: 0,
+            lowConfidenceConversionCount: 0,
+            pendingPortioningComponentCount: 0,
+          },
+          policyVersions: {
+            foodResolution: "food-resolution-v1",
+            nutritionCalculation: "nutrition-calculation-v1",
+            quantityNormalization: "quantity-normalization-v1",
+          },
+        },
+      },
+    });
+    expect(coeffs.ok).toBe(true);
+    if (!coeffs.ok) return;
+    expect(coeffs.components.some((c) => /mystery/i.test(c.displayName))).toBe(false);
+  });
+
+  it("recomputes meal nutrition when the user adjusts a discrete count", () => {
+    const meal: ConsumerMealSlot = {
+      day: "monday",
+      mealType: "lunch",
+      candidateId: "cand",
+      name: "Tacos",
+      prepIntent: "fresh",
+      components: [
+        {
+          componentId: "main",
+          displayName: "Filling",
+          role: "main",
+          amount: 180,
+          unit: "g",
+          nutrition: {
+            caloriesKcal: 300,
+            proteinGrams: 30,
+            carbsGrams: 10,
+            fatGrams: 12,
+          },
+        },
+        {
+          componentId: "tortillas",
+          displayName: "Corn Tortillas",
+          role: "carbohydrate",
+          amount: 2,
+          unit: "tortilla",
+          adjustableDiscrete: true,
+          minAmount: 1,
+          maxAmount: 4,
+          quantityStep: 1,
+          usedStapleEstimate: true,
+          nutrition: {
+            caloriesKcal: 130,
+            proteinGrams: 3.2,
+            carbsGrams: 27,
+            fatGrams: 1.8,
+            fiberGrams: 3.6,
+          },
+        },
+      ],
+      personalizedNutrition: {
+        caloriesKcal: 430,
+        proteinGrams: 33.2,
+        carbsGrams: 37,
+        fatGrams: 13.8,
+        fiberGrams: 3.6,
+      },
+    };
+
+    const adjusted = applyDiscretePortionAdjustment({
+      meal,
+      componentId: "tortillas",
+      amount: 3,
+    });
+    expect(adjusted).toBeTruthy();
+    expect(adjusted!.components.find((c) => c.componentId === "tortillas")!.amount).toBe(3);
+    expect(adjusted!.personalizedNutrition!.caloriesKcal).toBe(Math.round(300 + 130 * 1.5));
+  });
+
+  it("uses role-structural-estimate-v1 for required sides without USDA or staple match", () => {
+    const meal: CompleteMeal = {
+      mealId: "complete-role-estimate",
+      candidateId: "cand-role-estimate",
+      name: "Chicken with Mystery Side",
+      mainRecipeId: "recipe-chicken",
+      components: [
+        {
+          componentId: "main",
+          role: "main",
+          name: "Roasted Chicken",
+          relationship: "intrinsic",
+          source: "main_recipe",
+          reason: "main",
+          quantityMode: "solver_determined",
+          definitionKind: "recipe_component",
+          normalizedComponentKey: "main:roasted chicken",
+          definition: {
+            kind: "recipe_component",
+            name: "Roasted Chicken",
+            baseServings: 1,
+            referenceYieldGrams: 170,
+            ingredients: [{ name: "chicken", quantity: 170, unit: "g" }],
+          },
+          resolution: {
+            status: "component_recipe_resolved",
+            definition: {
+              kind: "recipe_component",
+              name: "Roasted Chicken",
+              baseServings: 1,
+              referenceYieldGrams: 170,
+              ingredients: [{ name: "chicken", quantity: 170, unit: "g" }],
+            },
+            ingredientNutrition: {
+              caloriesKcal: 260,
+              proteinGrams: 40,
+              carbohydrateGrams: 0,
+              fatGrams: 10,
+            },
+          },
+        },
+        {
+          componentId: "side",
+          role: "vegetable",
+          name: "Garden Relish Medley",
+          relationship: "required_companion",
+          source: "composition_engine",
+          reason: "veg",
+          quantityMode: "solver_determined",
+          definitionKind: "atomic_food",
+          normalizedComponentKey: "vegetable:garden relish medley",
+          definition: {
+            kind: "atomic_food",
+            name: "Garden Relish Medley",
+            measurementState: "cooked",
+          },
+          resolution: {
+            status: "unresolved",
+            definition: {
+              kind: "atomic_food",
+              name: "Garden Relish Medley",
+              measurementState: "cooked",
+            },
+          },
+        },
+      ],
+      compositionProfile: {
+        hasPrimaryProtein: true,
+        hasMeaningfulCarbohydrate: false,
+        hasMeaningfulVegetableOrFruit: true,
+        hasMeaningfulFiberSource: true,
+        hasSauceOrMoistureComponent: false,
+        addedComponentRoles: ["vegetable"],
+      },
+      metadata: {
+        promptVersion: "meal-composition-v2",
+        policyVersion: "meal-composition-v1",
+        createdAt: "2026-09-17T12:00:00.000Z",
+      },
+    };
+
+    const coeffs = buildCoefficientsFromCompleteMeal({
+      meal,
+      nutritionByCandidateId: {
+        [meal.candidateId]: {
+          recipeId: meal.mainRecipeId,
+          candidateId: meal.candidateId,
+          recipeName: meal.name,
+          baseServings: 1,
+          ingredients: [],
+          mealComponents: [],
+          nutrition: {
+            total: {
+              caloriesKcal: 260,
+              proteinGrams: 40,
+              carbohydrateGrams: 0,
+              fatGrams: 10,
+            },
+            perBaseServing: {
+              caloriesKcal: 260,
+              proteinGrams: 40,
+              carbohydrateGrams: 0,
+              fatGrams: 10,
+              fiberGrams: 0,
+            },
+            ingredientBreakdown: [
+              {
+                ingredientId: "main",
+                ingredientName: "Roasted Chicken",
+                grams: 170,
+                status: "resolved",
+              },
+            ],
+            resolutionQuality: {
+              status: "complete",
+              totalIngredientCount: 1,
+              resolvedIngredientCount: 1,
+              ambiguousIngredientCount: 0,
+              unresolvedIngredientCount: 0,
+              highConfidenceCount: 1,
+              mediumConfidenceCount: 0,
+              directMassConversionCount: 1,
+              providerMeasureConversionCount: 0,
+              lowConfidenceConversionCount: 0,
+              pendingPortioningComponentCount: 0,
+            },
+          },
+          resolutionQuality: {
+            status: "complete",
+            totalIngredientCount: 1,
+            resolvedIngredientCount: 1,
+            ambiguousIngredientCount: 0,
+            unresolvedIngredientCount: 0,
+            highConfidenceCount: 1,
+            mediumConfidenceCount: 0,
+            directMassConversionCount: 1,
+            providerMeasureConversionCount: 0,
+            lowConfidenceConversionCount: 0,
+            pendingPortioningComponentCount: 0,
+          },
+          policyVersions: {
+            foodResolution: "food-resolution-v1",
+            nutritionCalculation: "nutrition-calculation-v1",
+            quantityNormalization: "quantity-normalization-v1",
+          },
+        },
+      },
+    });
+    expect(coeffs.ok).toBe(true);
+    if (!coeffs.ok) return;
+    expect(coeffs.components.some((c) => c.role === "vegetable")).toBe(true);
+    expect(coeffs.components.some((c) => c.kind === "food_grams")).toBe(true);
   });
 });

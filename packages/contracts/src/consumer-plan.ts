@@ -35,6 +35,15 @@ export const ConsumerMealComponentSchema = z.object({
   /** Present only when PLAN-010 (or equivalent) provides authoritative amounts. */
   amount: z.number().finite().positive().optional(),
   unit: z.string().trim().min(1).max(40).optional(),
+  /** Component contribution used to recompute meal nutrition when the user adjusts counts. */
+  nutrition: PersonalizedMealNutritionSchema.optional(),
+  /** Discrete staples (tortillas, eggs, …) may be adjusted in Meal Detail. */
+  adjustableDiscrete: z.boolean().optional(),
+  minAmount: z.number().finite().positive().optional(),
+  maxAmount: z.number().finite().positive().optional(),
+  quantityStep: z.number().finite().positive().optional(),
+  /** When true, amount used a versioned staple estimate rather than USDA. */
+  usedStapleEstimate: z.boolean().optional(),
 });
 
 export const ConsumerMealSlotSchema = z.object({
@@ -53,6 +62,20 @@ export const ConsumerMealSlotSchema = z.object({
   /** Hide in UI until personalized / authoritative. */
   personalizedNutrition: PersonalizedMealNutritionSchema.optional(),
   personalizationStatus: z.enum(["solved", "best_feasible", "blocked"]).optional(),
+  /** Developer-facing typed failure code when status is blocked — never show raw codes to consumers. */
+  personalizationBlockReason: z
+    .enum([
+      "missing_reference_yield",
+      "missing_canonical_nutrition",
+      "invalid_constraints",
+      "invalid_intent",
+      "no_valid_combination",
+      "minimum_exceeds_calorie_ceiling",
+      "unquantifiable_component",
+    ])
+    .optional(),
+  /** Developer-facing failure detail when status is blocked. */
+  personalizationMessage: z.string().trim().min(1).max(600).optional(),
 });
 
 export const ConsumerWeeklyPlanStatusSchema = z.enum([

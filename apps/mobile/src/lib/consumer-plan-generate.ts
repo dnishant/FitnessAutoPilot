@@ -21,6 +21,7 @@ import {
   MockComponentRecipeProvider,
   MockMealCompositionProvider,
   attachPersonalizedWeeklyPlan,
+  buildComponentNutritionByKeyFromCompleteMeals,
   buildLocalDemoNutritionMaps,
   composeMealConcepts,
   personalizeWeeklyNutritionPlan,
@@ -301,7 +302,7 @@ function buildDiscoveryRequest(
           maxFinishMinutes: cooking.maxFinishMinutes,
         }
       : undefined,
-    targetCandidateCount: 16,
+    targetCandidateCount: 12,
   };
 }
 
@@ -351,14 +352,14 @@ async function buildRemotePlan(
       candidates: lunchDiscover.result.candidates,
       userPreferences,
       cookingPreferences: cookingPrefs,
-      targetPoolSize: 12,
+      targetPoolSize: 10,
     }),
     apis.rankCulinaryCandidates({
       mealType: "dinner",
       candidates: dinnerDiscover.result.candidates,
       userPreferences,
       cookingPreferences: cookingPrefs,
-      targetPoolSize: 12,
+      targetPoolSize: 10,
     }),
   ]);
   if (!lunchRanked.ok) {
@@ -460,33 +461,27 @@ async function buildRemotePlan(
     }
   }
 
-  // Prefer ingredient nutrition already on CompleteMeal components; fill remaining
-  // compound-side coefficients with structural role maps so PLAN-010 can run on
-  // arbitrary generated plates when USDA has not yet batched component recipes.
-  const structural = buildLocalDemoNutritionMaps({
-    completeMealsByCandidateId: completeMeals,
-    recipesByCandidateId,
-  });
-  const componentNutritionByKey = { ...structural.componentNutritionByKey };
-  for (const meal of Object.values(completeMeals)) {
-    for (const component of meal.components) {
-      const nutrition = component.resolution?.ingredientNutrition;
-      if (!nutrition) continue;
-      const definition = component.definition ?? component.resolution?.definition;
-      const yieldGrams =
-        definition?.kind === "recipe_component"
-          ? definition.referenceYieldGrams ??
-            definition.ingredients.reduce((acc, ing) => acc + (ing.quantity ?? 0), 0)
-          : undefined;
-      componentNutritionByKey[component.normalizedComponentKey] = {
-        nutrition,
-        referenceYieldGrams: yieldGrams && yieldGrams > 0 ? yieldGrams : undefined,
-        baseServings:
-          definition?.kind === "recipe_component" ? definition.baseServings ?? 1 : 1,
-      };
-    }
+  // Plate nutrition from CompleteMeal resolutions (USDA when enriched). Role/staple
+  // estimates live inside the coefficient builder — do not prefill demo maps remotely.
+  const fromMeals = buildComponentNutritionByKeyFromCompleteMeals(completeMeals);
+  const componentNutritionByKey: Record<
+    string,
+    { nutrition: import("@fitness-autopilot/contracts").IngredientNutrition; referenceYieldGrams?: number; baseServings?: number }
+  > = {};
+  for (const [key, entry] of Object.entries(fromMeals)) {
+    componentNutritionByKey[key] = {
+      nutrition: entry.nutrition,
+      referenceYieldGrams: entry.referenceYieldGrams,
+      baseServings: entry.baseServings,
+    };
   }
+
   if (!nutritionByCandidateId || Object.keys(nutritionByCandidateId).length === 0) {
+    // Offline / failed nutrition: structural main nutrition only for local fallback.
+    const structural = buildLocalDemoNutritionMaps({
+      completeMealsByCandidateId: completeMeals,
+      recipesByCandidateId,
+    });
     nutritionByCandidateId = structural.nutritionByCandidateId;
   }
 

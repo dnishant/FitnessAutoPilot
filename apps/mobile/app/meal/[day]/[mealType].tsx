@@ -34,7 +34,7 @@ function parseMealType(value: string | string[] | undefined): "lunch" | "dinner"
 
 export default function MealDetailScreen() {
   const params = useLocalSearchParams<{ day: string; mealType: string }>();
-  const { weeklyPlan, loading } = useSession();
+  const { weeklyPlan, loading, adjustDiscreteMealComponent } = useSession();
   const day = parseDay(params.day);
   const mealType = parseMealType(params.mealType);
 
@@ -92,6 +92,18 @@ export default function MealDetailScreen() {
     }
   }
 
+  async function nudgeDiscrete(componentId: string, delta: number) {
+    const current = meal!.components.find((c) => c.componentId === componentId);
+    if (!current?.amount || !current.adjustableDiscrete) return;
+    const step = current.quantityStep ?? 1;
+    await adjustDiscreteMealComponent({
+      day: day!,
+      mealType: mealType!,
+      componentId,
+      amount: current.amount + delta * step,
+    });
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <ScreenHeader
@@ -125,6 +137,16 @@ export default function MealDetailScreen() {
             displayName={component.displayName}
             amount={component.amount}
             unit={component.unit}
+            adjustable={Boolean(component.adjustableDiscrete && component.amount != null)}
+            onDecrease={() => void nudgeDiscrete(component.componentId, -1)}
+            onIncrease={() => void nudgeDiscrete(component.componentId, 1)}
+            hint={
+              component.adjustableDiscrete
+                ? component.usedStapleEstimate
+                  ? "Approximate count · you can adjust"
+                  : "You can adjust this count"
+                : undefined
+            }
           />
         ))}
       </View>

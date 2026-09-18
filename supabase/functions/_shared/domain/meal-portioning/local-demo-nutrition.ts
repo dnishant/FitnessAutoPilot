@@ -5,95 +5,22 @@ import type {
   RecipeNutritionResult,
   ResolvedRecipe,
 } from "../../contracts/index.ts";
-import type { MealComponentRole } from "../../contracts/index.ts";
+import {
+  defaultRoleYieldGrams,
+  roleStructuralNutritionForGrams,
+} from "./role-structural-estimates.ts";
 
 /**
  * Local-planner / offline demo nutrition only.
  * Meal-name agnostic role coefficients — NOT a production USDA substitute.
- * Production Generate My Plan must use resolve-recipe-nutrition.
+ * Production Generate My Plan must use resolve-recipe-nutrition + plate nutrition.
  */
 
-const ROLE_PER_100G: Record<
-  MealComponentRole,
-  {
-    caloriesKcal: number;
-    proteinGrams: number;
-    carbohydrateGrams: number;
-    fatGrams: number;
-    fiberGrams: number;
-  }
-> = {
-  main: {
-    caloriesKcal: 165,
-    proteinGrams: 25,
-    carbohydrateGrams: 2,
-    fatGrams: 7,
-    fiberGrams: 0.2,
-  },
-  carbohydrate: {
-    caloriesKcal: 130,
-    proteinGrams: 2.7,
-    carbohydrateGrams: 28,
-    fatGrams: 0.3,
-    fiberGrams: 0.4,
-  },
-  vegetable: {
-    caloriesKcal: 30,
-    proteinGrams: 1.2,
-    carbohydrateGrams: 5.5,
-    fatGrams: 0.3,
-    fiberGrams: 1.8,
-  },
-  fruit: {
-    caloriesKcal: 50,
-    proteinGrams: 0.6,
-    carbohydrateGrams: 12,
-    fatGrams: 0.2,
-    fiberGrams: 2,
-  },
-  legume: {
-    caloriesKcal: 120,
-    proteinGrams: 8,
-    carbohydrateGrams: 18,
-    fatGrams: 1.5,
-    fiberGrams: 6,
-  },
-  sauce_condiment: {
-    caloriesKcal: 90,
-    proteinGrams: 3,
-    carbohydrateGrams: 5,
-    fatGrams: 6,
-    fiberGrams: 0.5,
-  },
-  fat: {
-    caloriesKcal: 884,
-    proteinGrams: 0,
-    carbohydrateGrams: 0,
-    fatGrams: 100,
-    fiberGrams: 0,
-  },
-  garnish: {
-    caloriesKcal: 20,
-    proteinGrams: 1,
-    carbohydrateGrams: 3,
-    fatGrams: 0.5,
-    fiberGrams: 1,
-  },
-};
-
 function nutritionForGrams(
-  role: MealComponentRole,
+  role: Parameters<typeof roleStructuralNutritionForGrams>[0],
   grams: number,
 ): IngredientNutrition {
-  const per100 = ROLE_PER_100G[role] ?? ROLE_PER_100G.vegetable;
-  const f = grams / 100;
-  return {
-    caloriesKcal: per100.caloriesKcal * f,
-    proteinGrams: per100.proteinGrams * f,
-    carbohydrateGrams: per100.carbohydrateGrams * f,
-    fatGrams: per100.fatGrams * f,
-    fiberGrams: per100.fiberGrams * f,
-  };
+  return roleStructuralNutritionForGrams(role, grams);
 }
 
 export function buildLocalDemoNutritionMaps(input: {
@@ -116,7 +43,7 @@ export function buildLocalDemoNutritionMaps(input: {
   for (const meal of Object.values(input.completeMealsByCandidateId)) {
     const recipe = input.recipesByCandidateId[meal.candidateId];
     const baseServings = recipe?.baseServings ?? 4;
-    const mainYield = 170;
+    const mainYield = defaultRoleYieldGrams("main");
     const perServing = nutritionForGrams("main", mainYield);
     const total: IngredientNutrition = {
       caloriesKcal: perServing.caloriesKcal * baseServings,
@@ -173,15 +100,7 @@ export function buildLocalDemoNutritionMaps(input: {
         );
         if (sum > 0) yieldGrams = sum;
       }
-      yieldGrams =
-        yieldGrams ??
-        (component.role === "carbohydrate"
-          ? 180
-          : component.role === "sauce_condiment"
-            ? 40
-            : component.role === "garnish"
-              ? 8
-              : 120);
+      yieldGrams = yieldGrams ?? defaultRoleYieldGrams(component.role);
       const nutritionRow = nutritionForGrams(component.role, yieldGrams);
       componentNutritionByKey[component.normalizedComponentKey] = {
         nutrition: nutritionRow,

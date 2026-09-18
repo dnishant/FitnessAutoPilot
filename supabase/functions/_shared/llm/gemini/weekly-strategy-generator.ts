@@ -373,7 +373,11 @@ export class GeminiWeeklyStrategyGenerator
       return strategy;
     }
 
-    const retryPrompt = buildRankedWeeklyStrategyRetryPrompt(parsed.value, firstComplexity);
+    const retryPrompt = buildRankedWeeklyStrategyRetryPrompt(
+      parsed.value,
+      firstComplexity,
+      firstValidated.value,
+    );
 
     const retryAttempt = await this.invokeRankedGeminiCall({
       requestId,

@@ -29,8 +29,10 @@ Dev previews are diagnostics — never the definition of done.
 ## Trust model
 
 - Gemini/LLMs never choose grams, calories, macros, fiber, or optimization results.
-- Nutrition coefficients are resolved **before** solving (PLAN-009 / structural trusted maps).
-- Missing required calories/protein blocks solving — never treated as zero.
+- Nutrition coefficients are resolved **before** solving (PLAN-009 plate pass / structural estimates).
+- Missing **main** calories/protein blocks solving — never treated as zero.
+- Required companions without USDA may use versioned estimates (`discrete-staple-estimate-v1`,
+  then `role-structural-estimate-v1`). Recommended companions without nutrition are skipped.
 - Compound sides scale as culinary units (ratios fixed upstream).
 - Meal definitions (CompleteMeal) are distinct from meal instances (day + mealType slots).
 
@@ -42,6 +44,8 @@ Dev previews are diagnostics — never the definition of done.
 | Meal portion / culinary bounds | `meal-portion-policy-v1` |
 | Solver algorithm | `meal-portion-solver-v1` |
 | Weekly personalization orchestration | `weekly-nutrition-personalization-v1` |
+| Discrete staple gap-fill | `discrete-staple-estimate-v1` |
+| Role/structural gap-fill (required sides) | `role-structural-estimate-v1` |
 | Fiber (upstream daily) | `fiber-policy-v1` |
 
 ## Allocation policy (`nutrition-allocation-policy-v1`)
@@ -75,14 +79,18 @@ Assumptions:
 
 ```
 Generate My Plan
-  → discovery → rank → concepts → weekly strategy
+  → discovery → rank → concepts (top-K pools) → weekly strategy
   → selected recipe resolution
   → selected CompleteMeal resolution
-  → PLAN-009 nutrition (when available)
+  → resolveCompleteMealNutrition (plate USDA when FoodResolver present)
+  → PLAN-009 main-recipe nutrition (when available)
   → PLAN-010 personalizeWeeklyNutritionPlan
   → persist ConsumerWeeklyPlan (+ personalizedWeeklyPlan)
   → Today / Plan / Meal Detail / Recipe
 ```
+
+Token-preserving Generate My Plan knobs (behavior-preserving): discovery target 12 / pool 10,
+composition neighbor-name cap 5, discovery grounding attempts 2, compact strategy complexity retry.
 
 ## Developer preview
 

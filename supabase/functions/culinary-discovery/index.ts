@@ -83,7 +83,7 @@ serveWithCors(async (req) => {
       config: config.value,
       // Ungrounded replies are small; grounded replies strip searchEntryPoint HTML.
       // Retries are required because Gemini 3.x often skips Search on JSON-heavy prompts.
-      maxGroundingAttempts: 3,
+      maxGroundingAttempts: 2,
       onLog: (event) => {
         requestId = event.requestId;
         console.log(

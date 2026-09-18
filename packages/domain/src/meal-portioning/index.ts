@@ -10,4 +10,7 @@ export * from "./reconcile";
 export * from "./personalize";
 export * from "./project";
 export * from "./arbitrary-meals";
+export * from "./staple-estimates";
+export * from "./role-structural-estimates";
+export * from "./complete-meal-nutrition";
 export * from "./local-demo-nutrition";

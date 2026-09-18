@@ -15,6 +15,7 @@ import {
   assertSufficientRankedCandidates,
   buildComplexityRetryFeedback,
   buildRankedWeeklyStrategyPrompt,
+  buildRankedWeeklyStrategyRetryPrompt,
   calculateRankedWeeklyStrategyQualityStats,
   classifyWeeklyComplexityStatus,
   collectAdjacentMealPairs,
@@ -667,5 +668,22 @@ describe("weekly variety complexity policy", () => {
     );
     expect(lunchRepeats.length).toBe(2);
     expect(dinnerRepeats.length).toBe(2);
+  });
+
+  it("builds a compact complexity retry prompt from the prior week schedule", () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    const validated = validateRankedWeeklyStrategy(clonePayload(), request, metadata);
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    const evaluation = evaluateWeeklyComplexity(validated.value, request);
+    const full = buildRankedWeeklyStrategyRetryPrompt(request, evaluation);
+    const compact = buildRankedWeeklyStrategyRetryPrompt(
+      request,
+      evaluation,
+      validated.value,
+    );
+    expect(compact.userPrompt).toContain("PREVIOUS_WEEK_CANDIDATE_SCHEDULE_JSON");
+    expect(compact.userPrompt.length).toBeLessThan(full.userPrompt.length);
+    expect(compact.systemInstruction.length).toBeLessThan(full.systemInstruction.length);
   });
 });

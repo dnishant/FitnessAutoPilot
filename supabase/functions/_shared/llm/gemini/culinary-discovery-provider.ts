@@ -184,7 +184,7 @@ export class GeminiGroundedCulinaryDiscoveryProvider implements CulinaryDiscover
     this.requestIdFactory = options.requestIdFactory ?? createRequestId;
     this.now = options.now ?? (() => Date.now());
     this.onLog = options.onLog;
-    this.maxGroundingAttempts = Math.max(1, options.maxGroundingAttempts ?? 3);
+    this.maxGroundingAttempts = Math.max(1, options.maxGroundingAttempts ?? 2);
   }
 
   async discover(request: CulinaryDiscoveryRequest): Promise<CulinaryDiscoveryResult> {

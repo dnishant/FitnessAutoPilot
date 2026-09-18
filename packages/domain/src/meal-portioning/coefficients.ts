@@ -7,6 +7,11 @@ import type {
   RecipeNutritionResult,
   ResolvedRecipe,
 } from "@fitness-autopilot/contracts";
+import { matchDiscreteStapleEstimate } from "./staple-estimates";
+import {
+  roleStructuralEstimateForComponent,
+  roleStructuralNutritionPer100g,
+} from "./role-structural-estimates";
 
 export type CoefficientBuildFailure = {
   code:
@@ -291,8 +296,10 @@ function coefficientForComponent(
         };
       }
       if (per100 && hasMacros(per100)) {
-        // Approximate one piece ≈ 30g when measure unknown — only for discrete staples with trusted per100g.
-        const nutritionPerUnit = scalePer100(per100, 30);
+        // Approximate one piece ≈ staple gram weight when measure unknown — only with trusted per100g.
+        const staple = matchDiscreteStapleEstimate(component.name);
+        const grams = staple?.approximateGramsPerUnit ?? 30;
+        const nutritionPerUnit = scalePer100(per100, grams);
         return {
           ok: true,
           components: [
@@ -302,7 +309,40 @@ function coefficientForComponent(
               displayName: component.name,
               role: component.role,
               nutritionPerUnit,
+              unitLabel: staple?.unitLabel ?? discreteUnitLabel(component.name),
+              quantityStep: 1,
+            },
+          ],
+        };
+      }
+      if (keyed?.nutrition && hasMacros(keyed.nutrition)) {
+        return {
+          ok: true,
+          components: [
+            {
+              kind: "count",
+              componentId: component.componentId,
+              displayName: component.name,
+              role: component.role,
+              nutritionPerUnit: keyed.nutrition,
               unitLabel: discreteUnitLabel(component.name),
+              quantityStep: 1,
+            },
+          ],
+        };
+      }
+      const stapleEstimate = matchDiscreteStapleEstimate(component.name);
+      if (stapleEstimate) {
+        return {
+          ok: true,
+          components: [
+            {
+              kind: "count",
+              componentId: component.componentId,
+              displayName: component.name,
+              role: component.role,
+              nutritionPerUnit: stapleEstimate.nutritionPerUnit,
+              unitLabel: stapleEstimate.unitLabel,
               quantityStep: 1,
             },
           ],
@@ -380,6 +420,33 @@ function coefficientForComponent(
     };
   }
 
+  // Discrete staples without a resolved definition still get a versioned estimate.
+  if (isDiscreteComponent(component)) {
+    const stapleEstimate = matchDiscreteStapleEstimate(component.name);
+    if (stapleEstimate) {
+      return {
+        ok: true,
+        components: [
+          {
+            kind: "count",
+            componentId: component.componentId,
+            displayName: component.name,
+            role: component.role,
+            nutritionPerUnit: stapleEstimate.nutritionPerUnit,
+            unitLabel: stapleEstimate.unitLabel,
+            quantityStep: 1,
+          },
+        ],
+      };
+    }
+  }
+
+  // Last resort for required non-main sides: role-structural-estimate-v1 (never for main
+  // or recommended — recommended failures are skipped by the meal builder).
+  if (component.role !== "main" && component.relationship !== "recommended") {
+    return roleStructuralCoefficient(component);
+  }
+
   return {
     ok: false,
     error: {
@@ -387,6 +454,79 @@ function coefficientForComponent(
       message: `Component "${component.name}" cannot be quantified for portioning.`,
       componentId: component.componentId,
     },
+  };
+}
+
+function roleStructuralCoefficient(component: CompleteMealComponent): CoefficientBuildResult {
+  if (isDiscreteComponent(component)) {
+    const staple = matchDiscreteStapleEstimate(component.name);
+    if (staple) {
+      return {
+        ok: true,
+        components: [
+          {
+            kind: "count",
+            componentId: component.componentId,
+            displayName: component.name,
+            role: component.role,
+            nutritionPerUnit: staple.nutritionPerUnit,
+            unitLabel: staple.unitLabel,
+            quantityStep: 1,
+          },
+        ],
+      };
+    }
+  }
+
+  const definition = component.definition ?? component.resolution?.definition;
+  let yieldGrams: number | undefined;
+  if (definition?.kind === "recipe_component") {
+    yieldGrams =
+      definition.referenceYieldGrams ??
+      definition.ingredients.reduce((acc, ing) => acc + (ing.quantity ?? 0), 0);
+    if (!(yieldGrams != null && yieldGrams > 0)) yieldGrams = undefined;
+  }
+  const estimate = roleStructuralEstimateForComponent({
+    role: component.role,
+    referenceYieldGrams: yieldGrams,
+  });
+
+  if (isDiscreteComponent(component)) {
+    // Unknown discrete name: treat one unit ≈ role default yield / typical piece mass.
+    const perUnit = roleStructuralEstimateForComponent({
+      role: component.role,
+      referenceYieldGrams: Math.min(estimate.referenceYieldGrams, 40),
+    });
+    return {
+      ok: true,
+      components: [
+        {
+          kind: "count",
+          componentId: component.componentId,
+          displayName: component.name,
+          role: component.role,
+          nutritionPerUnit: perUnit.nutrition,
+          unitLabel: discreteUnitLabel(component.name),
+          quantityStep: 1,
+        },
+      ],
+    };
+  }
+
+  return {
+    ok: true,
+    components: [
+      {
+        kind: "food_grams",
+        componentId: component.componentId,
+        displayName: component.name,
+        role: component.role,
+        nutritionPer100g: roleStructuralNutritionPer100g(component.role),
+        preferredGrams: estimate.referenceYieldGrams,
+        minGrams: Math.max(8, Math.round(estimate.referenceYieldGrams * 0.5)),
+        maxGrams: Math.round(estimate.referenceYieldGrams * 1.75),
+      },
+    ],
   };
 }
 
@@ -446,8 +586,17 @@ export function buildCoefficientsFromCompleteMeal(input: {
       input.componentNutritionByKey,
     );
     if (!built.ok) {
-      // Recommended garnish failure should not block the meal.
-      if (component.relationship === "recommended" && component.role === "garnish") {
+      // Recommended sides must not sink an otherwise valid plate.
+      if (component.relationship === "recommended") {
+        continue;
+      }
+      // Required non-main sides: last-resort role estimate instead of blocking the meal.
+      if (component.role !== "main") {
+        const roleBuilt = roleStructuralCoefficient(component);
+        if (roleBuilt.ok) {
+          components.push(...roleBuilt.components);
+          continue;
+        }
         continue;
       }
       return built;

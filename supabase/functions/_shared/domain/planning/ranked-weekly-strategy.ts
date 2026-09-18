@@ -755,9 +755,42 @@ function cookingPreferencesReadyLunchHint(request: RankedWeeklyStrategyRequest):
 export function buildRankedWeeklyStrategyRetryPrompt(
   request: RankedWeeklyStrategyRequest,
   evaluation: WeeklyComplexityEvaluation,
+  priorStrategy?: RankedWeeklyStrategy,
 ): RankedWeeklyStrategyPrompt {
   const base = buildRankedWeeklyStrategyPrompt(request);
   const feedback = buildComplexityRetryFeedback(request, evaluation);
+  // Token-saving corrective path: compact system + prior week JSON + feedback
+  // instead of re-sending the full ranked strategy system/user prompt.
+  if (priorStrategy) {
+    const compactDays = priorStrategy.days.map((day) => ({
+      day: day.day,
+      lunchCandidateId: day.lunch.candidateId,
+      dinnerCandidateId: day.dinner.candidateId,
+    }));
+    const lunchIds = request.lunchCandidates.map((c) => c.candidate.candidateId);
+    const dinnerIds = request.dinnerCandidates.map((c) => c.candidate.candidateId);
+    return {
+      version: base.version,
+      systemInstruction: [
+        "You are correcting a ranked weekly meal strategy that exceeded the hard unique-candidate limit.",
+        "Select only from the provided lunch and dinner candidate ID pools.",
+        "Do not invent dishes. Do not cross lunch/dinner pools.",
+        "Output the same ranked weekly strategy JSON schema as before (full days with meal slots).",
+      ].join(" "),
+      userPrompt: [
+        `Variety level: ${request.foodPreferences.varietyLevel}`,
+        `Cooking style: ${request.cookingPreferences.cookingStyle}`,
+        `Allowed lunch candidate IDs: ${lunchIds.join(", ")}`,
+        `Allowed dinner candidate IDs: ${dinnerIds.join(", ")}`,
+        "",
+        "PREVIOUS_WEEK_CANDIDATE_SCHEDULE_JSON:",
+        JSON.stringify(compactDays),
+        "",
+        "CORRECTIVE RETRY FEEDBACK:",
+        feedback,
+      ].join("\n"),
+    };
+  }
   return {
     version: base.version,
     systemInstruction: base.systemInstruction,

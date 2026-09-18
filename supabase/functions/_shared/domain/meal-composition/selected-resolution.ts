@@ -27,6 +27,7 @@ import {
 } from "./component-recipe.ts";
 import { resolveAddedComponent } from "./component-resolution.ts";
 import { summarizeMealConceptRepertoire } from "./repertoire.ts";
+import { resolveCompleteMealNutrition } from "../meal-portioning/complete-meal-nutrition.ts";
 
 export type ResolveSelectedCompleteMealsInput = {
   concepts: readonly MealConcept[] | Record<string, MealConcept>;
@@ -308,6 +309,16 @@ export async function resolveSelectedCompleteMeals(
         createdAt: concept.metadata.createdAt,
       },
     };
+  }
+
+  if (input.foodResolver && input.resolveAddedComponents === true) {
+    const plate = await resolveCompleteMealNutrition({
+      completeMealsByCandidateId: mealsByCandidateId,
+      foodResolver: input.foodResolver,
+    });
+    for (const [id, meal] of Object.entries(plate.completeMealsByCandidateId)) {
+      mealsByCandidateId[id] = meal;
+    }
   }
 
   const selectedSummary = summarizeMealConceptRepertoire(selectedConcepts);

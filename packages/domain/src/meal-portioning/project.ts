@@ -2,11 +2,14 @@ import type {
   ConsumerMealComponent,
   ConsumerMealSlot,
   ConsumerWeeklyPlan,
+  PersonalizedMealNutrition,
   PersonalizedWeeklyNutritionPlan,
   RankedWeeklyStrategy,
   MealConcept,
   ResolvedRecipe,
 } from "@fitness-autopilot/contracts";
+import { DEFAULT_COUNT_BOUNDS } from "./policy";
+import { isDiscreteUnitLabel, matchDiscreteStapleEstimate } from "./staple-estimates";
 
 function finishMinutesFromRecipe(
   recipe: ResolvedRecipe | undefined,
@@ -43,6 +46,55 @@ function componentsFromConcept(
   return rows;
 }
 
+function toPersonalizedNutrition(input: {
+  caloriesKcal: number;
+  proteinGrams: number;
+  carbohydrateGrams: number;
+  fatGrams: number;
+  fiberGrams?: number;
+}): PersonalizedMealNutrition {
+  const out: PersonalizedMealNutrition = {
+    caloriesKcal: input.caloriesKcal,
+    proteinGrams: input.proteinGrams,
+    carbsGrams: input.carbohydrateGrams,
+    fatGrams: input.fatGrams,
+  };
+  if (input.fiberGrams != null) out.fiberGrams = input.fiberGrams;
+  return out;
+}
+
+function sumComponentNutrition(
+  components: readonly ConsumerMealComponent[],
+): PersonalizedMealNutrition | undefined {
+  const withNutrition = components.filter((c) => c.nutrition);
+  if (withNutrition.length === 0) return undefined;
+  let caloriesKcal = 0;
+  let proteinGrams = 0;
+  let carbsGrams = 0;
+  let fatGrams = 0;
+  let fiberGrams = 0;
+  let hasFiber = false;
+  for (const component of withNutrition) {
+    const n = component.nutrition!;
+    caloriesKcal += n.caloriesKcal;
+    proteinGrams += n.proteinGrams;
+    carbsGrams += n.carbsGrams;
+    fatGrams += n.fatGrams;
+    if (n.fiberGrams != null) {
+      fiberGrams += n.fiberGrams;
+      hasFiber = true;
+    }
+  }
+  const out: PersonalizedMealNutrition = {
+    caloriesKcal: Math.round(caloriesKcal),
+    proteinGrams: Math.round(proteinGrams * 10) / 10,
+    carbsGrams: Math.round(carbsGrams * 10) / 10,
+    fatGrams: Math.round(fatGrams * 10) / 10,
+  };
+  if (hasFiber) out.fiberGrams = Math.round(fiberGrams * 10) / 10;
+  return out;
+}
+
 /**
  * Project PersonalizedWeeklyNutritionPlan onto consumer meal slots.
  * Does not invent portions — blocked/missing personalization leaves amounts unset.
@@ -72,31 +124,35 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
       let components = baseComponents;
       let personalizedNutrition = undefined;
       let personalizationStatus = personalized?.status;
+      let personalizationBlockReason = personalized?.blockReason;
+      let personalizationMessage = personalized?.message;
 
       if (personalized?.personalizedPlan && personalized.status !== "blocked") {
         const plan = personalized.personalizedPlan;
         personalizedNutrition = plan.nutrition;
-        const byId = new Map(plan.portions.map((p) => [p.componentId, p]));
-        const byName = new Map(
-          plan.portions.map((p) => [p.displayName.toLowerCase(), p]),
-        );
         components = plan.portions.map((portion) => {
-          const existing =
-            byId.get(portion.componentId) &&
-            baseComponents.find((c) => c.componentId === portion.componentId);
           const byNameMatch = baseComponents.find(
             (c) => c.displayName.toLowerCase() === portion.displayName.toLowerCase(),
           );
-          const match = existing ?? byNameMatch;
+          const match =
+            baseComponents.find((c) => c.componentId === portion.componentId) ?? byNameMatch;
+          const discrete = isDiscreteUnitLabel(portion.unit);
+          const staple = discrete ? matchDiscreteStapleEstimate(portion.displayName) : null;
           return {
             componentId: match?.componentId ?? portion.componentId,
             displayName: match?.displayName ?? portion.displayName,
             role: match?.role ?? portion.role,
             amount: portion.amount,
             unit: portion.unit,
+            nutrition: toPersonalizedNutrition(portion.nutrition),
+            adjustableDiscrete: discrete,
+            minAmount: discrete ? DEFAULT_COUNT_BOUNDS.minCount : undefined,
+            maxAmount: discrete ? DEFAULT_COUNT_BOUNDS.maxCount : undefined,
+            quantityStep: discrete ? DEFAULT_COUNT_BOUNDS.quantityStep : undefined,
+            // Soft hint: discrete staples with a named estimate catalog entry may be estimates.
+            usedStapleEstimate: staple != null ? true : undefined,
           };
         });
-        // If concept had extra components without portions, keep names without amounts.
         for (const base of baseComponents) {
           if (
             !components.some(
@@ -108,7 +164,6 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
             components.push(base);
           }
         }
-        void byName;
       }
 
       meals.push({
@@ -130,6 +185,8 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
         components,
         personalizedNutrition,
         personalizationStatus,
+        personalizationBlockReason,
+        personalizationMessage,
       });
     }
   }
@@ -159,5 +216,52 @@ export function attachPersonalizedWeeklyPlan(
       conceptsByCandidateId: conceptsByCandidateId ?? plan.conceptsByCandidateId,
       recipesByCandidateId: recipesByCandidateId ?? plan.recipesByCandidateId,
     }),
+  };
+}
+
+/**
+ * Adjust a discrete component count on a meal slot and recompute meal nutrition
+ * from per-component contributions (scaled linearly with count).
+ */
+export function applyDiscretePortionAdjustment(input: {
+  meal: ConsumerMealSlot;
+  componentId: string;
+  amount: number;
+}): ConsumerMealSlot | null {
+  const target = input.meal.components.find((c) => c.componentId === input.componentId);
+  if (!target?.adjustableDiscrete || target.amount == null || !target.nutrition) {
+    return null;
+  }
+  const min = target.minAmount ?? DEFAULT_COUNT_BOUNDS.minCount;
+  const max = target.maxAmount ?? DEFAULT_COUNT_BOUNDS.maxCount;
+  const step = target.quantityStep ?? DEFAULT_COUNT_BOUNDS.quantityStep;
+  const clamped = Math.min(max, Math.max(min, Math.round(input.amount / step) * step));
+  if (!(clamped > 0)) return null;
+
+  const scale = clamped / target.amount;
+  const components = input.meal.components.map((component) => {
+    if (component.componentId !== input.componentId || !component.nutrition) {
+      return component;
+    }
+    return {
+      ...component,
+      amount: clamped,
+      nutrition: {
+        caloriesKcal: component.nutrition.caloriesKcal * scale,
+        proteinGrams: component.nutrition.proteinGrams * scale,
+        carbsGrams: component.nutrition.carbsGrams * scale,
+        fatGrams: component.nutrition.fatGrams * scale,
+        fiberGrams:
+          component.nutrition.fiberGrams != null
+            ? component.nutrition.fiberGrams * scale
+            : undefined,
+      },
+    };
+  });
+
+  return {
+    ...input.meal,
+    components,
+    personalizedNutrition: sumComponentNutrition(components) ?? input.meal.personalizedNutrition,
   };
 }

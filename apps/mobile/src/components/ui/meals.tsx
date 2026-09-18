@@ -99,15 +99,44 @@ export function MealComponentRow(props: {
   displayName: string;
   amount?: number;
   unit?: string;
+  adjustable?: boolean;
+  onDecrease?: () => void;
+  onIncrease?: () => void;
+  hint?: string;
 }) {
   return (
-    <View style={styles.componentRow}>
-      <Text style={styles.componentRowName}>{props.displayName}</Text>
-      {props.amount != null && props.unit ? (
-        <Text style={styles.componentRowAmount}>
-          {props.amount} {props.unit}
-        </Text>
-      ) : null}
+    <View style={styles.componentRowWrap}>
+      <View style={styles.componentRow}>
+        <Text style={styles.componentRowName}>{props.displayName}</Text>
+        {props.adjustable && props.amount != null && props.unit ? (
+          <View style={styles.adjustRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Decrease ${props.displayName}`}
+              onPress={props.onDecrease}
+              style={styles.adjustButton}
+            >
+              <Text style={styles.adjustButtonText}>−</Text>
+            </Pressable>
+            <Text style={styles.componentRowAmount}>
+              {props.amount} {props.unit}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Increase ${props.displayName}`}
+              onPress={props.onIncrease}
+              style={styles.adjustButton}
+            >
+              <Text style={styles.adjustButtonText}>+</Text>
+            </Pressable>
+          </View>
+        ) : props.amount != null && props.unit ? (
+          <Text style={styles.componentRowAmount}>
+            {props.amount} {props.unit}
+          </Text>
+        ) : null}
+      </View>
+      {props.hint ? <Text style={styles.componentHint}>{props.hint}</Text> : null}
     </View>
   );
 }
@@ -248,13 +277,15 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: spacing.xs,
   },
+  componentRowWrap: {
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
   componentRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingVertical: spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
   },
   componentRowName: {
     ...typography.body,
@@ -264,6 +295,32 @@ const styles = StyleSheet.create({
   componentRowAmount: {
     ...typography.bodyStrong,
     color: colors.textSecondary,
+  },
+  adjustRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+  },
+  adjustButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.surface,
+  },
+  adjustButtonText: {
+    ...typography.bodyStrong,
+    color: colors.text,
+    fontSize: 18,
+    lineHeight: 20,
+  },
+  componentHint: {
+    ...typography.caption,
+    color: colors.textSecondary,
+    paddingBottom: spacing.sm,
   },
   ingredientRow: {
     flexDirection: "row",

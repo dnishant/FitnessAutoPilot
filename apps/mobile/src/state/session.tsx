@@ -44,12 +44,14 @@ import type {
   WeeklyMealConceptResult,
   ConsumerWeeklyPlan,
   ConsumerPlanGenerationStage,
+  DayOfWeek,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   completeOnboarding as completeOnboardingDomain,
   composeMealConcepts as composeMealConceptsDomain,
   MockMealCompositionProvider,
+  applyDiscretePortionAdjustment,
 } from "@fitness-autopilot/domain";
 import { supabase, useLocalPlanner } from "../lib/supabase";
 import {
@@ -128,6 +130,12 @@ type SessionValue = {
     | { ok: false; error: string; plan: ConsumerWeeklyPlan }
   >;
   clearWeeklyPlan: () => Promise<void>;
+  adjustDiscreteMealComponent: (input: {
+    day: DayOfWeek;
+    mealType: "lunch" | "dinner";
+    componentId: string;
+    amount: number;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
   signIn: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signUp: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => Promise<void>;
@@ -534,6 +542,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       weeklyPlan,
       async clearWeeklyPlan() {
         await persistWeeklyPlan(null);
+      },
+      async adjustDiscreteMealComponent({ day, mealType, componentId, amount }) {
+        const plan = weeklyPlan;
+        if (!plan?.meals?.length) return { ok: false as const, error: "No weekly plan loaded." };
+        const index = plan.meals.findIndex((m) => m.day === day && m.mealType === mealType);
+        if (index < 0) return { ok: false as const, error: "Meal not found on this plan." };
+        const current = plan.meals[index]!;
+        const nextMeal = applyDiscretePortionAdjustment({
+          meal: current,
+          componentId,
+          amount,
+        });
+        if (!nextMeal) {
+          return { ok: false as const, error: "That portion cannot be adjusted." };
+        }
+        const meals = plan.meals.slice();
+        meals[index] = nextMeal;
+        await persistWeeklyPlan({ ...plan, meals });
+        return { ok: true as const };
       },
       async signIn(email, password) {
         if (useLocalPlanner) {
