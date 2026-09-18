@@ -8,6 +8,10 @@ import {
 } from "@fitness-autopilot/contracts";
 import { err, ok, type Result } from "@fitness-autopilot/validation";
 
+import {
+  TASTE_FIRST_NUTRITION_OPTIMIZATION_INSTRUCTIONS,
+} from "./generated-nutrition";
+
 export const RECIPE_GENERATION_PROMPT_VERSION = "recipe-generation-v1" as const;
 
 export type RecipeGenerationErrorCode =
@@ -160,12 +164,8 @@ export function buildRecipeGenerationPrompt(
     "Return exactly ONE complete recipe as structured JSON matching the schema.",
     "Never return a weekly plan, multiple recipes, or a recipe count derived from varietyLevel.",
     "",
-    "Culinary quality:",
-    "- Create food people genuinely want to eat: recognizable, flavorful, texturally satisfying.",
-    "- Include sauces, chutneys, marinades, gravies, dressings, and seasoning mixes when the dish needs them.",
-    "- Use specific dish names (e.g. Chicken Tikka Rice Bowl with Mint-Yogurt Chutney), not vague fitness names.",
-    "- Avoid plain grilled chicken + plain rice + steamed broccoli unless explicitly requested.",
-    "- Keep ingredients accessible and instructions concise but complete.",
+    "Culinary quality and nutrition philosophy:",
+    TASTE_FIRST_NUTRITION_OPTIMIZATION_INSTRUCTIONS,
     "",
     "Hard constraints:",
     "- Allergies and dietaryRestrictions are absolute exclusions.",
@@ -177,9 +177,10 @@ export function buildRecipeGenerationPrompt(
     "- Include oils, sauces, cheese, yogurt, honey, nuts, and seasonings with gram quantities when practical.",
     "- No vague quantities (some, handful, as needed, 1 breast).",
     "",
-    "Nutrition guidance:",
+    "Nutrition guidance (this PLAN-003 candidate schema):",
     "- targetCalories and targetProteinGrams are approximate guidance only.",
-    "- Do NOT output calories, macros, or nutrition totals. A later deterministic pipeline will resolve USDA nutrition and portions.",
+    "- Do NOT output calories/macros on this candidate schema — weekly recipe resolution attaches structured llm_estimate nutrition.",
+    "- Still author a complete, realistic ingredient list that would support accurate nutrition estimation.",
     "",
     `Prompt version: ${RECIPE_GENERATION_PROMPT_VERSION}`,
   ].join("\n");

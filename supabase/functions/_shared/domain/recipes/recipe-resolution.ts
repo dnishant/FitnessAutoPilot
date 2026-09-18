@@ -13,7 +13,11 @@ import {
   ResolvedRecipeSchema,
 } from "../../contracts/index.ts";
 import { err, ok, type Result } from "../../validation/index.ts";
-import { stripNonAuthoritativeNutrition } from "./generation.ts";
+import {
+  TASTE_FIRST_NUTRITION_OPTIMIZATION_INSTRUCTIONS,
+  parseRecipeOptimization,
+  validateGeneratedRecipeNutrition,
+} from "./generated-nutrition.ts";
 import { collectRankedMealSlots } from "../planning/ranked-weekly-strategy.ts";
 
 export { RECIPE_RESOLUTION_PROMPT_VERSION, DEFAULT_RECIPE_RESOLUTION_CONCURRENCY };
@@ -75,19 +79,18 @@ export function parseRecipeResolutionRequest(
 }
 
 /**
- * Strip AI-invented nutrition so callers never treat macros as authoritative.
+ * Preserve structured LLM nutrition + optimization; strip loose invented macro fields.
+ * USDA remains unused on the active path — generated nutrition is the planning source.
  */
 export function stripResolvedRecipeNutrition(value: unknown): unknown {
-  return stripNonAuthoritativeNutrition(value);
-}
-
-function assertNoAuthoritativeNutrition(
-  value: unknown,
-): Result<void, RecipeResolutionError> {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
-    return ok(undefined);
+    return value;
   }
-  const banned = [
+  const record = { ...(value as Record<string, unknown>) };
+  const nutrition = record.nutrition;
+  const optimization = record.optimization;
+
+  const bannedLoose = [
     "calories",
     "caloriesKcal",
     "targetCalories",
@@ -97,36 +100,48 @@ function assertNoAuthoritativeNutrition(
     "carbohydrateG",
     "fatG",
     "macros",
-    "nutrition",
     "nutritionTotals",
     "estimatedCalories",
     "estimatedProteinGrams",
   ];
-  const record = value as Record<string, unknown>;
-  for (const key of banned) {
-    if (key in record) {
-      return err({
-        code: "RECIPE_SCHEMA_VALIDATION_FAILED",
-        message: `Resolved recipe must not include authoritative nutrition field "${key}".`,
-        details: { field: key },
-      });
-    }
+  for (const key of bannedLoose) {
+    delete record[key];
   }
-  return ok(undefined);
+
+  if (nutrition !== undefined) {
+    record.nutrition = nutrition;
+  }
+  if (optimization !== undefined) {
+    record.optimization = optimization;
+  }
+
+  if (Array.isArray(record.ingredients)) {
+    record.ingredients = record.ingredients.map((ingredient) => {
+      if (ingredient === null || typeof ingredient !== "object") {
+        return ingredient;
+      }
+      const next = { ...(ingredient as Record<string, unknown>) };
+      for (const key of bannedLoose) {
+        delete next[key];
+      }
+      // Keep optional per-ingredient estimates when present.
+      return next;
+    });
+  }
+  return record;
 }
 
 /**
  * Deterministically validate a resolved recipe against the request candidate.
  * Forces candidateId from the request — Gemini must not invent a new identity.
+ * When nutrition is present, it must pass macro sanity validation.
  */
 export function validateResolvedRecipe(
   input: unknown,
   request: RecipeResolutionRequest,
+  options?: { requireNutrition?: boolean },
 ): Result<ResolvedRecipe, RecipeResolutionError> {
-  const nutritionCheck = assertNoAuthoritativeNutrition(input);
-  if (!nutritionCheck.ok) {
-    return nutritionCheck;
-  }
+  const requireNutrition = options?.requireNutrition ?? true;
   const sanitized = stripResolvedRecipeNutrition(input);
 
   const withIdentity =
@@ -177,6 +192,30 @@ export function validateResolvedRecipe(
     }
   }
 
+  if (requireNutrition || parsed.data.nutrition != null) {
+    const nutritionCheck = validateGeneratedRecipeNutrition({
+      baseServings: parsed.data.baseServings,
+      nutrition: parsed.data.nutrition,
+      ingredients: parsed.data.ingredients,
+    });
+    if (!nutritionCheck.ok) {
+      return err({
+        code: "RECIPE_SCHEMA_VALIDATION_FAILED",
+        message: nutritionCheck.error.message,
+        details: nutritionCheck.error,
+        candidateId: request.candidate.candidateId,
+        candidateName: request.candidate.name,
+      });
+    }
+  }
+
+  const optimization = parseRecipeOptimization(
+    (withIdentity as Record<string, unknown> | null)?.optimization,
+  );
+  if (optimization) {
+    return ok({ ...parsed.data, nutrition: parsed.data.nutrition, optimization });
+  }
+
   return ok(parsed.data);
 }
 
@@ -193,16 +232,13 @@ export function buildRecipeResolutionPrompt(
 
   const systemInstruction = [
     "You are the Fitness Autopilot recipe resolution engine.",
-    "Resolve ONE selected culinary candidate into a precise, delicious, structured recipe.",
-    "Taste first: preserve sauces, marinades, spices, aromatics, texture, technique, finishing ingredients, appropriate fat, acidity, and garnishes.",
-    "Do NOT optimize for low calorie, diet food, clean eating, bodybuilding, or macro friendliness.",
-    "Preserve culinary identity. Do not substitute a different dish. Do not turn Chicken Tikka into a healthy bowl or salad.",
+    "Resolve ONE selected culinary candidate into a precise, delicious, nutritionally complete structured recipe.",
+    TASTE_FIRST_NUTRITION_OPTIMIZATION_INSTRUCTIONS,
     "Create an original structured representation informed by the source and dish tradition.",
     "Do NOT copy source prose, copyrighted recipe articles, or verbatim instructions.",
-    "Do NOT invent or output calories, protein, carbs, fat, macros, or nutrition totals.",
-    "Main recipe ingredients must stay separate from meal-completion components (rice, chutney, sides).",
+    "Main recipe ingredients must stay separate from meal-completion components (rice, chutney, sides) unless they are intrinsic to the dish as authored.",
     "Meal components must be culinarily appropriate — never mindlessly add rice + broccoli to every dish.",
-    "Annotate scalingBehavior so a future portion solver can adjust without destroying identity.",
+    "Annotate scalingBehavior so portioning can adjust without destroying identity.",
     "Instructions must be practical and executable for a normal home cook.",
     `Prompt version: ${RECIPE_RESOLUTION_PROMPT_VERSION}.`,
   ].join(" ");
@@ -251,6 +287,18 @@ export function buildRecipeResolutionPrompt(
     "  mealComponent.type MUST be one of: main | carb_side | vegetable_side | sauce | condiment | garnish | other",
     "  Do NOT use type values like protein or side.",
     "- flavorProfile, experienceProfile (moistureLevel, flavorIntensity, textureTags, mealPrepQuality)",
+    "",
+    "NUTRITION (required — after final ingredients are set):",
+    '- nutrition.source MUST be "llm_estimate"',
+    "- nutrition.total: { caloriesKcal, proteinGrams, carbohydrateGrams, fatGrams, optional fiberGrams } for the FULL batch",
+    "- nutrition.perServing: total / baseServings (same fields)",
+    "- nutrition.confidence: low | medium | high",
+    "- Estimate from the FINAL ingredient quantities (ingredient-aware arithmetic), not from a target macro wish.",
+    "",
+    "OPTIMIZATION (optional structured record):",
+    "- optimization.applied: boolean",
+    "- optimization.changes[]: { type, from, to, reason } when you made taste-preserving nutrition improvements",
+    "  type one of: cooking_method | ingredient_substitution | quantity_adjustment | fat_reduction | protein_increase | vegetable_increase | other",
     "",
     "SCALING GUIDANCE:",
     "- Primary protein and carb sides: primary_scalable",

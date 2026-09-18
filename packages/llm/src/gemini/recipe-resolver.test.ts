@@ -121,8 +121,9 @@ describe("GeminiRecipeResolver", () => {
     const recipe = await resolver.resolve({ candidate: CHICKEN_TIKKA });
     expect(recipe.candidateId).toBe("tikka-chicken");
     expect(recipe.source.name).toBe("Serious Eats");
-    expect(recipe.resolutionMetadata.promptVersion).toBe("recipe-resolution-v1");
+    expect(recipe.resolutionMetadata.promptVersion).toBe("recipe-resolution-v2");
     expect(recipe.resolutionMetadata.searchGrounded).toBe(true);
+    expect(recipe.nutrition?.source).toBe("llm_estimate");
     expect(recipe).not.toHaveProperty("calories");
   });
 

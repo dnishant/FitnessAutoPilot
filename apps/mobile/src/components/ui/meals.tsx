@@ -75,6 +75,9 @@ export function MealCard(props: {
       {nutrition ? (
         <Text style={styles.nutritionMeta}>
           {Math.round(nutrition.caloriesKcal)} kcal · {Math.round(nutrition.proteinGrams)}g protein
+          {props.meal.personalServings != null
+            ? ` · ${Number(props.meal.personalServings.toFixed(2))} servings`
+            : ""}
         </Text>
       ) : null}
     </View>

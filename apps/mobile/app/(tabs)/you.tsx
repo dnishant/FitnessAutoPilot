@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import {
@@ -24,9 +25,13 @@ export default function YouTabScreen() {
     currentCalorieTarget,
     mealPreferences,
     cookingPreferences,
+    weeklyPlan,
     useLocalMode,
+    refreshWeeklyPlanFromCloud,
     signOut,
   } = useSession();
+  const [cloudMessage, setCloudMessage] = useState<string | null>(null);
+  const [cloudBusy, setCloudBusy] = useState(false);
 
   const goalType =
     goal &&
@@ -98,6 +103,57 @@ export default function YouTabScreen() {
               {line}
             </Text>
           ))}
+        </View>
+      </View>
+
+      <View style={styles.section}>
+        <SectionHeader title="Weekly plan" />
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>
+            {weeklyPlan?.status === "ready"
+              ? weeklyPlan.generatedPlanId ?? "Ready"
+              : weeklyPlan?.status === "generating"
+                ? "Generating…"
+                : weeklyPlan?.status === "failed"
+                  ? "Last generation failed"
+                  : "No plan loaded"}
+          </Text>
+          {weeklyPlan?.weekStart ? (
+            <Text style={styles.cardBody}>
+              Week {weeklyPlan.weekStart} → {weeklyPlan.weekEnd}
+              {weeklyPlan.meals?.length
+                ? ` · ${weeklyPlan.meals.length} meals`
+                : ""}
+            </Text>
+          ) : (
+            <Text style={styles.cardBody}>
+              {useLocalMode
+                ? "Local mode stores the plan on this device only."
+                : "Generate a plan to save it to your account, or reload from cloud."}
+            </Text>
+          )}
+          {cloudMessage ? <Text style={styles.cardBody}>{cloudMessage}</Text> : null}
+          {!useLocalMode ? (
+            <PrimaryButton
+              label={cloudBusy ? "Loading…" : "Reload plan from cloud"}
+              variant="secondary"
+              onPress={async () => {
+                setCloudBusy(true);
+                setCloudMessage(null);
+                const result = await refreshWeeklyPlanFromCloud();
+                setCloudBusy(false);
+                if (!result.ok) {
+                  setCloudMessage(result.error);
+                  return;
+                }
+                setCloudMessage(
+                  result.plan
+                    ? `Loaded ${result.plan.generatedPlanId ?? "plan"} from Supabase.`
+                    : "No ready weekly plan found in Supabase yet. Generate one while signed in.",
+                );
+              }}
+            />
+          ) : null}
         </View>
       </View>
 

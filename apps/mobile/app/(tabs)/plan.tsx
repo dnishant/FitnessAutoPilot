@@ -34,6 +34,14 @@ export default function PlanTabScreen() {
       ? formatWeekRange(weeklyPlan.weekStart, weeklyPlan.weekEnd)
       : undefined;
 
+  const recipesMissingNutrition =
+    status === "ready" &&
+    Boolean(weeklyPlan?.meals?.length) &&
+    weeklyPlan?.meals?.every((meal) => {
+      const recipe = weeklyPlan.recipesByCandidateId?.[meal.candidateId];
+      return !meal.personalizedNutrition && recipe?.nutrition?.source !== "llm_estimate";
+    });
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <ScreenHeader
@@ -42,6 +50,16 @@ export default function PlanTabScreen() {
         subtitle={[weekLabel, nutritionLine].filter(Boolean).join(" · ") || undefined}
       />
 
+      {recipesMissingNutrition ? (
+        <View style={styles.warnCard}>
+          <Text style={styles.warnTitle}>Meal macros unavailable</Text>
+          <Text style={styles.warnBody}>
+            This plan&apos;s recipes were resolved without llm_estimate nutrition (usually an outdated
+            resolve-recipes function). Deploy resolve-recipes, then regenerate your week.
+          </Text>
+          <PrimaryButton label="Regenerate week" onPress={() => router.push("/generate")} />
+        </View>
+      ) : null}
       {status === "generating" ? (
         <View style={styles.stack}>
           <Text style={styles.statusCopy}>Building your week…</Text>
@@ -135,6 +153,22 @@ const styles = StyleSheet.create({
   },
   stack: {
     gap: spacing.lg,
+  },
+  warnCard: {
+    backgroundColor: "#F8E8D8",
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: "#E0C4A8",
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  warnTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  warnBody: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
   statusCopy: {
     ...typography.body,

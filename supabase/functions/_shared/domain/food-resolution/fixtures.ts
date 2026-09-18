@@ -309,6 +309,24 @@ export function makeChickenTikkaResolvedRecipe(
       model: "test",
       promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
     },
+    nutrition: {
+      source: "llm_estimate",
+      total: {
+        caloriesKcal: 2080,
+        proteinGrams: 168,
+        carbohydrateGrams: 120,
+        fatGrams: 96,
+        fiberGrams: 16,
+      },
+      perServing: {
+        caloriesKcal: 520,
+        proteinGrams: 42,
+        carbohydrateGrams: 30,
+        fatGrams: 24,
+        fiberGrams: 4,
+      },
+      confidence: "medium",
+    },
     ...overrides,
   };
 }
@@ -317,6 +335,21 @@ function plan009BaseRecipe(
   partial: Pick<ResolvedRecipe, "recipeId" | "candidateId" | "name" | "ingredients" | "mealComponents"> &
     Partial<ResolvedRecipe>,
 ): ResolvedRecipe {
+  const baseServings = partial.baseServings ?? 4;
+  const perServing = {
+    caloriesKcal: 520,
+    proteinGrams: 42,
+    carbohydrateGrams: 30,
+    fatGrams: 24,
+    fiberGrams: 4,
+  };
+  const total = {
+    caloriesKcal: perServing.caloriesKcal * baseServings,
+    proteinGrams: perServing.proteinGrams * baseServings,
+    carbohydrateGrams: perServing.carbohydrateGrams * baseServings,
+    fatGrams: perServing.fatGrams * baseServings,
+    fiberGrams: (perServing.fiberGrams ?? 0) * baseServings,
+  };
   return {
     source: {
       name: "PLAN-008 Simple fixture",
@@ -324,7 +357,7 @@ function plan009BaseRecipe(
       author: "Fitness Autopilot",
     },
     description: `${partial.name} fixture for PLAN-009.`,
-    baseServings: 4,
+    baseServings,
     instructions: [{ stepNumber: 1, text: "Cook according to culinary identity." }],
     prepTimeMinutes: 20,
     cookTimeMinutes: 30,
@@ -352,6 +385,12 @@ function plan009BaseRecipe(
       provider: "fixture",
       model: "plan-009",
       promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
+    },
+    nutrition: {
+      source: "llm_estimate",
+      total,
+      perServing,
+      confidence: "medium",
     },
     ...partial,
   };

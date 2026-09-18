@@ -412,6 +412,7 @@ function portionFromAssignment(
           role: variable.role,
           amount: grams,
           unit: "g",
+          personalServings: Number(value.toFixed(2)),
           internalScale: value,
           nutrition: roundPortionNutrition(
             nutritionForRecipeScale(variable.baseNutrition, grams / variable.referenceYieldGrams),
@@ -419,13 +420,15 @@ function portionFromAssignment(
         };
       }
       // Servings-only representation — do not invent gram yield.
-      const servings = Number((value * (variable.baseServings ?? 1)).toFixed(2));
+      // personalServings = scale relative to ONE authored serving (never × baseServings).
+      const personalServings = Number(value.toFixed(2));
       return {
         componentId: variable.componentId,
         displayName: variable.displayName,
         role: variable.role,
-        amount: servings,
-        unit: servings === 1 ? "serving" : "servings",
+        amount: personalServings,
+        unit: personalServings === 1 ? "serving" : "servings",
+        personalServings,
         internalScale: value,
         nutrition,
       };

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import type { DayOfWeek } from "@fitness-autopilot/contracts";
@@ -14,6 +15,7 @@ import {
   findMealSlot,
   shortDayLabel,
 } from "../../../src/lib/consumer-plan-view";
+import { buildDishCompositionDebug } from "../../../src/lib/dish-composition-debug";
 import { useSession } from "../../../src/state/session";
 import { colors, radii, spacing, typography } from "../../../src/theme/tokens";
 
@@ -35,6 +37,7 @@ function parseMealType(value: string | string[] | undefined): "lunch" | "dinner"
 export default function MealDetailScreen() {
   const params = useLocalSearchParams<{ day: string; mealType: string }>();
   const { weeklyPlan, loading, adjustDiscreteMealComponent } = useSession();
+  const [showCompositionJson, setShowCompositionJson] = useState(true);
   const day = parseDay(params.day);
   const mealType = parseMealType(params.mealType);
 
@@ -92,6 +95,9 @@ export default function MealDetailScreen() {
     }
   }
 
+  const compositionDebug = buildDishCompositionDebug({ meal, weeklyPlan });
+  const compositionJson = JSON.stringify(compositionDebug, null, 2);
+
   async function nudgeDiscrete(componentId: string, delta: number) {
     const current = meal!.components.find((c) => c.componentId === componentId);
     if (!current?.amount || !current.adjustableDiscrete) return;
@@ -120,7 +126,20 @@ export default function MealDetailScreen() {
         </Text>
       ) : null}
 
+      {compositionDebug.diagnosis.suspectedStructuralMainFallback ||
+      compositionDebug.diagnosis.nutritionSource === "missing_on_recipe" ? (
+        <View style={styles.warningCard}>
+          <Text style={styles.warningTitle}>Protein may be inflated</Text>
+          <Text style={styles.warningBody}>{compositionDebug.diagnosis.note}</Text>
+        </View>
+      ) : null}
+
       <SectionHeader title="Your plate" />
+      {meal.personalServings != null ? (
+        <Text style={styles.portionSummary}>
+          Your portion · {Number(meal.personalServings.toFixed(2))} servings
+        </Text>
+      ) : null}
       {blocked && !hasPortions ? (
         <View style={styles.blockedCard}>
           <Text style={styles.blockedTitle}>Portions unavailable</Text>
@@ -164,6 +183,28 @@ export default function MealDetailScreen() {
             ) : null}
           </View>
         </View>
+      ) : recipesById[meal.candidateId]?.nutrition?.perServing ? (
+        <View style={styles.nutritionCard}>
+          <SectionHeader title="Nutrition (per recipe serving)" />
+          <Text style={styles.calories}>
+            {Math.round(recipesById[meal.candidateId]!.nutrition!.perServing.caloriesKcal)} kcal
+          </Text>
+          <View style={styles.macroGrid}>
+            <MacroLine
+              label="Protein"
+              value={`${Math.round(recipesById[meal.candidateId]!.nutrition!.perServing.proteinGrams)} g`}
+            />
+            <MacroLine
+              label="Carbs"
+              value={`${Math.round(recipesById[meal.candidateId]!.nutrition!.perServing.carbohydrateGrams)} g`}
+            />
+            <MacroLine
+              label="Fat"
+              value={`${Math.round(recipesById[meal.candidateId]!.nutrition!.perServing.fatGrams)} g`}
+            />
+          </View>
+          <Text style={styles.estimatedNote}>Estimated nutrition from recipe</Text>
+        </View>
       ) : null}
 
       {prep ? (
@@ -194,6 +235,40 @@ export default function MealDetailScreen() {
           ))}
         </View>
       ) : null}
+
+      <View style={styles.stack}>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setShowCompositionJson((v) => !v)}
+          style={styles.jsonToggle}
+        >
+          <SectionHeader title="Dish composition JSON" />
+          <Text style={styles.jsonToggleAction}>
+            {showCompositionJson ? "Hide" : "Show"}
+          </Text>
+        </Pressable>
+        {showCompositionJson ? (
+          <View style={styles.jsonCard}>
+            <Text style={styles.jsonHint}>
+              Source: {compositionDebug.diagnosis.nutritionSource}
+              {compositionDebug.diagnosis.suspectedStructuralMainFallback
+                ? " · structural chicken fallback suspected"
+                : ""}
+            </Text>
+            <ScrollView
+              style={styles.jsonScroll}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
+              <ScrollView horizontal nestedScrollEnabled>
+                <Text selectable style={styles.jsonText}>
+                  {compositionJson}
+                </Text>
+              </ScrollView>
+            </ScrollView>
+          </View>
+        ) : null}
+      </View>
     </ScrollView>
   );
 }
@@ -220,6 +295,27 @@ const styles = StyleSheet.create({
     color: colors.textSecondary,
     marginTop: -spacing.md,
   },
+  portionSummary: {
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginTop: -spacing.sm,
+  },
+  warningCard: {
+    backgroundColor: "#F8E8D8",
+    borderRadius: radii.lg,
+    padding: spacing.lg,
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: "#E0C4A8",
+  },
+  warningTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  warningBody: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
   card: {
     backgroundColor: colors.surface,
     borderRadius: radii.lg,
@@ -234,6 +330,10 @@ const styles = StyleSheet.create({
   calories: {
     ...typography.title,
     color: colors.text,
+  },
+  estimatedNote: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   macroGrid: {
     backgroundColor: colors.surface,
@@ -304,5 +404,34 @@ const styles = StyleSheet.create({
   recipeLinkAction: {
     ...typography.bodyStrong,
     color: colors.primary,
+  },
+  jsonToggle: {
+    gap: spacing.xs,
+  },
+  jsonToggleAction: {
+    ...typography.label,
+    color: colors.primary,
+    marginTop: -spacing.sm,
+  },
+  jsonCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  jsonScroll: {
+    maxHeight: 420,
+  },
+  jsonHint: {
+    ...typography.caption,
+    color: colors.textMuted,
+  },
+  jsonText: {
+    ...typography.caption,
+    color: colors.text,
+    fontFamily: "Courier",
+    lineHeight: 18,
   },
 });

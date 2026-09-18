@@ -1,5 +1,9 @@
 /**
  * PLAN-009 domain: food resolution, quantity normalization, deterministic nutrition.
+ *
+ * INACTIVE for the current meal-planning architecture (ADR-024).
+ * Weekly planning uses ResolvedRecipe.nutrition (llm_estimate).
+ * Keep this module for optional future USDA verification — do not restore it as a planning blocker.
  */
 
 export * from "./nutrient-mapper.ts";

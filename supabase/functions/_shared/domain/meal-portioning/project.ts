@@ -8,6 +8,7 @@ import type {
   MealConcept,
   ResolvedRecipe,
 } from "../../contracts/index.ts";
+import { macrosForServings } from "../recipes/generated-nutrition.ts";
 import { DEFAULT_COUNT_BOUNDS } from "./policy.ts";
 import { isDiscreteUnitLabel, matchDiscreteStapleEstimate } from "./staple-estimates.ts";
 
@@ -127,6 +128,7 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
       let personalizationBlockReason = personalized?.blockReason;
       let personalizationMessage = personalized?.message;
 
+      let personalServings: number | undefined;
       if (personalized?.personalizedPlan && personalized.status !== "blocked") {
         const plan = personalized.personalizedPlan;
         personalizedNutrition = plan.nutrition;
@@ -164,6 +166,14 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
             components.push(base);
           }
         }
+        const mainPortion =
+          plan.portions.find((p) => p.role === "main") ?? plan.portions[0];
+        personalServings =
+          mainPortion?.personalServings ??
+          mainPortion?.internalScale ??
+          (mainPortion?.unit === "servings" || mainPortion?.unit === "serving"
+            ? mainPortion.amount
+            : undefined);
       }
 
       meals.push({
@@ -183,6 +193,7 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
             ].filter(Boolean)
           : undefined,
         components,
+        personalServings,
         personalizedNutrition,
         personalizationStatus,
         personalizationBlockReason,
@@ -206,17 +217,58 @@ export function attachPersonalizedWeeklyPlan(
       personalizedWeeklyPlan,
     };
   }
+  const recipes = recipesByCandidateId ?? plan.recipesByCandidateId;
+  const meals = projectPersonalizedPlanToConsumerMeals({
+    strategy: plan.strategy,
+    personalizedWeeklyPlan,
+    conceptsByCandidateId: conceptsByCandidateId ?? plan.conceptsByCandidateId,
+    recipesByCandidateId: recipes,
+  });
   return {
     ...plan,
     generatedPlanId: personalizedWeeklyPlan.generatedPlanId,
     personalizedWeeklyPlan,
-    meals: projectPersonalizedPlanToConsumerMeals({
-      strategy: plan.strategy,
-      personalizedWeeklyPlan,
-      conceptsByCandidateId: conceptsByCandidateId ?? plan.conceptsByCandidateId,
-      recipesByCandidateId: recipesByCandidateId ?? plan.recipesByCandidateId,
-    }),
+    meals: fillMissingMealNutritionFromRecipes(meals, recipes),
   };
+}
+
+/**
+ * When the portion solver is blocked but the recipe already has llm_estimate macros,
+ * surface those macros so the UI is not blank.
+ * Default personalServings = 1.0 (one authored serving).
+ */
+export function fillMissingMealNutritionFromRecipes(
+  meals: readonly ConsumerMealSlot[],
+  recipesByCandidateId?: Record<string, ResolvedRecipe>,
+): ConsumerMealSlot[] {
+  if (!recipesByCandidateId) return [...meals];
+  return meals.map((meal) => {
+    if (meal.personalizedNutrition) return meal;
+    const recipe = recipesByCandidateId[meal.candidateId];
+    if (!recipe?.nutrition?.perServing || recipe.nutrition.source !== "llm_estimate") {
+      return meal;
+    }
+    const personalServings = meal.personalServings ?? 1;
+    const scaled = macrosForServings(recipe, personalServings);
+    const personalizedNutrition: PersonalizedMealNutrition = {
+      caloriesKcal: Math.round(scaled.caloriesKcal),
+      proteinGrams: Math.round(scaled.proteinGrams * 10) / 10,
+      carbsGrams: Math.round(scaled.carbohydrateGrams * 10) / 10,
+      fatGrams: Math.round(scaled.fatGrams * 10) / 10,
+    };
+    if (scaled.fiberGrams != null) {
+      personalizedNutrition.fiberGrams = Math.round(scaled.fiberGrams * 10) / 10;
+    }
+    return {
+      ...meal,
+      personalServings,
+      personalizedNutrition,
+      personalizationStatus: meal.personalizationStatus === "blocked" ? "best_feasible" : meal.personalizationStatus ?? "best_feasible",
+      personalizationMessage:
+        meal.personalizationMessage ??
+        "Macros from recipe.nutrition (llm_estimate); portion solver did not personalize this plate.",
+    };
+  });
 }
 
 /**

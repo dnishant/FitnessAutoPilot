@@ -9,6 +9,7 @@ export * from "./cooking-preferences.ts";
 export * from "./recipe.ts";
 export * from "./recipe-generation.ts";
 export * from "./recipe-resolution.ts";
+export * from "./generated-recipe-nutrition.ts";
 export * from "./food-resolution.ts";
 export * from "./meal-composition.ts";
 export * from "./meal-portioning.ts";

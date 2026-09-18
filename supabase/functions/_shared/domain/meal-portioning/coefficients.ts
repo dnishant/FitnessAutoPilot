@@ -79,8 +79,26 @@ function mainRecipeNutrition(
   baseServings: number;
   referenceYieldGrams?: number;
 } | null {
-  const result = nutritionByCandidateId?.[meal.candidateId];
   const recipe = recipesByCandidateId?.[meal.candidateId];
+
+  // Active architecture: prefer LLM-generated recipe.nutrition (complete before planning).
+  if (recipe?.nutrition?.source === "llm_estimate" && hasMacros(recipe.nutrition.perServing)) {
+    return {
+      baseNutrition: {
+        caloriesKcal: recipe.nutrition.perServing.caloriesKcal,
+        proteinGrams: recipe.nutrition.perServing.proteinGrams,
+        carbohydrateGrams: recipe.nutrition.perServing.carbohydrateGrams,
+        fatGrams: recipe.nutrition.perServing.fatGrams,
+        fiberGrams: recipe.nutrition.perServing.fiberGrams,
+      },
+      baseServings: recipe.baseServings,
+      // Servings-only display — do not invent gram yield from LLM macros.
+      referenceYieldGrams: undefined,
+    };
+  }
+
+  // Inactive / verification path: PLAN-009 USDA RecipeNutritionResult (optional).
+  const result = nutritionByCandidateId?.[meal.candidateId];
   const perServing = result?.nutrition?.perBaseServing;
   if (!perServing || !hasMacros(perServing)) return null;
   if (result.resolutionQuality.status === "blocked") return null;
@@ -94,10 +112,6 @@ function mainRecipeNutrition(
     if (grams.length > 0) {
       referenceYieldGrams = grams.reduce((a, b) => a + b, 0) / Math.max(baseServings, 1);
     }
-  }
-  if (referenceYieldGrams == null && recipe) {
-    // Prefer explicit culinary preferred display mass when yield unknown but servings known.
-    referenceYieldGrams = undefined;
   }
 
   return {
@@ -179,11 +193,12 @@ function coefficientForComponent(
         ok: false,
         error: {
           code: "missing_canonical_nutrition",
-          message: `Main "${component.name}" lacks trusted PLAN-009 nutrition.`,
+          message: `Main "${component.name}" lacks trusted recipe nutrition (llm_estimate or USDA).`,
           componentId: component.componentId,
         },
       };
     }
+    // baseServings is always available from the recipe; gram yield is optional for display.
     if (main.referenceYieldGrams == null && main.baseServings == null) {
       return {
         ok: false,

@@ -56,6 +56,48 @@ describe("PLAN-010 deterministic meal portion solver", () => {
     expect(nutritionForRecipeScale(base, 1.5).proteinGrams).toBeCloseTo(15, 8);
   });
 
+  it("displays personalServings as authored servings (never × baseServings)", () => {
+    const request: SolveMealPortionsRequest = {
+      mealId: "serving-semantics",
+      mealName: "Paneer Kathi Roll",
+      components: [
+        {
+          kind: "recipe_scale",
+          componentId: "main",
+          displayName: "Paneer Kathi Roll",
+          role: "main",
+          baseNutrition: {
+            caloriesKcal: 500,
+            proteinGrams: 24,
+            carbohydrateGrams: 39,
+            fatGrams: 26,
+          },
+          baseServings: 4,
+        },
+      ],
+      nutritionIntent: {
+        ...DEVELOPER_TEST_INTENT_600,
+        targetCaloriesKcal: 600,
+      },
+      generatedAt: new Date().toISOString(),
+    };
+    const plan = solveMealPortions(request);
+    const main = plan.portions.find((p) => p.componentId === "main");
+    expect(main).toBeDefined();
+    expect(main!.unit).toBe("servings");
+    expect(main!.personalServings).toBeDefined();
+    expect(main!.personalServings).toBe(main!.amount);
+    // Regression: previously amount = scale × baseServings (e.g. 4.8 for 1.2 servings).
+    expect(main!.amount).toBeLessThan(baseServingsCeiling(4));
+    expect(main!.amount).not.toBe(4.8);
+    expect(main!.nutrition.caloriesKcal).toBeCloseTo(500 * (main!.personalServings ?? 0), 0);
+  });
+
+  function baseServingsCeiling(baseServings: number): number {
+    // personalServings for a single meal should stay near 1× authored serving, not batch size.
+    return baseServings;
+  }
+
   it("keeps compound Kachumber as a single scalable unit", () => {
     const plan = solveMealPortions(chickenTikkaCompleteMealRequest());
     const kachumber = plan.portions.find((p) => p.componentId === "kachumber");

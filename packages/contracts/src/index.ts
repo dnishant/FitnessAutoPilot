@@ -9,6 +9,7 @@ export * from "./cooking-preferences";
 export * from "./recipe";
 export * from "./recipe-generation";
 export * from "./recipe-resolution";
+export * from "./generated-recipe-nutrition";
 export * from "./food-resolution";
 export * from "./meal-composition";
 export * from "./meal-portioning";

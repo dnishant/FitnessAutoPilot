@@ -89,3 +89,11 @@ verify_jwt = false
 [functions.upsert-profile]
 import_map = "./functions/import_map.json"
 verify_jwt = false
+
+[functions.save-consumer-weekly-plan]
+import_map = "./functions/import_map.json"
+verify_jwt = false
+
+[functions.get-consumer-weekly-plan]
+import_map = "./functions/import_map.json"
+verify_jwt = false

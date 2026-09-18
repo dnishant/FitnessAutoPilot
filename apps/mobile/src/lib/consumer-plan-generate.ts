@@ -23,6 +23,7 @@ import {
   attachPersonalizedWeeklyPlan,
   buildComponentNutritionByKeyFromCompleteMeals,
   buildLocalDemoNutritionMaps,
+  buildNutritionMapsFromGeneratedRecipes,
   composeMealConcepts,
   personalizeWeeklyNutritionPlan,
   plan008SimpleCandidateLookup,
@@ -208,6 +209,18 @@ async function personalizeGeneratedPlan(input: {
   );
 }
 
+/** True when at least one selected recipe carries llm_estimate macros. */
+export function recipesHaveGeneratedNutrition(
+  recipesByCandidateId: Record<string, ResolvedRecipe>,
+  candidateIds?: readonly string[],
+): boolean {
+  const ids = candidateIds ?? Object.keys(recipesByCandidateId);
+  return ids.some((id) => {
+    const nutrition = recipesByCandidateId[id]?.nutrition;
+    return nutrition?.source === "llm_estimate" && nutrition.perServing != null;
+  });
+}
+
 async function buildLocalDemoPlan(
   apis: PlanGenerationApis,
   onProgress?: GenerationProgressCallback,
@@ -258,10 +271,15 @@ async function buildLocalDemoPlan(
   const completeMeals = completeMealsByCandidateId(completeResult);
 
   onProgress?.("personalizing_portions");
+  // Prefer LLM-generated recipe.nutrition; fall back to structural demo maps.
+  let nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
   const demoNutrition = buildLocalDemoNutritionMaps({
     completeMealsByCandidateId: completeMeals,
     recipesByCandidateId,
   });
+  if (Object.keys(nutritionByCandidateId).length === 0) {
+    nutritionByCandidateId = demoNutrition.nutritionByCandidateId;
+  }
 
   return personalizeGeneratedPlan({
     generatedPlanId,
@@ -271,7 +289,7 @@ async function buildLocalDemoPlan(
     conceptsByCandidateId: composed.result.conceptsByCandidateId,
     recipesByCandidateId,
     completeMeals,
-    nutritionByCandidateId: demoNutrition.nutritionByCandidateId,
+    nutritionByCandidateId,
     componentNutritionByKey: demoNutrition.componentNutritionByKey,
     nutritionTarget: apis.nutritionTarget,
     generatedAt,
@@ -421,6 +439,22 @@ async function buildRemotePlan(
     ? resolved.result.recipesByCandidateId
     : (resolved.result?.recipesByCandidateId ?? {});
 
+  if (
+    Object.keys(recipesByCandidateId).length > 0 &&
+    !recipesHaveGeneratedNutrition(
+      recipesByCandidateId,
+      strategyResult.strategy.uniqueCandidateIds,
+    )
+  ) {
+    throw Object.assign(
+      new Error(
+        "Resolved recipes are missing llm_estimate nutrition, so meal macros cannot be shown. " +
+          "Deploy the updated resolve-recipes Edge Function (recipe-resolution-v2), then regenerate your plan.",
+      ),
+      { code: "MISSING_RECIPE_NUTRITION" },
+    );
+  }
+
   // Selected-only complete meal resolution (discarded candidates are not resolved).
   let completeMeals: Record<string, CompleteMeal> = {};
   if (apis.resolveSelectedCompleteMeals) {
@@ -447,22 +481,36 @@ async function buildRemotePlan(
   }
 
   onProgress?.("personalizing_portions");
-  let nutritionByCandidateId: Record<string, RecipeNutritionResult> | undefined;
+  // Active architecture: recipe.nutrition (llm_estimate) is the planning source of truth.
+  // USDA resolveRecipeNutrition is optional verification only — never blocks planning.
+  let nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
 
   if (apis.resolveRecipeNutrition && Object.keys(recipesByCandidateId).length > 0) {
-    const nutrition = await apis.resolveRecipeNutrition({
-      recipes: Object.values(recipesByCandidateId),
-      uniqueCandidateIds: strategyResult.strategy.uniqueCandidateIds,
-    });
-    if (nutrition.ok) {
-      nutritionByCandidateId = nutrition.result.recipesByCandidateId;
-    } else if (nutrition.result?.recipesByCandidateId) {
-      nutritionByCandidateId = nutrition.result.recipesByCandidateId;
+    try {
+      const nutrition = await apis.resolveRecipeNutrition({
+        recipes: Object.values(recipesByCandidateId),
+        uniqueCandidateIds: strategyResult.strategy.uniqueCandidateIds,
+      });
+      // Merge USDA results only for candidates still missing generated nutrition.
+      const usdaMap =
+        nutrition.ok || nutrition.result?.recipesByCandidateId
+          ? nutrition.result?.recipesByCandidateId ??
+            (nutrition.ok ? nutrition.result.recipesByCandidateId : undefined)
+          : undefined;
+      if (usdaMap) {
+        for (const [candidateId, result] of Object.entries(usdaMap)) {
+          if (!nutritionByCandidateId[candidateId]) {
+            nutritionByCandidateId[candidateId] = result;
+          }
+        }
+      }
+    } catch {
+      // USDA is non-blocking — continue with generated nutrition.
     }
   }
 
-  // Plate nutrition from CompleteMeal resolutions (USDA when enriched). Role/staple
-  // estimates live inside the coefficient builder — do not prefill demo maps remotely.
+  // Plate nutrition from CompleteMeal resolutions (sides). Role/staple estimates
+  // live inside the coefficient builder.
   const fromMeals = buildComponentNutritionByKeyFromCompleteMeals(completeMeals);
   const componentNutritionByKey: Record<
     string,
@@ -476,13 +524,14 @@ async function buildRemotePlan(
     };
   }
 
-  if (!nutritionByCandidateId || Object.keys(nutritionByCandidateId).length === 0) {
-    // Offline / failed nutrition: structural main nutrition only for local fallback.
-    const structural = buildLocalDemoNutritionMaps({
-      completeMealsByCandidateId: completeMeals,
-      recipesByCandidateId,
-    });
-    nutritionByCandidateId = structural.nutritionByCandidateId;
+  if (Object.keys(nutritionByCandidateId).length === 0) {
+    // Do NOT fall back to role-structural "lean chicken" mains for remote plans.
+    // That path was assigning ~42g protein / serving to every dish (including curd rice),
+    // which inflated protein across the week. Prefer blocked meals over fake macros.
+    console.warn(
+      "[consumer-plan-generate] No recipe.nutrition (llm_estimate) on resolved recipes; " +
+        "skipping structural chicken fallback. Meals without trusted nutrition will be blocked.",
+    );
   }
 
   return personalizeGeneratedPlan({

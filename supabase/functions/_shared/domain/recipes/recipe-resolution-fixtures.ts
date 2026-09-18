@@ -144,6 +144,22 @@ export function makeResolvedRecipeFixture(
   candidate: CulinaryDiscoveryCandidate,
   overrides: Partial<ResolvedRecipe> = {},
 ): ResolvedRecipe {
+  const baseServings = overrides.baseServings ?? 4;
+  const perServing = {
+    caloriesKcal: 480,
+    proteinGrams: 38,
+    carbohydrateGrams: 28,
+    fatGrams: 22,
+    fiberGrams: 4,
+  };
+  const total = {
+    caloriesKcal: perServing.caloriesKcal * baseServings,
+    proteinGrams: perServing.proteinGrams * baseServings,
+    carbohydrateGrams: perServing.carbohydrateGrams * baseServings,
+    fatGrams: perServing.fatGrams * baseServings,
+    fiberGrams: (perServing.fiberGrams ?? 0) * baseServings,
+  };
+
   return {
     recipeId: `rr_${candidate.candidateId}`,
     candidateId: candidate.candidateId,
@@ -154,7 +170,7 @@ export function makeResolvedRecipeFixture(
       author: candidate.source.author ?? null,
     },
     description: `Structured culinary resolution of ${candidate.name}.`,
-    baseServings: 4,
+    baseServings,
     ingredients: [
       {
         ingredientId: "protein",
@@ -227,6 +243,16 @@ export function makeResolvedRecipeFixture(
       provider: "fixture",
       model: "test",
       promptVersion: RECIPE_RESOLUTION_PROMPT_VERSION,
+    },
+    nutrition: {
+      source: "llm_estimate",
+      total,
+      perServing,
+      confidence: "medium",
+    },
+    optimization: {
+      applied: false,
+      changes: [],
     },
     ...overrides,
   };

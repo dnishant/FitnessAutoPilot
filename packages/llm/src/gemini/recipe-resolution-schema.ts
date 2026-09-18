@@ -7,13 +7,22 @@ import {
   MealComponentTypeSchema,
   MealPrepQualitySchema,
   MoistureLevelSchema,
+  RecipeOptimizationChangeTypeSchema,
 } from "@fitness-autopilot/contracts";
 import { PrepIntentSchema } from "@fitness-autopilot/contracts";
 import { zodToGeminiJsonSchema } from "./json-schema";
 
+const GeminiNutritionMacrosSchema = z.object({
+  caloriesKcal: z.number().min(0),
+  proteinGrams: z.number().min(0),
+  carbohydrateGrams: z.number().min(0),
+  fatGrams: z.number().min(0),
+  fiberGrams: z.number().min(0).optional(),
+});
+
 /**
- * Model payload for PLAN-008. Omits server-stamped fields:
- * candidateId (forced from request), source provenance, resolutionMetadata.
+ * Model payload for recipe resolution with LLM-estimated nutrition.
+ * Omits server-stamped fields: candidateId (forced from request), source provenance, resolutionMetadata.
  */
 export const GeminiResolvedRecipePayloadSchema = z.object({
   recipeId: z.string().min(1).max(80),
@@ -83,6 +92,28 @@ export const GeminiResolvedRecipePayloadSchema = z.object({
     textureTags: z.array(z.string().min(1).max(80)).optional(),
     mealPrepQuality: MealPrepQualitySchema,
   }),
+  nutrition: z.object({
+    source: z.literal("llm_estimate"),
+    total: GeminiNutritionMacrosSchema,
+    perServing: GeminiNutritionMacrosSchema,
+    confidence: z.enum(["low", "medium", "high"]).optional(),
+    estimationNotes: z.string().min(1).max(600).optional(),
+  }),
+  optimization: z
+    .object({
+      applied: z.boolean(),
+      changes: z
+        .array(
+          z.object({
+            type: RecipeOptimizationChangeTypeSchema,
+            from: z.string().min(1).max(200),
+            to: z.string().min(1).max(200),
+            reason: z.string().min(1).max(400),
+          }),
+        )
+        .optional(),
+    })
+    .optional(),
 });
 
 export type GeminiResolvedRecipePayload = z.infer<typeof GeminiResolvedRecipePayloadSchema>;
