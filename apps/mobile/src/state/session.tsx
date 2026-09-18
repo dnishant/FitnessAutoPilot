@@ -125,6 +125,11 @@ type SessionValue = {
   cookingPreferences: CookingPreferences | null;
   dailyPlan: DailyPlan | null;
   weeklyPlan: ConsumerWeeklyPlan | null;
+  /** Reload the latest ready plan from Supabase (remote mode). */
+  refreshWeeklyPlanFromCloud: () => Promise<
+    | { ok: true; plan: ConsumerWeeklyPlan | null }
+    | { ok: false; error: string }
+  >;
   generateWeeklyPlan: () => Promise<
     | { ok: true; plan: ConsumerWeeklyPlan }
     | { ok: false; error: string; plan: ConsumerWeeklyPlan }
@@ -346,6 +351,45 @@ async function composeMealConceptsLocally(input: {
   };
 }
 
+async function loadRemoteWeeklyPlan(): Promise<ConsumerWeeklyPlan | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase.functions.invoke("get-consumer-weekly-plan", {
+    body: {},
+  });
+  if (error) {
+    console.warn("[session] get-consumer-weekly-plan failed:", error.message);
+    return null;
+  }
+  const payload = data as
+    | { ok?: boolean; plan?: ConsumerWeeklyPlan | null; error?: string }
+    | null;
+  if (!payload?.ok) {
+    console.warn("[session] get-consumer-weekly-plan error:", payload?.error);
+    return null;
+  }
+  return payload.plan ?? null;
+}
+
+async function saveRemoteWeeklyPlan(plan: ConsumerWeeklyPlan): Promise<void> {
+  if (!supabase) return;
+  if (plan.status !== "ready" && plan.status !== "failed") return;
+  if (!plan.generatedPlanId) {
+    console.warn("[session] skip cloud save: missing generatedPlanId");
+    return;
+  }
+  const { data, error } = await supabase.functions.invoke("save-consumer-weekly-plan", {
+    body: { plan },
+  });
+  if (error) {
+    console.warn("[session] save-consumer-weekly-plan failed:", error.message);
+    return;
+  }
+  const payload = data as { ok?: boolean; error?: string } | null;
+  if (!payload?.ok) {
+    console.warn("[session] save-consumer-weekly-plan error:", payload?.error);
+  }
+}
+
 async function loadRemoteOnboardingState(userId: string): Promise<{
   profile: ProfileBasics | null;
   currentRmr: RmrEstimate | null;
@@ -451,6 +495,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     } catch {
       // Persistence is best-effort; in-memory state still drives the UI.
     }
+    // Remote source of truth: persist completed plans to Supabase (not generating stages).
+    if (!useLocalPlanner && plan && (plan.status === "ready" || plan.status === "failed")) {
+      void saveRemoteWeeklyPlan(plan);
+    }
   }
 
   useEffect(() => {
@@ -504,15 +552,39 @@ export function SessionProvider({ children }: { children: ReactNode }) {
               setCookingPreferences(loaded.cookingPreferences);
               setGoal(loaded.goal);
             }
+            // Prefer Supabase weekly plan over local AsyncStorage cache.
+            const remotePlan = await loadRemoteWeeklyPlan();
+            if (!cancelled && remotePlan) {
+              setWeeklyPlan(remotePlan);
+              try {
+                await AsyncStorage.setItem(
+                  CONSUMER_PLAN_STORAGE_KEY,
+                  JSON.stringify(remotePlan),
+                );
+              } catch {
+                // Cache write is best-effort.
+              }
+            } else {
+              try {
+                const planRaw = await AsyncStorage.getItem(CONSUMER_PLAN_STORAGE_KEY);
+                if (planRaw && !cancelled) {
+                  setWeeklyPlan(JSON.parse(planRaw) as ConsumerWeeklyPlan);
+                }
+              } catch {
+                // Ignore corrupt cache.
+              }
+            }
           }
         }
-        try {
-          const planRaw = await AsyncStorage.getItem(CONSUMER_PLAN_STORAGE_KEY);
-          if (planRaw && !cancelled) {
-            setWeeklyPlan(JSON.parse(planRaw) as ConsumerWeeklyPlan);
+        if (useLocalPlanner) {
+          try {
+            const planRaw = await AsyncStorage.getItem(CONSUMER_PLAN_STORAGE_KEY);
+            if (planRaw && !cancelled) {
+              setWeeklyPlan(JSON.parse(planRaw) as ConsumerWeeklyPlan);
+            }
+          } catch {
+            // Ignore corrupt cache.
           }
-        } catch {
-          // Ignore corrupt cache.
         }
       } finally {
         if (!cancelled) {
@@ -540,6 +612,40 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       cookingPreferences,
       dailyPlan,
       weeklyPlan,
+      async refreshWeeklyPlanFromCloud() {
+        if (useLocalPlanner) {
+          return { ok: false as const, error: "Cloud plans are unavailable in local planner mode." };
+        }
+        if (!supabase || !user) {
+          return { ok: false as const, error: "Not signed in." };
+        }
+        try {
+          const remotePlan = await loadRemoteWeeklyPlan();
+          await persistWeeklyPlan(remotePlan);
+          // persistWeeklyPlan would re-save to cloud for ready plans — avoid loop by setting state+cache only when null
+          if (remotePlan) {
+            setWeeklyPlan(remotePlan);
+            try {
+              await AsyncStorage.setItem(CONSUMER_PLAN_STORAGE_KEY, JSON.stringify(remotePlan));
+            } catch {
+              // ignore
+            }
+          } else {
+            setWeeklyPlan(null);
+            try {
+              await AsyncStorage.removeItem(CONSUMER_PLAN_STORAGE_KEY);
+            } catch {
+              // ignore
+            }
+          }
+          return { ok: true as const, plan: remotePlan };
+        } catch (e) {
+          return {
+            ok: false as const,
+            error: e instanceof Error ? e.message : "Failed to load weekly plan from cloud.",
+          };
+        }
+      },
       async clearWeeklyPlan() {
         await persistWeeklyPlan(null);
       },
@@ -611,6 +717,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setMealPreferences(loaded.mealPreferences);
         setCookingPreferences(loaded.cookingPreferences);
         setGoal(loaded.goal);
+        const remotePlan = await loadRemoteWeeklyPlan();
+        if (remotePlan) {
+          setWeeklyPlan(remotePlan);
+          try {
+            await AsyncStorage.setItem(CONSUMER_PLAN_STORAGE_KEY, JSON.stringify(remotePlan));
+          } catch {
+            // ignore
+          }
+        }
         return { ok: true };
       },
       async signUp(email, password) {
@@ -664,6 +779,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setMealPreferences(null);
         setCookingPreferences(null);
         setDailyPlan(null);
+        setWeeklyPlan(null);
+        try {
+          await AsyncStorage.removeItem(CONSUMER_PLAN_STORAGE_KEY);
+        } catch {
+          // ignore
+        }
       },
       async completeOnboarding(request) {
         try {
@@ -1439,6 +1560,13 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           },
         );
         await persistWeeklyPlan(result.plan);
+        if (
+          !useLocalPlanner &&
+          result.plan &&
+          (result.plan.status === "ready" || result.plan.status === "failed")
+        ) {
+          await saveRemoteWeeklyPlan(result.plan);
+        }
         return result;
       },
     };
