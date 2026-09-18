@@ -183,6 +183,28 @@ export default function MealDetailScreen() {
             ) : null}
           </View>
         </View>
+      ) : recipesById[meal.candidateId]?.nutrition?.perServing ? (
+        <View style={styles.nutritionCard}>
+          <SectionHeader title="Nutrition (per recipe serving)" />
+          <Text style={styles.calories}>
+            {Math.round(recipesById[meal.candidateId]!.nutrition!.perServing.caloriesKcal)} kcal
+          </Text>
+          <View style={styles.macroGrid}>
+            <MacroLine
+              label="Protein"
+              value={`${Math.round(recipesById[meal.candidateId]!.nutrition!.perServing.proteinGrams)} g`}
+            />
+            <MacroLine
+              label="Carbs"
+              value={`${Math.round(recipesById[meal.candidateId]!.nutrition!.perServing.carbohydrateGrams)} g`}
+            />
+            <MacroLine
+              label="Fat"
+              value={`${Math.round(recipesById[meal.candidateId]!.nutrition!.perServing.fatGrams)} g`}
+            />
+          </View>
+          <Text style={styles.estimatedNote}>Estimated nutrition from recipe</Text>
+        </View>
       ) : null}
 
       {prep ? (
@@ -302,6 +324,10 @@ const styles = StyleSheet.create({
   calories: {
     ...typography.title,
     color: colors.text,
+  },
+  estimatedNote: {
+    ...typography.caption,
+    color: colors.textMuted,
   },
   macroGrid: {
     backgroundColor: colors.surface,

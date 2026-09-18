@@ -209,6 +209,18 @@ async function personalizeGeneratedPlan(input: {
   );
 }
 
+/** True when at least one selected recipe carries llm_estimate macros. */
+export function recipesHaveGeneratedNutrition(
+  recipesByCandidateId: Record<string, ResolvedRecipe>,
+  candidateIds?: readonly string[],
+): boolean {
+  const ids = candidateIds ?? Object.keys(recipesByCandidateId);
+  return ids.some((id) => {
+    const nutrition = recipesByCandidateId[id]?.nutrition;
+    return nutrition?.source === "llm_estimate" && nutrition.perServing != null;
+  });
+}
+
 async function buildLocalDemoPlan(
   apis: PlanGenerationApis,
   onProgress?: GenerationProgressCallback,
@@ -426,6 +438,22 @@ async function buildRemotePlan(
   const recipesByCandidateId = resolved.ok
     ? resolved.result.recipesByCandidateId
     : (resolved.result?.recipesByCandidateId ?? {});
+
+  if (
+    Object.keys(recipesByCandidateId).length > 0 &&
+    !recipesHaveGeneratedNutrition(
+      recipesByCandidateId,
+      strategyResult.strategy.uniqueCandidateIds,
+    )
+  ) {
+    throw Object.assign(
+      new Error(
+        "Resolved recipes are missing llm_estimate nutrition, so meal macros cannot be shown. " +
+          "Deploy the updated resolve-recipes Edge Function (recipe-resolution-v2), then regenerate your plan.",
+      ),
+      { code: "MISSING_RECIPE_NUTRITION" },
+    );
+  }
 
   // Selected-only complete meal resolution (discarded candidates are not resolved).
   let completeMeals: Record<string, CompleteMeal> = {};

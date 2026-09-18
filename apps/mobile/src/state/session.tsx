@@ -46,13 +46,14 @@ import type {
   ConsumerPlanGenerationStage,
   DayOfWeek,
 } from "@fitness-autopilot/contracts";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   completeOnboarding as completeOnboardingDomain,
   composeMealConcepts as composeMealConceptsDomain,
   MockMealCompositionProvider,
   applyDiscretePortionAdjustment,
+  fillMissingMealNutritionFromRecipes,
 } from "@fitness-autopilot/domain";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { supabase, useLocalPlanner } from "../lib/supabase";
 import {
   CONSUMER_PLAN_STORAGE_KEY,
@@ -351,6 +352,20 @@ async function composeMealConceptsLocally(input: {
   };
 }
 
+async function hydrateWeeklyPlanWithRecipeMacros(
+  plan: ConsumerWeeklyPlan | null,
+): Promise<ConsumerWeeklyPlan | null> {
+  if (!plan?.meals?.length) return plan;
+  const meals = fillMissingMealNutritionFromRecipes(plan.meals, plan.recipesByCandidateId);
+  const next = { ...plan, meals };
+  try {
+    await AsyncStorage.setItem(CONSUMER_PLAN_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // ignore
+  }
+  return next;
+}
+
 async function loadRemoteWeeklyPlan(): Promise<ConsumerWeeklyPlan | null> {
   if (!supabase) return null;
   const { data, error } = await supabase.functions.invoke("get-consumer-weekly-plan", {
@@ -367,7 +382,7 @@ async function loadRemoteWeeklyPlan(): Promise<ConsumerWeeklyPlan | null> {
     console.warn("[session] get-consumer-weekly-plan error:", payload?.error);
     return null;
   }
-  return payload.plan ?? null;
+  return hydrateWeeklyPlanWithRecipeMacros(payload.plan ?? null);
 }
 
 async function saveRemoteWeeklyPlan(plan: ConsumerWeeklyPlan): Promise<void> {
