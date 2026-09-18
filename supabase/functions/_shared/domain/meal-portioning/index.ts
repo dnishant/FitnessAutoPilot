@@ -15,3 +15,4 @@ export * from "./role-structural-estimates.ts";
 export * from "./complete-meal-nutrition.ts";
 export * from "./local-demo-nutrition.ts";
 export * from "./executability.ts";
+export * from "./canonical-meal-integrity.ts";

@@ -22,6 +22,7 @@ import {
   MockMealCompositionProvider,
   MAX_EXECUTABLE_REPLACEMENT_ROUNDS,
   assessWeeklyPlanExecutability,
+  assertWeeklyConsumerPlanIntegrity,
   attachPersonalizedWeeklyPlan,
   buildComponentNutritionByKeyFromCompleteMeals,
   buildLocalDemoNutritionMaps,
@@ -214,6 +215,20 @@ async function personalizeGeneratedPlan(input: {
   );
 }
 
+function assertReadyPlanIntegrity(plan: ConsumerWeeklyPlan): ConsumerWeeklyPlan {
+  const integrity = assertWeeklyConsumerPlanIntegrity(plan.meals ?? []);
+  if (!integrity.ok) {
+    throw Object.assign(
+      new Error(
+        `Refusing to activate weekly plan with canonical meal integrity failures: ` +
+          integrity.failures.map((f) => f.code).join(", "),
+      ),
+      { code: "CANONICAL_MEAL_INTEGRITY_FAILED" },
+    );
+  }
+  return plan;
+}
+
 /** True when at least one selected recipe carries llm_estimate macros. */
 export function recipesHaveGeneratedNutrition(
   recipesByCandidateId: Record<string, ResolvedRecipe>,
@@ -286,19 +301,21 @@ async function buildLocalDemoPlan(
     nutritionByCandidateId = demoNutrition.nutritionByCandidateId;
   }
 
-  return personalizeGeneratedPlan({
-    generatedPlanId,
-    weekStart,
-    weekEnd,
-    strategy,
-    conceptsByCandidateId: composed.result.conceptsByCandidateId,
-    recipesByCandidateId,
-    completeMeals,
-    nutritionByCandidateId,
-    componentNutritionByKey: demoNutrition.componentNutritionByKey,
-    nutritionTarget: apis.nutritionTarget,
-    generatedAt,
-  });
+  return assertReadyPlanIntegrity(
+    await personalizeGeneratedPlan({
+      generatedPlanId,
+      weekStart,
+      weekEnd,
+      strategy,
+      conceptsByCandidateId: composed.result.conceptsByCandidateId,
+      recipesByCandidateId,
+      completeMeals,
+      nutritionByCandidateId,
+      componentNutritionByKey: demoNutrition.componentNutritionByKey,
+      nutritionTarget: apis.nutritionTarget,
+      generatedAt,
+    }),
+  );
 }
 
 function buildDiscoveryRequest(
@@ -628,7 +645,7 @@ async function buildRemotePlan(
     );
   }
 
-  return plan;
+  return assertReadyPlanIntegrity(plan);
 }
 
 async function resolveCompleteMealsForStrategy(input: {

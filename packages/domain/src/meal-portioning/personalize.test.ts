@@ -773,7 +773,7 @@ describe("discrete-staple-estimate-v1", () => {
     expect(Number.isInteger(tortilla!.amount)).toBe(true);
   });
 
-  it("skips recommended discrete companions that still cannot be estimated", () => {
+  it("fails when a selected independent companion cannot be quantified", () => {
     const meal: CompleteMeal = {
       mealId: "complete-skip-recommended",
       candidateId: "cand-skip-recommended",
@@ -824,6 +824,7 @@ describe("discrete-staple-estimate-v1", () => {
           quantityMode: "solver_determined",
           definitionKind: "atomic_food",
           normalizedComponentKey: "carbohydrate:mystery flatbread disk",
+          nutritionOwnership: "independent",
           definition: {
             kind: "atomic_food",
             name: "Mystery Flatbread Disk",
@@ -921,9 +922,8 @@ describe("discrete-staple-estimate-v1", () => {
         },
       },
     });
-    expect(coeffs.ok).toBe(true);
-    if (!coeffs.ok) return;
-    expect(coeffs.components.some((c) => /mystery/i.test(c.displayName))).toBe(false);
+    // Selected independent edible on the plate must be quantified — no soft skip.
+    expect(coeffs.ok).toBe(false);
   });
 
   it("recomputes meal nutrition when the user adjusts a discrete count", () => {

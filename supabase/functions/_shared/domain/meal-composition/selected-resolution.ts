@@ -162,16 +162,24 @@ function mergeRecipeCompanions(
     // Culinary needs / purpose prose are never edible CompleteMeal companions.
     if (mc.kind === "culinary_need") continue;
     if (!isEdibleFoodIdentity(mc.name) || isUnresolvedPlaceholderName(mc.name)) continue;
+
+    // Non-required recipe mealComponents are OPTIONS, not prescribed food.
+    // Only required/intrinsic companions auto-merge; architect additions cover selections.
+    const isRequired = mc.required === true || mc.relationship === "intrinsic";
+    if (!isRequired) {
+      continue;
+    }
+
     const role =
       mc.type === "carb_side"
-        ? "carbohydrate"
+        ? ("carbohydrate" as const)
         : mc.type === "vegetable_side"
-          ? "vegetable"
+          ? ("vegetable" as const)
           : mc.type === "sauce" || mc.type === "condiment"
-            ? "sauce_condiment"
+            ? ("sauce_condiment" as const)
             : mc.type === "garnish"
-              ? "garnish"
-              : "garnish";
+              ? ("garnish" as const)
+              : ("garnish" as const);
     const key = buildNormalizedComponentKey(role, mc.name);
     if (
       next.some(
@@ -180,12 +188,19 @@ function mergeRecipeCompanions(
     ) {
       continue;
     }
+    // Role already covered by an independent prescribed companion → unselected alternative.
+    if (
+      next.some(
+        (c) =>
+          c.role === role && (c.nutritionOwnership ?? "independent") === "independent",
+      )
+    ) {
+      continue;
+    }
     const relationship =
       mc.relationship === "intrinsic"
-        ? "intrinsic"
-        : mc.required
-          ? "required_companion"
-          : "recommended";
+        ? ("intrinsic" as const)
+        : ("required_companion" as const);
     next.push({
       componentId: mc.componentId,
       role,

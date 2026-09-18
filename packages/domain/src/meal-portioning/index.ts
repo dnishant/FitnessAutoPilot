@@ -15,3 +15,4 @@ export * from "./role-structural-estimates";
 export * from "./complete-meal-nutrition";
 export * from "./local-demo-nutrition";
 export * from "./executability";
+export * from "./canonical-meal-integrity";

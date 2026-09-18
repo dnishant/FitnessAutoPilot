@@ -11,6 +11,7 @@ import { isEdibleFoodIdentity } from "../meal-composition/edible-identity";
 import { isUnresolvedPlaceholderName } from "../meal-composition/placeholders";
 import { buildCoefficientsFromCompleteMeal } from "./coefficients";
 import { buildPortionVariables } from "./build-variables";
+import { assertCoefficientOwnersMatchIndependentEdibles } from "./canonical-meal-integrity";
 
 /**
  * Generic meal executability (pre-PLAN-010).
@@ -54,8 +55,11 @@ function isPendingMainRecipeId(mainRecipeId: string | undefined, candidateId: st
 
 function isRequiredIndependentOwner(component: CompleteMealComponent): boolean {
   if ((component.nutritionOwnership ?? "independent") === "parent_owned") return false;
-  // Recommended companions may be omitted when unresolvable (composition semantics).
-  if (component.relationship === "recommended") return false;
+  // Selected onto the prescribed CompleteMeal as independent edible ⇒ execution-required.
+  // Culinary relationship (recommended vs required_companion) does not waive nutrition.
+  if (isUnresolvedPlaceholderName(component.name) || !isEdibleFoodIdentity(component.name)) {
+    return false;
+  }
   return true;
 }
 
@@ -224,6 +228,22 @@ export function assessMealExecutability(input: {
         coefficients.error.message,
         coefficients.error.componentId,
       ),
+    };
+  }
+
+  const ownership = assertCoefficientOwnersMatchIndependentEdibles({
+    meal,
+    coefficients: coefficients.components,
+  });
+  if (!ownership.ok) {
+    return {
+      ok: false,
+      error: {
+        code: "INCOMPLETE_MEAL_NUTRITION",
+        message: ownership.error.message,
+        candidateId,
+        componentId: ownership.error.componentId,
+      },
     };
   }
 

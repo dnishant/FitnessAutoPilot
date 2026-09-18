@@ -610,7 +610,8 @@ export function buildCoefficientsFromCompleteMeal(input: {
       continue;
     }
     if (isUnresolvedPlaceholderName(component.name) || !isEdibleFoodIdentity(component.name)) {
-      // Recommended companions may be omitted; they must not sink the plate.
+      // Non-edible labels must never be independent owners. Recommended prose may be omitted;
+      // anything else fails the plate (selected food cannot be purpose text).
       if (component.relationship === "recommended") {
         continue;
       }
@@ -634,17 +635,8 @@ export function buildCoefficientsFromCompleteMeal(input: {
       input.componentNutritionByKey,
     );
     if (!built.ok) {
-      // Recommended sides must not sink an otherwise valid plate.
-      if (component.relationship === "recommended") {
-        continue;
-      }
-      // Required non-main sides without trusted nutrition: block — do not invent
-      // role-structural macros for unresolved placeholders or unknown foods.
-      if (component.role !== "main") {
-        // Discrete staples may still use versioned staple estimates inside coefficientForComponent.
-        // If that failed, skip recommended-like softness already handled; required → fail meal.
-        return built;
-      }
+      // Once an independent edible is on the prescribed CompleteMeal, relationship
+      // does not grant a free pass — selected means execution-required.
       return built;
     }
     components.push(...built.components);

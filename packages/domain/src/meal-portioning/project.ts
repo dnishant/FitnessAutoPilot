@@ -8,7 +8,6 @@ import type {
   MealConcept,
   ResolvedRecipe,
 } from "@fitness-autopilot/contracts";
-import { macrosForServings } from "../recipes/generated-nutrition";
 import { DEFAULT_COUNT_BOUNDS } from "./policy";
 import { isDiscreteUnitLabel, matchDiscreteStapleEstimate } from "./staple-estimates";
 
@@ -134,6 +133,7 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
       if (personalized?.personalizedPlan && personalized.status !== "blocked") {
         const plan = personalized.personalizedPlan;
         personalizedNutrition = plan.nutrition;
+        // Canonical consumer plate = PLAN-010 portions only (no concept leftovers).
         components = plan.portions.map((portion) => {
           const byNameMatch = baseComponents.find(
             (c) => c.displayName.toLowerCase() === portion.displayName.toLowerCase(),
@@ -153,21 +153,9 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
             minAmount: discrete ? DEFAULT_COUNT_BOUNDS.minCount : undefined,
             maxAmount: discrete ? DEFAULT_COUNT_BOUNDS.maxCount : undefined,
             quantityStep: discrete ? DEFAULT_COUNT_BOUNDS.quantityStep : undefined,
-            // Soft hint: discrete staples with a named estimate catalog entry may be estimates.
             usedStapleEstimate: staple != null ? true : undefined,
           };
         });
-        for (const base of baseComponents) {
-          if (
-            !components.some(
-              (c) =>
-                c.componentId === base.componentId ||
-                c.displayName.toLowerCase() === base.displayName.toLowerCase(),
-            )
-          ) {
-            components.push(base);
-          }
-        }
         const mainPortion =
           plan.portions.find((p) => p.role === "main") ?? plan.portions[0];
         personalServings =
@@ -176,6 +164,17 @@ export function projectPersonalizedPlanToConsumerMeals(input: {
           (mainPortion?.unit === "servings" || mainPortion?.unit === "serving"
             ? mainPortion.amount
             : undefined);
+      } else {
+        // Blocked / missing personalization: do not present concept sides as a
+        // personalized plate, and never invent personalizedNutrition here.
+        components = [
+          {
+            componentId: baseComponents[0]?.componentId ?? "main",
+            displayName: baseComponents[0]?.displayName ?? slot.name,
+            role: baseComponents[0]?.role ?? "main",
+          },
+        ];
+        personalizedNutrition = undefined;
       }
 
       meals.push({
@@ -230,47 +229,21 @@ export function attachPersonalizedWeeklyPlan(
     ...plan,
     generatedPlanId: personalizedWeeklyPlan.generatedPlanId,
     personalizedWeeklyPlan,
-    meals: fillMissingMealNutritionFromRecipes(meals, recipes),
+    // Consumer plate + totals come only from PLAN-010 projection — never LLM fill.
+    meals,
   };
 }
 
 /**
- * When the portion solver is blocked but the recipe already has llm_estimate macros,
- * surface those macros so the UI is not blank.
- * Default personalServings = 1.0 (one authored serving).
+ * @deprecated LLM recipe estimates must not become personalizedNutrition.
+ * Kept as a no-op identity for callers that previously hydrated macros; remove once
+ * all call sites stop importing it.
  */
 export function fillMissingMealNutritionFromRecipes(
   meals: readonly ConsumerMealSlot[],
-  recipesByCandidateId?: Record<string, ResolvedRecipe>,
+  _recipesByCandidateId?: Record<string, ResolvedRecipe>,
 ): ConsumerMealSlot[] {
-  if (!recipesByCandidateId) return [...meals];
-  return meals.map((meal) => {
-    if (meal.personalizedNutrition) return meal;
-    const recipe = recipesByCandidateId[meal.candidateId];
-    if (!recipe?.nutrition?.perServing || recipe.nutrition.source !== "llm_estimate") {
-      return meal;
-    }
-    const personalServings = meal.personalServings ?? 1;
-    const scaled = macrosForServings(recipe, personalServings);
-    const personalizedNutrition: PersonalizedMealNutrition = {
-      caloriesKcal: Math.round(scaled.caloriesKcal),
-      proteinGrams: Math.round(scaled.proteinGrams * 10) / 10,
-      carbsGrams: Math.round(scaled.carbohydrateGrams * 10) / 10,
-      fatGrams: Math.round(scaled.fatGrams * 10) / 10,
-    };
-    if (scaled.fiberGrams != null) {
-      personalizedNutrition.fiberGrams = Math.round(scaled.fiberGrams * 10) / 10;
-    }
-    return {
-      ...meal,
-      personalServings,
-      personalizedNutrition,
-      personalizationStatus: meal.personalizationStatus === "blocked" ? "best_feasible" : meal.personalizationStatus ?? "best_feasible",
-      personalizationMessage:
-        meal.personalizationMessage ??
-        "Macros from recipe.nutrition (llm_estimate); portion solver did not personalize this plate.",
-    };
-  });
+  return [...meals];
 }
 
 /**

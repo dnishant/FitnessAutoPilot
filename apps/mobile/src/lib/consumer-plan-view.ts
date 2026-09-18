@@ -172,7 +172,9 @@ export function humanizePlanGenerationError(message: string, code?: string): str
   if (
     code === "EXECUTABLE_REPLACEMENT_EXHAUSTED" ||
     code === "PLAN_NOT_EXECUTABLE" ||
-    lower.includes("not executable")
+    code === "CANONICAL_MEAL_INTEGRITY_FAILED" ||
+    lower.includes("not executable") ||
+    lower.includes("canonical meal integrity")
   ) {
     return "We couldn't build a complete executable meal plan from the available recipes. Your preferences are saved — try generating again.";
   }
@@ -192,6 +194,8 @@ function componentsFromConcept(concept: MealConcept | undefined, fallbackName: s
   ];
   for (const component of concept.components) {
     if (component.componentId === concept.main.componentId) continue;
+    // Parent-owned intrinsic structure belongs on Recipe Detail, not Your Meal.
+    if ((component.nutritionOwnership ?? "independent") === "parent_owned") continue;
     rows.push({
       componentId: component.componentId,
       displayName: component.name,

@@ -266,7 +266,7 @@ describe("generic meal executability gate", () => {
     expect(result.error.code).toBe("EDIBLE_IDENTITY_UNRESOLVED");
   });
 
-  it("Test G — recommended failure does not block meal when main is executable", () => {
+  it("Test G — recommended non-edible need is omitted; main remains executable", () => {
     const candidate = syntheticCandidate("cand-optional", "Comet Chicken Skillet");
     const { meal, componentNutritionByKey } = buildCompleteMealFromSpecs({
       mealId: "meal-optional",
@@ -306,6 +306,69 @@ describe("generic meal executability gate", () => {
       componentNutritionByKey,
     });
     expect(result.ok).toBe(true);
+  });
+
+  it("selected edible companion without nutrition makes meal non-executable", () => {
+    const candidate = syntheticCandidate("cand-selected-side", "Nova Paneer Scramble");
+    const { meal, componentNutritionByKey } = buildCompleteMealFromSpecs({
+      mealId: "meal-selected-side",
+      candidateId: candidate.candidateId,
+      name: candidate.name,
+      components: [
+        {
+          componentId: "main",
+          name: candidate.name,
+          role: "main",
+          nutrition: {
+            caloriesKcal: 255,
+            proteinGrams: 17,
+            carbohydrateGrams: 4.5,
+            fatGrams: 18.8,
+          },
+          referenceYieldGrams: 180,
+        },
+        {
+          componentId: "added-0-carbohydrate",
+          name: "Whole Wheat Roti",
+          role: "carbohydrate",
+          relationship: "recommended",
+          source: "composition_engine",
+          nutrition: {
+            caloriesKcal: 0,
+            proteinGrams: 0,
+            carbohydrateGrams: 0,
+            fatGrams: 0,
+          },
+        },
+      ],
+    });
+    meal.components = meal.components.map((c) =>
+      c.componentId === "added-0-carbohydrate"
+        ? {
+            ...c,
+            definition: undefined,
+            resolution: { status: "unresolved", note: "selected but unresolved" },
+            nutritionOwnership: "independent",
+          }
+        : c,
+    );
+    const keyed = { ...componentNutritionByKey };
+    delete keyed["carbohydrate:whole wheat roti"];
+
+    const result = assessMealExecutability({
+      candidateId: candidate.candidateId,
+      completeMeal: meal,
+      recipe: recipeFor(candidate),
+      componentNutritionByKey: keyed,
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect([
+      "AUTHORITATIVE_NUTRITION_UNRESOLVED",
+      "REQUIRED_COMPONENT_UNRESOLVED",
+      "INCOMPLETE_MEAL_NUTRITION",
+      "EDIBLE_IDENTITY_UNRESOLVED",
+    ]).toContain(result.error.code);
   });
 
   it("executable lemon-herb fixture passes the same gate", () => {
