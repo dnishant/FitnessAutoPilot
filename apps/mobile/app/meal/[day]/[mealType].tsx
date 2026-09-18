@@ -134,7 +134,7 @@ export default function MealDetailScreen() {
         </View>
       ) : null}
 
-      <SectionHeader title="Your plate" />
+      <SectionHeader title="Your meal" />
       {meal.personalServings != null ? (
         <Text style={styles.portionSummary}>
           Your portion · {Number(meal.personalServings.toFixed(2))} servings

@@ -88,13 +88,25 @@ export const RecipeInstructionSchema = z.object({
   text: z.string().trim().min(1).max(800),
 });
 
+export const MealComponentKindSchema = z.enum(["edible_component", "culinary_need"]);
+
 export const MealComponentSchema = z.object({
   componentId: z.string().trim().min(1).max(80),
+  /**
+   * Edible food label when kind=edible_component.
+   * For culinary_need, prefer a short role label; put the prose in `purpose`.
+   */
   name: z.string().trim().min(1).max(160),
   type: MealComponentTypeSchema,
   required: z.boolean(),
   purpose: z.string().trim().min(1).max(400),
   relationship: MealComponentRelationshipSchema,
+  /**
+   * Distinguishes actual food from abstract culinary recommendations.
+   * Missing on historical recipes — treated as edible_component only when
+   * `name` passes edible-identity checks.
+   */
+  kind: MealComponentKindSchema.optional(),
 });
 
 export const FlavorProfileSchema = z.object({
@@ -234,6 +246,7 @@ export type ResolvedRecipeSource = z.infer<typeof ResolvedRecipeSourceSchema>;
 export type ResolvedRecipeIngredient = z.infer<typeof ResolvedRecipeIngredientSchema>;
 export type RecipeInstruction = z.infer<typeof RecipeInstructionSchema>;
 export type MealComponent = z.infer<typeof MealComponentSchema>;
+export type MealComponentKind = z.infer<typeof MealComponentKindSchema>;
 export type FlavorProfile = z.infer<typeof FlavorProfileSchema>;
 export type RecipeExperience = z.infer<typeof RecipeExperienceSchema>;
 export type RecipePrepMode = z.infer<typeof RecipePrepModeSchema>;

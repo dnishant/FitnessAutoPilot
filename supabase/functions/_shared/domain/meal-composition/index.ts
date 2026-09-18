@@ -11,3 +11,7 @@ export * from "./candidate-role-detection.ts";
 export * from "./repertoire.ts";
 export * from "./component-recipe.ts";
 export * from "./selected-resolution.ts";
+export * from "./placeholders.ts";
+export * from "./edible-identity.ts";
+export * from "./nutrition-ownership.ts";
+export * from "./structure-validation.ts";

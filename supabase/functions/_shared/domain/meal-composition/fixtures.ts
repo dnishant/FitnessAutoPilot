@@ -203,6 +203,30 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
     if (missing.length === 0) {
       return {
         mealName: candidate.name,
+        mealUnderstanding: {
+          mealForm: "complete_composite",
+          isStandaloneMeal: true,
+          dishSummary: `${candidate.name} already contains a satisfying plate structure.`,
+          howItIsEaten: "Eaten as a complete composed dish.",
+          existingComponents: detected.existingComponents.map((c) => ({
+            name: c.name,
+            role: c.role,
+            relationship: c.relationship,
+            integration:
+              c.relationship === "intrinsic" || c.role === "main"
+                ? ("integrated_in_dish" as const)
+                : ("separately_eaten" as const),
+            purpose: c.reason,
+          })),
+          satisfiedNeeds: [
+            "protein_structure",
+            "carbohydrate_accompaniment",
+            "fresh_vegetable_accompaniment",
+          ],
+          missingNeeds: [],
+          additionsRecommended: false,
+          confidence: "high",
+        },
         alreadySatisfiedRoles: ["main", "carbohydrate", "vegetable", "sauce_condiment"],
         missingRoles: [],
         addedComponents: [],
@@ -219,19 +243,24 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
       .join(" ")
       .toLowerCase();
     const added: MealCompositionProposal["addedComponents"] = [];
+    const missingNeeds: MealCompositionProposal["mealUnderstanding"]["missingNeeds"] = [];
 
     if (missing.includes("carbohydrate")) {
-      const riceName = cuisine.includes("thai") || cuisine.includes("viet")
-        ? "jasmine rice"
-        : cuisine.includes("jamaican") || cuisine.includes("caribbean")
-          ? "rice and peas"
-          : "basmati rice";
+      missingNeeds.push("carbohydrate_accompaniment");
+      const riceName =
+        cuisine.includes("thai") || cuisine.includes("viet")
+          ? "jasmine rice"
+          : cuisine.includes("jamaican") || cuisine.includes("caribbean")
+            ? "rice and peas"
+            : "basmati rice";
       if (riceName === "rice and peas") {
         added.push({
           name: riceName,
           role: "carbohydrate",
           relationship: "required_companion",
           reason: "Traditional Caribbean starch accompaniment",
+          culinaryReason: "Dry mains need a separately eaten starch companion.",
+          satisfiesMissingNeed: "carbohydrate_accompaniment",
           definitionKind: "recipe_component",
         });
       } else {
@@ -240,6 +269,8 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
           role: "carbohydrate",
           relationship: "required_companion",
           reason: "Traditional starch accompaniment for this cuisine",
+          culinaryReason: "Bare main needs a separately eaten carbohydrate companion.",
+          satisfiesMissingNeed: "carbohydrate_accompaniment",
           definitionKind: "atomic_food",
           preparation: "steamed",
           measurementState: "cooked",
@@ -248,12 +279,15 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
     }
 
     if (missing.includes("vegetable")) {
+      missingNeeds.push("fresh_vegetable_accompaniment");
       if (cuisine.includes("kerala") || /beef fry/i.test(candidate.name)) {
         added.push({
           name: "cabbage thoran",
           role: "vegetable",
           relationship: "required_companion",
           reason: "Traditional Kerala coconut vegetable side",
+          culinaryReason: "Dry fry benefits from a separately eaten vegetable side.",
+          satisfiesMissingNeed: "fresh_vegetable_accompaniment",
           definitionKind: "recipe_component",
         });
       } else if (cuisine.includes("indian")) {
@@ -262,6 +296,8 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
           role: "vegetable",
           relationship: "required_companion",
           reason: "Fresh cucumber-onion-tomato salad traditionally served with Indian grills",
+          culinaryReason: "Grill plates are typically finished with a fresh salad companion.",
+          satisfiesMissingNeed: "fresh_vegetable_accompaniment",
           definitionKind: "recipe_component",
         });
       } else if (cuisine.includes("jamaican") || cuisine.includes("caribbean")) {
@@ -270,6 +306,8 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
           role: "vegetable",
           relationship: "recommended",
           reason: "Simple cabbage side that balances jerk heat",
+          culinaryReason: "Adds freshness and moisture contrast to a dry spice rub.",
+          satisfiesMissingNeed: "fresh_vegetable_accompaniment",
           definitionKind: "recipe_component",
         });
       } else {
@@ -278,12 +316,15 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
           role: "vegetable",
           relationship: "recommended",
           reason: "Fresh pickled vegetables complement the main",
+          culinaryReason: "Bare main benefits from a separately eaten vegetable accompaniment.",
+          satisfiesMissingNeed: "fresh_vegetable_accompaniment",
           definitionKind: "recipe_component",
         });
       }
     }
 
     if (missing.includes("sauce_condiment")) {
+      missingNeeds.push("moisture_sauce");
       if (cuisine.includes("indian")) {
         if (cuisine.includes("kerala") || /beef fry/i.test(candidate.name)) {
           added.push({
@@ -291,6 +332,8 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
             role: "sauce_condiment",
             relationship: "recommended",
             reason: "Cooling yogurt-cucumber accompaniment for Kerala dry fries",
+            culinaryReason: "Dry fry needs a separately eaten cooling condiment.",
+            satisfiesMissingNeed: "moisture_sauce",
             definitionKind: "recipe_component",
           });
         } else {
@@ -299,6 +342,8 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
             role: "sauce_condiment",
             relationship: "recommended",
             reason: "Cooling yogurt condiment traditionally served with tikka and dry fries",
+            culinaryReason: "Dry grilled protein needs a separately eaten moisture condiment.",
+            satisfiesMissingNeed: "moisture_sauce",
             definitionKind: "recipe_component",
           });
         }
@@ -307,6 +352,29 @@ export class MockMealCompositionProvider implements MealCompositionProvider {
 
     return {
       mealName: `${candidate.name}`,
+      mealUnderstanding: {
+        mealForm: added.length === 0 ? "complete_composite" : "main_only",
+        isStandaloneMeal: added.length === 0,
+        dishSummary: `${candidate.name} is a prepared main that may need companions.`,
+        howItIsEaten:
+          added.length === 0
+            ? "Eaten as a complete dish."
+            : "Main is plated with separately eaten companions.",
+        existingComponents: detected.existingComponents.map((c) => ({
+          name: c.name,
+          role: c.role,
+          relationship: c.relationship,
+          integration:
+            c.relationship === "intrinsic" || c.role === "main"
+              ? ("integrated_in_dish" as const)
+              : ("separately_eaten" as const),
+          purpose: c.reason,
+        })),
+        satisfiedNeeds: ["protein_structure"],
+        missingNeeds,
+        additionsRecommended: added.length > 0,
+        confidence: "high",
+      },
       alreadySatisfiedRoles: ["main"],
       missingRoles: missing,
       addedComponents: added,

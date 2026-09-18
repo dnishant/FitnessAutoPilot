@@ -13,6 +13,8 @@ import {
   mapPlan008TypeToRole,
   namesLikelyEquivalent,
 } from "./component-identity";
+import { isEdibleFoodIdentity } from "./edible-identity";
+import { isUnresolvedPlaceholderName } from "./placeholders";
 
 export type DetectedExistingComponent = {
   componentId: string;
@@ -59,9 +61,18 @@ function presenceFromMacros(input: {
   return { proteinPresence, carbohydratePresence, fiberPresence };
 }
 
+export type DetectedCulinaryNeed = {
+  needId: string;
+  role: MealComponentRole;
+  purpose: string;
+  required: boolean;
+  relationship: "required_companion" | "recommended" | "optional";
+};
+
 /**
  * Deterministic role detection for the existing plate (recipe + PLAN-008 components).
  * Uses meaningful-quantity heuristics and trusted PLAN-009 nutrition when available.
+ * Abstract culinary_need mealComponents become needs — never edible existingComponents.
  */
 export function detectExistingMealRoles(
   recipe: ResolvedRecipe,
@@ -70,6 +81,7 @@ export function detectExistingMealRoles(
   profile: MealCompositionProfile;
   nutritionSignals: CompositionNutritionSignals;
   existingComponents: DetectedExistingComponent[];
+  culinaryNeeds: DetectedCulinaryNeed[];
 } {
   const roleFlags: Record<
     keyof Omit<MealCompositionProfile, "addedComponentRoles">,
@@ -83,6 +95,7 @@ export function detectExistingMealRoles(
   };
 
   const existingComponents: DetectedExistingComponent[] = [];
+  const culinaryNeeds: DetectedCulinaryNeed[] = [];
   const seenKeys = new Set<string>();
 
   // Main dish always present.
@@ -104,9 +117,30 @@ export function detectExistingMealRoles(
   for (const mc of recipe.mealComponents) {
     const role = mapPlan008TypeToRole(mc.type);
     if (role === "main") {
-      // Already represented by main recipe entry.
       continue;
     }
+
+    const isNeed =
+      mc.kind === "culinary_need" ||
+      !isEdibleFoodIdentity(mc.name) ||
+      isUnresolvedPlaceholderName(mc.name);
+
+    if (isNeed) {
+      culinaryNeeds.push({
+        needId: mc.componentId,
+        role,
+        purpose: mc.purpose || mc.name,
+        required: mc.required === true,
+        relationship:
+          mc.relationship === "optional"
+            ? "optional"
+            : mc.required || mc.relationship === "intrinsic"
+              ? "required_companion"
+              : "recommended",
+      });
+      continue;
+    }
+
     const key = buildNormalizedComponentKey(role, mc.name);
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
@@ -269,6 +303,7 @@ export function detectExistingMealRoles(
     },
     nutritionSignals,
     existingComponents,
+    culinaryNeeds,
   };
 }
 

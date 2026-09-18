@@ -7,6 +7,7 @@ import type {
   MealCompositionRequest,
   MealConcept,
   MealConceptComponent,
+  MealUnderstanding,
   RankedCulinaryCandidate,
   ResolvedRecipe,
   WeeklyMealConceptResult,
@@ -25,19 +26,15 @@ import {
   detectRolesForCompositionRequest,
 } from "./candidate-role-detection.ts";
 import { buildNormalizedComponentKey, namesLikelyEquivalent } from "./component-identity.ts";
+import { applyOwnershipToConceptComponents } from "./nutrition-ownership.ts";
 import { subjectCandidateFromRequest } from "./prompt.ts";
 import type { MealCompositionProvider } from "./provider.ts";
 import { summarizeMealConceptRepertoire } from "./repertoire.ts";
-
-/** Cap neighbor names passed into composition prompts to avoid O(n²) token growth. */
-export const MAX_COMPOSITION_NEIGHBOR_MEAL_NAMES = 5;
-
-function neighborMealNames(allNames: readonly string[], currentName: string): string[] {
-  return allNames
-    .filter((name) => name !== currentName)
-    .slice(0, MAX_COMPOSITION_NEIGHBOR_MEAL_NAMES);
-}
 import { missingRolesFromProfile } from "./role-detection.ts";
+import {
+  filterPlaceholdersFromComponents,
+  validateMealArchitectProposalStructure,
+} from "./structure-validation.ts";
 import {
   mealCompositionError,
   validateMealCompositionProposal,
@@ -50,16 +47,61 @@ export {
   MEAL_COMPOSITION_PROMPT_VERSION,
 };
 
-function likelyCompleteFromProfile(
+/** Cap neighbor names passed into composition prompts to avoid O(n²) token growth. */
+export const MAX_COMPOSITION_NEIGHBOR_MEAL_NAMES = 5;
+
+function neighborMealNames(allNames: readonly string[], currentName: string): string[] {
+  return allNames
+    .filter((name) => name !== currentName)
+    .slice(0, MAX_COMPOSITION_NEIGHBOR_MEAL_NAMES);
+}
+
+/**
+ * Short-circuit only when a real PLAN-008 recipe proves culinary completeness.
+ * Candidate-name heuristics must NEVER invent completeness (that caused bowl placeholders).
+ */
+function likelyCompleteFromRecipeProfile(
+  hasRecipe: boolean,
   profile: MealConcept["compositionProfile"],
   missing: string[],
 ): boolean {
+  if (!hasRecipe) return false;
   return (
     missing.length === 0 &&
     profile.hasPrimaryProtein &&
     profile.hasMeaningfulCarbohydrate &&
     profile.hasMeaningfulVegetableOrFruit
   );
+}
+
+function standaloneUnderstanding(input: {
+  candidateName: string;
+  existing: MealConceptComponent[];
+}): MealUnderstanding {
+  return {
+    mealForm: "complete_composite",
+    isStandaloneMeal: true,
+    dishSummary: `${input.candidateName} already forms a satisfying plate from its recipe structure.`,
+    howItIsEaten: "Eaten as a single composed dish without mandatory extra sides.",
+    existingComponents: input.existing.map((c) => ({
+      name: c.name,
+      role: c.role,
+      relationship: c.relationship,
+      integration:
+        c.relationship === "intrinsic" || c.role === "main"
+          ? ("integrated_in_dish" as const)
+          : ("separately_eaten" as const),
+      purpose: c.reason,
+    })),
+    satisfiedNeeds: [
+      "protein_structure",
+      "carbohydrate_accompaniment",
+      "fresh_vegetable_accompaniment",
+    ],
+    missingNeeds: [],
+    additionsRecommended: false,
+    confidence: "high",
+  };
 }
 
 function mergeProposalIntoConcept(input: {
@@ -77,9 +119,10 @@ function mergeProposalIntoConcept(input: {
   createdAt: string;
   existingRoles: MealConcept["compositionProfile"];
 }): MealConcept {
-  const companions = [...input.existing.filter((c) => c.role !== "main")];
+  const existing = filterPlaceholdersFromComponents(input.existing);
+  const companions = [...existing.filter((c) => c.role !== "main")];
   const main =
-    input.existing.find((c) => c.role === "main") ??
+    existing.find((c) => c.role === "main") ??
     ({
       componentId: "main",
       role: "main" as const,
@@ -89,26 +132,40 @@ function mergeProposalIntoConcept(input: {
       reason: "Ranked main-dish candidate",
       definitionKind: "recipe_component" as const,
       normalizedComponentKey: `main:${input.candidate.name.toLowerCase()}`,
+      nutritionOwnership: "independent" as const,
     } satisfies MealConceptComponent);
 
   const addedRoles: MealConcept["compositionProfile"]["addedComponentRoles"] = [];
   let idx = 0;
-  for (const added of input.proposal.addedComponents) {
-    if (companions.some((c) => c.role === added.role && namesLikelyEquivalent(c.name, added.name))) {
-      continue;
+  const understanding = input.proposal.mealUnderstanding;
+  const skipAdditions =
+    understanding.additionsRecommended === false ||
+    understanding.isStandaloneMeal ||
+    input.proposal.noAdditionsNeeded === true;
+
+  if (!skipAdditions) {
+    for (const added of input.proposal.addedComponents) {
+      if (
+        companions.some(
+          (c) => c.role === added.role && namesLikelyEquivalent(c.name, added.name),
+        )
+      ) {
+        continue;
+      }
+      addedRoles.push(added.role);
+      companions.push({
+        componentId: `added-${idx}-${added.role}`,
+        role: added.role,
+        name: added.name,
+        relationship: added.relationship,
+        source: "composition_engine",
+        reason: added.culinaryReason ?? added.reason,
+        definitionKind: added.definitionKind,
+        normalizedComponentKey: buildNormalizedComponentKey(added.role, added.name),
+        nutritionOwnership: "independent",
+      });
+      idx += 1;
     }
-    addedRoles.push(added.role);
-    companions.push({
-      componentId: `added-${idx}-${added.role}`,
-      role: added.role,
-      name: added.name,
-      relationship: added.relationship,
-      source: "composition_engine",
-      reason: added.reason,
-      definitionKind: added.definitionKind,
-      normalizedComponentKey: buildNormalizedComponentKey(added.role, added.name),
-    });
-    idx += 1;
   }
 
   const profile = {
@@ -129,14 +186,15 @@ function mergeProposalIntoConcept(input: {
     if (role === "sauce_condiment") profile.hasSauceOrMoistureComponent = true;
   }
 
-  return {
+  const concept: MealConcept = {
     candidateId: input.candidate.candidateId,
     name: input.proposal.mealName || input.candidate.name,
     mealType: input.mealType,
-    main,
+    main: { ...main, nutritionOwnership: "independent" },
     components: companions,
     compositionProfile: profile,
     compositionSummary: input.proposal.compositionSummary,
+    mealUnderstanding: understanding,
     metadata: {
       provider: input.providerMeta.provider,
       model: input.providerMeta.model,
@@ -148,6 +206,8 @@ function mergeProposalIntoConcept(input: {
       providerCalled: input.providerMeta.providerCalled,
     },
   };
+
+  return applyOwnershipToConceptComponents(concept);
 }
 
 export type ComposeMealConceptOptions = {
@@ -161,6 +221,54 @@ export type ComposeMealConceptOptions = {
   otherSelectedMealNames?: string[];
   now?: () => Date;
 };
+
+async function validateAndMaybeRetry(
+  proposal: MealCompositionProposal,
+  enrichedRequest: MealCompositionRequest,
+  existing: MealConceptComponent[],
+  provider: MealCompositionProvider,
+  alreadyRetried: boolean,
+): Promise<Result<MealCompositionProposal, MealCompositionError>> {
+  const schemaValidated = validateMealCompositionProposal(proposal, enrichedRequest);
+  if (!schemaValidated.ok) return schemaValidated;
+
+  const structure = validateMealArchitectProposalStructure(
+    schemaValidated.value,
+    enrichedRequest,
+    existing,
+  );
+  if (structure.ok) return structure;
+
+  if (!alreadyRetried && structure.error.code !== "HARD_CONSTRAINT_CONFLICT") {
+    try {
+      const retryRequest: MealCompositionRequest = {
+        ...enrichedRequest,
+        compositionContext: {
+          ...enrichedRequest.compositionContext!,
+          // Feedback via otherSelectedMealNames channel is awkward; embed in cooking hint.
+          existingRoles: enrichedRequest.compositionContext!.existingRoles,
+        },
+        cookingStyleHint: [
+          enrichedRequest.cookingStyleHint ?? "",
+          `VALIDATION_FEEDBACK: ${structure.error.message}. Re-understand the dish; prefer zero additions; never emit placeholders or semantic duplicates.`,
+        ]
+          .filter(Boolean)
+          .join(" "),
+      };
+      const retried = await provider.compose(retryRequest);
+      return validateAndMaybeRetry(retried, enrichedRequest, existing, provider, true);
+    } catch (error) {
+      return err(
+        mealCompositionError(
+          "COMPOSITION_PROVIDER_ERROR",
+          error instanceof Error ? error.message : "Meal composition retry failed.",
+        ),
+      );
+    }
+  }
+
+  return structure;
+}
 
 export async function composeMealConcept(
   request: MealCompositionRequest,
@@ -191,17 +299,35 @@ export async function composeMealConcept(
     const missing = missingRolesFromProfile(
       detected.profile,
       detected.profile.hasMeaningfulFiberSource
-        ? { proteinPresence: "meaningful", carbohydratePresence: detected.profile.hasMeaningfulCarbohydrate ? "meaningful" : "low", fiberPresence: "meaningful" }
-        : { proteinPresence: "meaningful", carbohydratePresence: detected.profile.hasMeaningfulCarbohydrate ? "meaningful" : "low", fiberPresence: "low" },
+        ? {
+            proteinPresence: "meaningful",
+            carbohydratePresence: detected.profile.hasMeaningfulCarbohydrate
+              ? "meaningful"
+              : "low",
+            fiberPresence: "meaningful",
+          }
+        : {
+            proteinPresence: "meaningful",
+            carbohydratePresence: detected.profile.hasMeaningfulCarbohydrate
+              ? "meaningful"
+              : "low",
+            fiberPresence: "low",
+          },
     );
-    if (likelyCompleteFromProfile(detected.profile, missing)) {
+    if (likelyCompleteFromRecipeProfile(Boolean(request.recipe), detected.profile, missing)) {
       proposal = {
         mealName: candidate.name,
+        mealUnderstanding: standaloneUnderstanding({
+          candidateName: candidate.name,
+          existing: detected.existingComponents,
+        }),
         alreadySatisfiedRoles: [
           "main",
           ...(detected.profile.hasMeaningfulCarbohydrate ? (["carbohydrate"] as const) : []),
           ...(detected.profile.hasMeaningfulVegetableOrFruit ? (["vegetable"] as const) : []),
-          ...(detected.profile.hasSauceOrMoistureComponent ? (["sauce_condiment"] as const) : []),
+          ...(detected.profile.hasSauceOrMoistureComponent
+            ? (["sauce_condiment"] as const)
+            : []),
         ],
         missingRoles: [],
         addedComponents: [],
@@ -222,7 +348,13 @@ export async function composeMealConcept(
     );
   }
 
-  const validated = validateMealCompositionProposal(proposal, enrichedRequest);
+  const validated = await validateAndMaybeRetry(
+    proposal,
+    enrichedRequest,
+    detected.existingComponents,
+    options.provider,
+    false,
+  );
   if (!validated.ok) {
     return err({
       ...validated.error,

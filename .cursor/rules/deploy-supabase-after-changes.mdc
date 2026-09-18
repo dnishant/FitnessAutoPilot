@@ -1,0 +1,16 @@
+---
+description: Deploy Supabase Edge Functions after code changes so Vercel previews can test against live backend
+alwaysApply: true
+---
+
+# Deploy Supabase after changes
+
+When finishing work that affects Edge Functions, shared domain/contracts/llm used by Edge, or anything the hosted Generate My Plan path calls:
+
+1. Run `pnpm sync:edge` if `packages/domain`, `packages/contracts`, `packages/validation`, or `packages/llm` changed.
+2. Deploy the affected Supabase functions (prefer full `npx supabase functions deploy` when unsure which functions bundle `_shared`).
+3. Do this in the same turn as the code change — do not wait for the user to ask — so Vercel preview builds can hit the updated backend immediately.
+
+Skip only when the change is purely mobile UI / docs / tests with no Edge or `_shared` impact.
+
+Migrations: if SQL migrations were added, also apply them to the linked remote project (`npx supabase db push` or the repo’s documented migration path) before telling the user the change is ready to test.

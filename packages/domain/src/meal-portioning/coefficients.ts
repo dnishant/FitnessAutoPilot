@@ -7,6 +7,8 @@ import type {
   RecipeNutritionResult,
   ResolvedRecipe,
 } from "@fitness-autopilot/contracts";
+import { isUnresolvedPlaceholderName } from "../meal-composition/placeholders";
+import { isEdibleFoodIdentity } from "../meal-composition/edible-identity";
 import { matchDiscreteStapleEstimate } from "./staple-estimates";
 import {
   roleStructuralEstimateForComponent,
@@ -137,6 +139,25 @@ function coefficientForComponent(
     { nutrition: IngredientNutrition; referenceYieldGrams?: number; baseServings?: number }
   >,
 ): CoefficientBuildResult {
+  // Parent-owned intrinsic structure is informational only — never a second owner.
+  if ((component.nutritionOwnership ?? "independent") === "parent_owned") {
+    return { ok: true, components: [] };
+  }
+
+  if (
+    isUnresolvedPlaceholderName(component.name) ||
+    !isEdibleFoodIdentity(component.name)
+  ) {
+    return {
+      ok: false,
+      error: {
+        code: "unquantifiable_component",
+        message: `Non-edible label "${component.name}" cannot enter PLAN-010 portioning.`,
+        componentId: component.componentId,
+      },
+    };
+  }
+
   if (component.role === "garnish") {
     const fixedNutrition =
       component.resolution?.ingredientNutrition ??
@@ -456,12 +477,7 @@ function coefficientForComponent(
     }
   }
 
-  // Last resort for required non-main sides: role-structural-estimate-v1 (never for main
-  // or recommended — recommended failures are skipped by the meal builder).
-  if (component.role !== "main" && component.relationship !== "recommended") {
-    return roleStructuralCoefficient(component);
-  }
-
+  // Do not invent role-structural macros for unresolved / unknown foods.
   return {
     ok: false,
     error: {
@@ -473,6 +489,7 @@ function coefficientForComponent(
 }
 
 function roleStructuralCoefficient(component: CompleteMealComponent): CoefficientBuildResult {
+  // Retained for tests / explicit callers — not used as a silent production fallback.
   if (isDiscreteComponent(component)) {
     const staple = matchDiscreteStapleEstimate(component.name);
     if (staple) {
@@ -507,7 +524,6 @@ function roleStructuralCoefficient(component: CompleteMealComponent): Coefficien
   });
 
   if (isDiscreteComponent(component)) {
-    // Unknown discrete name: treat one unit ≈ role default yield / typical piece mass.
     const perUnit = roleStructuralEstimateForComponent({
       role: component.role,
       referenceYieldGrams: Math.min(estimate.referenceYieldGrams, 40),
@@ -590,6 +606,24 @@ export function buildCoefficientsFromCompleteMeal(input: {
 }): CoefficientBuildResult {
   const components: ComponentNutritionCoefficient[] = [];
   for (const component of input.meal.components) {
+    if ((component.nutritionOwnership ?? "independent") === "parent_owned") {
+      continue;
+    }
+    if (isUnresolvedPlaceholderName(component.name) || !isEdibleFoodIdentity(component.name)) {
+      // Non-edible labels must never be independent owners. Recommended prose may be omitted;
+      // anything else fails the plate (selected food cannot be purpose text).
+      if (component.relationship === "recommended") {
+        continue;
+      }
+      return {
+        ok: false,
+        error: {
+          code: "unquantifiable_component",
+          message: `Non-edible label "${component.name}" blocked before portioning.`,
+          componentId: component.componentId,
+        },
+      };
+    }
     if (component.relationship === "recommended" && component.role === "garnish") {
       // Soft garnish may be omitted when unquantifiable — try fixed path first.
     }
@@ -601,19 +635,8 @@ export function buildCoefficientsFromCompleteMeal(input: {
       input.componentNutritionByKey,
     );
     if (!built.ok) {
-      // Recommended sides must not sink an otherwise valid plate.
-      if (component.relationship === "recommended") {
-        continue;
-      }
-      // Required non-main sides: last-resort role estimate instead of blocking the meal.
-      if (component.role !== "main") {
-        const roleBuilt = roleStructuralCoefficient(component);
-        if (roleBuilt.ok) {
-          components.push(...roleBuilt.components);
-          continue;
-        }
-        continue;
-      }
+      // Once an independent edible is on the prescribed CompleteMeal, relationship
+      // does not grant a free pass — selected means execution-required.
       return built;
     }
     components.push(...built.components);

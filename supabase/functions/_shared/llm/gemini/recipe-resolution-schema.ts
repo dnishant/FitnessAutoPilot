@@ -75,6 +75,7 @@ export const GeminiResolvedRecipePayloadSchema = z.object({
         required: z.boolean(),
         purpose: z.string().min(1).max(400),
         relationship: MealComponentRelationshipSchema,
+        kind: z.enum(["edible_component", "culinary_need"]).optional(),
       }),
     )
     .min(1),

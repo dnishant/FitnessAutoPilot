@@ -20,17 +20,23 @@ import type {
 import {
   MockComponentRecipeProvider,
   MockMealCompositionProvider,
+  MAX_EXECUTABLE_REPLACEMENT_ROUNDS,
+  assessWeeklyPlanExecutability,
+  assertWeeklyConsumerPlanIntegrity,
   attachPersonalizedWeeklyPlan,
   buildComponentNutritionByKeyFromCompleteMeals,
   buildLocalDemoNutritionMaps,
   buildNutritionMapsFromGeneratedRecipes,
   composeMealConcepts,
+  isStructuralPortionBlockReason,
   personalizeWeeklyNutritionPlan,
   plan008SimpleCandidateLookup,
   plan008SimpleRankedPools,
   plan008SimpleWeeklyStrategy,
   makeResolvedRecipeFixture,
   plan009SimpleResolvedRecipes,
+  recordExecutabilityFailures,
+  replaceFailedCandidatesInStrategy,
   resolveSelectedCompleteMeals,
 } from "@fitness-autopilot/domain";
 import {
@@ -209,6 +215,20 @@ async function personalizeGeneratedPlan(input: {
   );
 }
 
+function assertReadyPlanIntegrity(plan: ConsumerWeeklyPlan): ConsumerWeeklyPlan {
+  const integrity = assertWeeklyConsumerPlanIntegrity(plan.meals ?? []);
+  if (!integrity.ok) {
+    throw Object.assign(
+      new Error(
+        `Refusing to activate weekly plan with canonical meal integrity failures: ` +
+          integrity.failures.map((f) => f.code).join(", "),
+      ),
+      { code: "CANONICAL_MEAL_INTEGRITY_FAILED" },
+    );
+  }
+  return plan;
+}
+
 /** True when at least one selected recipe carries llm_estimate macros. */
 export function recipesHaveGeneratedNutrition(
   recipesByCandidateId: Record<string, ResolvedRecipe>,
@@ -281,19 +301,21 @@ async function buildLocalDemoPlan(
     nutritionByCandidateId = demoNutrition.nutritionByCandidateId;
   }
 
-  return personalizeGeneratedPlan({
-    generatedPlanId,
-    weekStart,
-    weekEnd,
-    strategy,
-    conceptsByCandidateId: composed.result.conceptsByCandidateId,
-    recipesByCandidateId,
-    completeMeals,
-    nutritionByCandidateId,
-    componentNutritionByKey: demoNutrition.componentNutritionByKey,
-    nutritionTarget: apis.nutritionTarget,
-    generatedAt,
-  });
+  return assertReadyPlanIntegrity(
+    await personalizeGeneratedPlan({
+      generatedPlanId,
+      weekStart,
+      weekEnd,
+      strategy,
+      conceptsByCandidateId: composed.result.conceptsByCandidateId,
+      recipesByCandidateId,
+      completeMeals,
+      nutritionByCandidateId,
+      componentNutritionByKey: demoNutrition.componentNutritionByKey,
+      nutritionTarget: apis.nutritionTarget,
+      generatedAt,
+    }),
+  );
 }
 
 function buildDiscoveryRequest(
@@ -428,41 +450,218 @@ async function buildRemotePlan(
   for (const ranked of uniqueRanked) {
     candidateLookup.set(ranked.candidate.candidateId, ranked.candidate);
   }
-  const selectedCandidates = strategyResult.strategy.uniqueCandidateIds
-    .map((id) => candidateLookup.get(id))
-    .filter((c): c is CulinaryDiscoveryCandidate => c != null);
-  const resolved = await apis.resolveWeeklyRecipes({
-    candidates: selectedCandidates,
-    uniqueCandidateIds: strategyResult.strategy.uniqueCandidateIds,
-  });
-  const recipesByCandidateId = resolved.ok
-    ? resolved.result.recipesByCandidateId
-    : (resolved.result?.recipesByCandidateId ?? {});
 
-  if (
-    Object.keys(recipesByCandidateId).length > 0 &&
-    !recipesHaveGeneratedNutrition(
+  let strategy = strategyResult.strategy;
+  let recipesByCandidateId: Record<string, ResolvedRecipe> = {};
+  let completeMeals: Record<string, CompleteMeal> = {};
+  let nutritionByCandidateId: Record<
+    string,
+    import("@fitness-autopilot/contracts").RecipeNutritionResult
+  > = {};
+  let componentNutritionByKey: Record<
+    string,
+    {
+      nutrition: import("@fitness-autopilot/contracts").IngredientNutrition;
+      referenceYieldGrams?: number;
+      baseServings?: number;
+    }
+  > = {};
+
+  const failedCandidateIds = new Set<string>();
+  let lastFailures: ReturnType<typeof assessWeeklyPlanExecutability>["failures"] = [];
+
+  for (let round = 0; round <= MAX_EXECUTABLE_REPLACEMENT_ROUNDS; round += 1) {
+    const missingIds = strategy.uniqueCandidateIds.filter((id) => !recipesByCandidateId[id]);
+    if (missingIds.length > 0) {
+      const toResolve = missingIds
+        .map((id) => candidateLookup.get(id))
+        .filter((c): c is CulinaryDiscoveryCandidate => c != null);
+      const resolved = await apis.resolveWeeklyRecipes({
+        candidates: toResolve,
+        uniqueCandidateIds: missingIds,
+      });
+      const partial = resolved.ok
+        ? resolved.result.recipesByCandidateId
+        : (resolved.result?.recipesByCandidateId ?? {});
+      recipesByCandidateId = { ...recipesByCandidateId, ...partial };
+    }
+
+    if (
+      Object.keys(recipesByCandidateId).length > 0 &&
+      !recipesHaveGeneratedNutrition(recipesByCandidateId, strategy.uniqueCandidateIds)
+    ) {
+      // Mark selected IDs without llm_estimate as failed for replacement rather than
+      // publishing a ready plan with unknown nutrition.
+      for (const id of strategy.uniqueCandidateIds) {
+        const nutrition = recipesByCandidateId[id]?.nutrition;
+        if (!(nutrition?.source === "llm_estimate" && nutrition.perServing != null)) {
+          failedCandidateIds.add(id);
+        }
+      }
+    }
+
+    completeMeals = await resolveCompleteMealsForStrategy({
+      apis,
+      conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+      selectedCandidateIds: strategy.uniqueCandidateIds,
       recipesByCandidateId,
-      strategyResult.strategy.uniqueCandidateIds,
-    )
-  ) {
+      targetCalories: apis.nutritionTarget?.targetCalories,
+    });
+
+    nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
+    if (apis.resolveRecipeNutrition && Object.keys(recipesByCandidateId).length > 0) {
+      try {
+        const nutrition = await apis.resolveRecipeNutrition({
+          recipes: Object.values(recipesByCandidateId),
+          uniqueCandidateIds: strategy.uniqueCandidateIds,
+        });
+        const usdaMap =
+          nutrition.ok || nutrition.result?.recipesByCandidateId
+            ? nutrition.result?.recipesByCandidateId ??
+              (nutrition.ok ? nutrition.result.recipesByCandidateId : undefined)
+            : undefined;
+        if (usdaMap) {
+          for (const [candidateId, result] of Object.entries(usdaMap)) {
+            if (!nutritionByCandidateId[candidateId]) {
+              nutritionByCandidateId[candidateId] = result;
+            }
+          }
+        }
+      } catch {
+        // USDA is non-blocking verification only.
+      }
+    }
+
+    const fromMeals = buildComponentNutritionByKeyFromCompleteMeals(completeMeals);
+    componentNutritionByKey = {};
+    for (const [key, entry] of Object.entries(fromMeals)) {
+      componentNutritionByKey[key] = {
+        nutrition: entry.nutrition,
+        referenceYieldGrams: entry.referenceYieldGrams,
+        baseServings: entry.baseServings,
+      };
+    }
+
+    const assessment = assessWeeklyPlanExecutability({
+      uniqueCandidateIds: strategy.uniqueCandidateIds,
+      completeMealsByCandidateId: completeMeals,
+      recipesByCandidateId,
+      nutritionByCandidateId,
+      componentNutritionByKey,
+    });
+    lastFailures = assessment.failures;
+
+    if (assessment.failures.length === 0) {
+      break;
+    }
+
+    const nextFailed = recordExecutabilityFailures(failedCandidateIds, assessment.failures);
+    for (const id of nextFailed) failedCandidateIds.add(id);
+
+    if (round === MAX_EXECUTABLE_REPLACEMENT_ROUNDS) {
+      throw Object.assign(
+        new Error(
+          `Weekly plan is not executable after ${MAX_EXECUTABLE_REPLACEMENT_ROUNDS} replacement rounds. ` +
+            assessment.failures.map((f) => `${f.candidateId}:${f.code}`).join("; "),
+        ),
+        { code: "EXECUTABLE_REPLACEMENT_EXHAUSTED" },
+      );
+    }
+
+    const replacement = replaceFailedCandidatesInStrategy({
+      strategy,
+      failures: assessment.failures,
+      lunchPool: lunchRanked.result.selected,
+      dinnerPool: dinnerRanked.result.selected,
+      failedCandidateIds,
+      conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+    });
+
+    if (!replacement.ok || replacement.replacements.length === 0) {
+      throw Object.assign(
+        new Error(
+          replacement.ok === false
+            ? replacement.message
+            : "No ranked replacements available for non-executable selected candidates.",
+        ),
+        { code: "EXECUTABLE_REPLACEMENT_EXHAUSTED" },
+      );
+    }
+
+    strategy = replacement.strategy;
+    for (const id of replacement.failedCandidateIds) failedCandidateIds.add(id);
+    onProgress?.("finalizing_recipes");
+  }
+
+  if (lastFailures.length > 0) {
     throw Object.assign(
       new Error(
-        "Resolved recipes are missing llm_estimate nutrition, so meal macros cannot be shown. " +
-          "Deploy the updated resolve-recipes Edge Function (recipe-resolution-v2), then regenerate your plan.",
+        `Non-executable candidates remain: ${lastFailures.map((f) => f.candidateId).join(", ")}`,
       ),
-      { code: "MISSING_RECIPE_NUTRITION" },
+      { code: "EXECUTABLE_REPLACEMENT_EXHAUSTED" },
     );
   }
 
-  // Selected-only complete meal resolution (discarded candidates are not resolved).
+  onProgress?.("personalizing_portions");
+  if (Object.keys(nutritionByCandidateId).length === 0) {
+    console.warn(
+      "[consumer-plan-generate] No recipe.nutrition (llm_estimate) on resolved recipes; " +
+        "skipping structural chicken fallback. Meals without trusted nutrition will be blocked.",
+    );
+  }
+
+  const plan = await personalizeGeneratedPlan({
+    generatedPlanId,
+    weekStart,
+    weekEnd,
+    strategy,
+    conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+    recipesByCandidateId,
+    completeMeals,
+    nutritionByCandidateId,
+    componentNutritionByKey,
+    nutritionTarget: apis.nutritionTarget,
+    generatedAt,
+  });
+
+  // Defense in depth: never publish a ready plan with unresolved mains / structural blocks.
+  const personalizedInstances =
+    plan.personalizedWeeklyPlan?.days.flatMap((d) => d.meals) ?? [];
+  const structuralBlocked = personalizedInstances.filter(
+    (m) => m.status === "blocked" && isStructuralPortionBlockReason(m.blockReason),
+  );
+  const missingRecipes = strategy.uniqueCandidateIds.filter((id) => !recipesByCandidateId[id]);
+
+  if (structuralBlocked.length > 0 || missingRecipes.length > 0) {
+    throw Object.assign(
+      new Error(
+        `Refusing to activate weekly plan with ${structuralBlocked.length} structurally blocked meal(s)` +
+          (missingRecipes.length > 0
+            ? ` and ${missingRecipes.length} unresolved recipe(s)`
+            : "") +
+          ".",
+      ),
+      { code: "PLAN_NOT_EXECUTABLE" },
+    );
+  }
+
+  return assertReadyPlanIntegrity(plan);
+}
+
+async function resolveCompleteMealsForStrategy(input: {
+  apis: PlanGenerationApis;
+  conceptsByCandidateId: Record<string, MealConcept>;
+  selectedCandidateIds: string[];
+  recipesByCandidateId: Record<string, ResolvedRecipe>;
+  targetCalories?: number;
+}): Promise<Record<string, CompleteMeal>> {
   let completeMeals: Record<string, CompleteMeal> = {};
-  if (apis.resolveSelectedCompleteMeals) {
-    const selected = await apis.resolveSelectedCompleteMeals({
-      mealConcepts: Object.values(composed.concepts.conceptsByCandidateId),
-      selectedCandidateIds: strategyResult.strategy.uniqueCandidateIds,
-      recipes: Object.values(recipesByCandidateId),
-      targetCalories: apis.nutritionTarget?.targetCalories,
+  if (input.apis.resolveSelectedCompleteMeals) {
+    const selected = await input.apis.resolveSelectedCompleteMeals({
+      mealConcepts: Object.values(input.conceptsByCandidateId),
+      selectedCandidateIds: input.selectedCandidateIds,
+      recipes: Object.values(input.recipesByCandidateId),
+      targetCalories: input.targetCalories,
     });
     if (selected.ok) {
       completeMeals = completeMealsByCandidateId(selected.result);
@@ -472,81 +671,28 @@ async function buildRemotePlan(
   }
   if (Object.keys(completeMeals).length === 0) {
     const local = await resolveCompleteMealsLocally({
-      conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
-      selectedCandidateIds: strategyResult.strategy.uniqueCandidateIds,
-      recipesByCandidateId,
-      targetCalories: apis.nutritionTarget?.targetCalories,
+      conceptsByCandidateId: input.conceptsByCandidateId,
+      selectedCandidateIds: input.selectedCandidateIds,
+      recipesByCandidateId: input.recipesByCandidateId,
+      targetCalories: input.targetCalories,
     });
     completeMeals = completeMealsByCandidateId(local);
   }
+  return completeMeals;
+}
 
-  onProgress?.("personalizing_portions");
-  // Active architecture: recipe.nutrition (llm_estimate) is the planning source of truth.
-  // USDA resolveRecipeNutrition is optional verification only — never blocks planning.
-  let nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
-
-  if (apis.resolveRecipeNutrition && Object.keys(recipesByCandidateId).length > 0) {
-    try {
-      const nutrition = await apis.resolveRecipeNutrition({
-        recipes: Object.values(recipesByCandidateId),
-        uniqueCandidateIds: strategyResult.strategy.uniqueCandidateIds,
-      });
-      // Merge USDA results only for candidates still missing generated nutrition.
-      const usdaMap =
-        nutrition.ok || nutrition.result?.recipesByCandidateId
-          ? nutrition.result?.recipesByCandidateId ??
-            (nutrition.ok ? nutrition.result.recipesByCandidateId : undefined)
-          : undefined;
-      if (usdaMap) {
-        for (const [candidateId, result] of Object.entries(usdaMap)) {
-          if (!nutritionByCandidateId[candidateId]) {
-            nutritionByCandidateId[candidateId] = result;
-          }
-        }
-      }
-    } catch {
-      // USDA is non-blocking — continue with generated nutrition.
-    }
+/** @internal exported for tests */
+export function assertNoUnresolvedRecipesOnReadyPlan(input: {
+  uniqueCandidateIds: readonly string[];
+  recipesByCandidateId: Record<string, ResolvedRecipe>;
+}): { ok: true } | { ok: false; missingCandidateIds: string[] } {
+  const missingCandidateIds = input.uniqueCandidateIds.filter(
+    (id) => input.recipesByCandidateId[id] == null,
+  );
+  if (missingCandidateIds.length > 0) {
+    return { ok: false, missingCandidateIds };
   }
-
-  // Plate nutrition from CompleteMeal resolutions (sides). Role/staple estimates
-  // live inside the coefficient builder.
-  const fromMeals = buildComponentNutritionByKeyFromCompleteMeals(completeMeals);
-  const componentNutritionByKey: Record<
-    string,
-    { nutrition: import("@fitness-autopilot/contracts").IngredientNutrition; referenceYieldGrams?: number; baseServings?: number }
-  > = {};
-  for (const [key, entry] of Object.entries(fromMeals)) {
-    componentNutritionByKey[key] = {
-      nutrition: entry.nutrition,
-      referenceYieldGrams: entry.referenceYieldGrams,
-      baseServings: entry.baseServings,
-    };
-  }
-
-  if (Object.keys(nutritionByCandidateId).length === 0) {
-    // Do NOT fall back to role-structural "lean chicken" mains for remote plans.
-    // That path was assigning ~42g protein / serving to every dish (including curd rice),
-    // which inflated protein across the week. Prefer blocked meals over fake macros.
-    console.warn(
-      "[consumer-plan-generate] No recipe.nutrition (llm_estimate) on resolved recipes; " +
-        "skipping structural chicken fallback. Meals without trusted nutrition will be blocked.",
-    );
-  }
-
-  return personalizeGeneratedPlan({
-    generatedPlanId,
-    weekStart,
-    weekEnd,
-    strategy: strategyResult.strategy,
-    conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
-    recipesByCandidateId,
-    completeMeals,
-    nutritionByCandidateId,
-    componentNutritionByKey,
-    nutritionTarget: apis.nutritionTarget,
-    generatedAt,
-  });
+  return { ok: true };
 }
 
 export async function generateConsumerWeeklyPlan(

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateConsumerWeeklyPlan } from "./consumer-plan-generate";
+import { generateConsumerWeeklyPlan, assertNoUnresolvedRecipesOnReadyPlan } from "./consumer-plan-generate";
 import type { PlanGenerationApis } from "./consumer-plan-generate";
 import { GENERATION_STAGE_ORDER } from "./consumer-plan-view";
 
@@ -91,5 +91,20 @@ describe("PLAN-010 consumer generation orchestration", () => {
     expect(first.plan.meals?.[0]?.mealInstanceId).not.toBe(
       second.plan.meals?.[0]?.mealInstanceId,
     );
+  });
+
+  it("refuses ready activation when unique candidates lack resolved recipes", () => {
+    const check = assertNoUnresolvedRecipesOnReadyPlan({
+      uniqueCandidateIds: ["a", "b"],
+      recipesByCandidateId: {
+        a: {
+          recipeId: "r1",
+          candidateId: "a",
+        } as never,
+      },
+    });
+    expect(check.ok).toBe(false);
+    if (check.ok) return;
+    expect(check.missingCandidateIds).toEqual(["b"]);
   });
 });

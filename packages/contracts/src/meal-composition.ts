@@ -11,15 +11,18 @@ import { ResolvedRecipeSchema } from "./recipe-resolution";
 /**
  * Meal composition contracts.
  *
- * Lightweight complete-meal concepts (prompt `meal-composition-v2`) run after
- * ranking and before weekly strategy. Detailed component recipes remain a
- * selected-only downstream step (PLAN-009.5 resolution, prompt `component-recipe-v1`).
- * Culinary plate completion only — never authoritative nutrition or personalized quantities.
+ * Lightweight complete-meal concepts (prompt `meal-composition-v3`, Culinary Meal
+ * Architect) run after ranking and before weekly strategy. Detailed component
+ * recipes remain a selected-only downstream step (PLAN-009.5 resolution, prompt
+ * `component-recipe-v1`). Culinary plate completion only — never authoritative
+ * nutrition or personalized quantities.
  */
 
 export const MEAL_COMPOSITION_PROMPT_VERSION_V1 = "meal-composition-v1" as const;
-export const MEAL_COMPOSITION_PROMPT_VERSION = "meal-composition-v2" as const;
-export const MEAL_COMPOSITION_POLICY_VERSION = "meal-composition-v1" as const;
+export const MEAL_COMPOSITION_PROMPT_VERSION_V2 = "meal-composition-v2" as const;
+export const MEAL_COMPOSITION_PROMPT_VERSION = "meal-composition-v3" as const;
+export const MEAL_COMPOSITION_POLICY_VERSION_V1 = "meal-composition-v1" as const;
+export const MEAL_COMPOSITION_POLICY_VERSION = "meal-composition-v2" as const;
 export const COMPONENT_RECIPE_PROMPT_VERSION = "component-recipe-v1" as const;
 export const FIBER_POLICY_VERSION = "fiber-policy-v1" as const;
 
@@ -75,6 +78,58 @@ export const MealComponentQuantityModeSchema = z.enum([
 ]);
 
 export const ComponentDefinitionKindSchema = z.enum(["atomic_food", "recipe_component"]);
+
+/**
+ * Every calorie/macro gram in a CompleteMeal belongs to exactly one independent
+ * nutritional owner. Parent-owned rows stay available for recipe/prep/display
+ * but must not contribute a second coefficient to PLAN-010.
+ */
+export const NutritionOwnershipSchema = z.enum(["parent_owned", "independent"]);
+
+export const MealFormSchema = z.enum([
+  "complete_composite",
+  "main_only",
+  "main_with_existing_companions",
+  "multi_component",
+  "assembly",
+  "other",
+]);
+
+export const MealNeedSchema = z.enum([
+  "protein_structure",
+  "carbohydrate_accompaniment",
+  "fresh_vegetable_accompaniment",
+  "moisture_sauce",
+  "textural_contrast",
+  "completeness_other",
+]);
+
+export const CulinaryConfidenceSchema = z.enum(["high", "medium", "low"]);
+
+export const UnderstoodMealComponentSchema = z.object({
+  name: z.string().trim().min(1).max(160),
+  role: MealComponentRoleSchema.optional(),
+  relationship: CompleteMealComponentRelationshipSchema.optional(),
+  integration:
+    z.enum(["integrated_in_dish", "separately_eaten", "unclear"]).default("unclear"),
+  purpose: z.string().trim().min(1).max(400).optional(),
+});
+
+/**
+ * Structured understanding produced BEFORE proposing additions.
+ * Completeness is semantic — not protein+carb+veg checkbox filling.
+ */
+export const MealUnderstandingSchema = z.object({
+  mealForm: MealFormSchema,
+  isStandaloneMeal: z.boolean(),
+  dishSummary: z.string().trim().min(1).max(600),
+  howItIsEaten: z.string().trim().min(1).max(600),
+  existingComponents: z.array(UnderstoodMealComponentSchema).max(24),
+  satisfiedNeeds: z.array(MealNeedSchema).max(12),
+  missingNeeds: z.array(MealNeedSchema).max(12),
+  additionsRecommended: z.boolean(),
+  confidence: CulinaryConfidenceSchema,
+});
 
 export const CompositionPresenceSchema = z.enum(["low", "meaningful", "high"]);
 
@@ -167,20 +222,31 @@ export const CompleteMealComponentSchema = z.object({
   definitionKind: ComponentDefinitionKindSchema,
   /** Stable key for weekly dedup / future prep reuse (PLAN-012). */
   normalizedComponentKey: z.string().trim().min(1).max(200),
+  /**
+   * Nutritional ownership. Intrinsic substructure of a parent-owned composite is
+   * `parent_owned` (informational). Independently eaten companions are `independent`.
+   */
+  nutritionOwnership: NutritionOwnershipSchema.optional(),
   definition: ComponentDefinitionSchema.optional(),
   resolution: ComponentResolutionSchema.optional(),
 });
 
 export const MealCompositionPromptVersionSchema = z.enum([
   MEAL_COMPOSITION_PROMPT_VERSION_V1,
+  MEAL_COMPOSITION_PROMPT_VERSION_V2,
   MEAL_COMPOSITION_PROMPT_VERSION,
+]);
+
+export const MealCompositionPolicyVersionSchema = z.enum([
+  MEAL_COMPOSITION_POLICY_VERSION_V1,
+  MEAL_COMPOSITION_POLICY_VERSION,
 ]);
 
 export const MealCompositionMetadataSchema = z.object({
   provider: z.string().trim().min(1).max(80).optional(),
   model: z.string().trim().min(1).max(120).optional(),
   promptVersion: MealCompositionPromptVersionSchema,
-  policyVersion: z.literal(MEAL_COMPOSITION_POLICY_VERSION),
+  policyVersion: MealCompositionPolicyVersionSchema,
   componentRecipePromptVersion: z.literal(COMPONENT_RECIPE_PROMPT_VERSION).optional(),
   requestId: z.string().trim().min(1).max(120).optional(),
   durationMs: z.number().nonnegative().optional(),
@@ -201,13 +267,14 @@ export const MealConceptComponentSchema = z.object({
   /** Routing hint for later selected-only resolution (atomic staple vs compound side). */
   definitionKind: ComponentDefinitionKindSchema,
   normalizedComponentKey: z.string().trim().min(1).max(200),
+  nutritionOwnership: NutritionOwnershipSchema.optional(),
 });
 
 export const MealConceptMetadataSchema = z.object({
   provider: z.string().trim().min(1).max(80).optional(),
   model: z.string().trim().min(1).max(120).optional(),
-  promptVersion: z.literal(MEAL_COMPOSITION_PROMPT_VERSION),
-  policyVersion: z.literal(MEAL_COMPOSITION_POLICY_VERSION),
+  promptVersion: MealCompositionPromptVersionSchema,
+  policyVersion: MealCompositionPolicyVersionSchema,
   requestId: z.string().trim().min(1).max(120).optional(),
   durationMs: z.number().nonnegative().optional(),
   createdAt: z.string().min(1),
@@ -222,6 +289,7 @@ export const MealConceptSchema = z.object({
   components: z.array(MealConceptComponentSchema).max(16),
   compositionProfile: MealCompositionProfileSchema,
   compositionSummary: z.string().trim().min(1).max(600).optional(),
+  mealUnderstanding: MealUnderstandingSchema.optional(),
   metadata: MealConceptMetadataSchema,
 });
 
@@ -234,6 +302,9 @@ export const CompleteMealSchema = z.object({
   components: z.array(CompleteMealComponentSchema).min(1).max(16),
   compositionProfile: MealCompositionProfileSchema,
   nutritionSignals: CompositionNutritionSignalsSchema.optional(),
+  mealUnderstanding: MealUnderstandingSchema.optional(),
+  /** When parent-owned composite: only the main recipe owns meal nutrition. */
+  nutritionModel: z.enum(["parent_owned_composite", "independent_components"]).optional(),
   metadata: MealCompositionMetadataSchema,
 });
 
@@ -275,7 +346,7 @@ export const MealCompositionRequestSchema = z
   });
 
 /**
- * Provider proposal for lightweight composition (meal-composition-v2).
+ * Provider proposal for Culinary Meal Architect composition (meal-composition-v3).
  * Culinary additions only — no ingredient quantities, instructions, or nutrition.
  */
 export const MealCompositionAddedComponentProposalSchema = z.object({
@@ -283,6 +354,9 @@ export const MealCompositionAddedComponentProposalSchema = z.object({
   role: AddableMealComponentRoleSchema,
   relationship: z.enum(["required_companion", "recommended"]),
   reason: z.string().trim().min(1).max(400),
+  /** Explicit culinary justification — must map to a genuine missing need. */
+  culinaryReason: z.string().trim().min(1).max(400).optional(),
+  satisfiesMissingNeed: MealNeedSchema.optional(),
   definitionKind: ComponentDefinitionKindSchema,
   preparation: z.string().trim().min(1).max(200).nullable().optional(),
   measurementState: z
@@ -292,8 +366,11 @@ export const MealCompositionAddedComponentProposalSchema = z.object({
 
 export const MealCompositionProposalSchema = z.object({
   mealName: z.string().trim().min(1).max(160),
-  alreadySatisfiedRoles: z.array(MealComponentRoleSchema).max(12),
-  missingRoles: z.array(MealComponentRoleSchema).max(12),
+  mealUnderstanding: MealUnderstandingSchema,
+  /** @deprecated Prefer mealUnderstanding.satisfiedNeeds — retained for v2 compatibility. */
+  alreadySatisfiedRoles: z.array(MealComponentRoleSchema).max(12).default([]),
+  /** @deprecated Prefer mealUnderstanding.missingNeeds — retained for v2 compatibility. */
+  missingRoles: z.array(MealComponentRoleSchema).max(12).default([]),
   addedComponents: z.array(MealCompositionAddedComponentProposalSchema).max(8),
   compositionSummary: z.string().trim().min(1).max(600),
   noAdditionsNeeded: z.boolean().optional(),
@@ -363,8 +440,8 @@ export const WeeklyMealConceptResultSchema = z.object({
   fiberTarget: FiberTargetSchema.optional(),
   candidateTrace: z.array(CandidateCompositionTraceSchema).max(40).optional(),
   policyVersions: z.object({
-    mealComposition: z.literal(MEAL_COMPOSITION_POLICY_VERSION),
-    prompt: z.literal(MEAL_COMPOSITION_PROMPT_VERSION),
+    mealComposition: MealCompositionPolicyVersionSchema,
+    prompt: MealCompositionPromptVersionSchema,
     fiber: z.literal(FIBER_POLICY_VERSION).optional(),
   }),
 });
@@ -379,7 +456,7 @@ export const WeeklyMealCompositionResultSchema = z.object({
   diagnostics: MealCompositionDiagnosticsSchema,
   fiberTarget: FiberTargetSchema.optional(),
   policyVersions: z.object({
-    mealComposition: z.literal(MEAL_COMPOSITION_POLICY_VERSION),
+    mealComposition: MealCompositionPolicyVersionSchema,
     prompt: MealCompositionPromptVersionSchema,
     componentRecipe: z.literal(COMPONENT_RECIPE_PROMPT_VERSION).optional(),
     fiber: z.literal(FIBER_POLICY_VERSION).optional(),
@@ -398,6 +475,10 @@ export const MealCompositionFailureSchema = z.object({
     "INVALID_COMPOSITION_REQUEST",
     "LLM_CONFIGURATION_ERROR",
     "RATE_LIMITED",
+    "MEAL_STRUCTURE_UNRESOLVED",
+    "DUPLICATE_COMPONENT_OWNERSHIP",
+    "UNRESOLVED_COMPONENT_IDENTITY",
+    "SEMANTIC_DUPLICATE_COMPONENT",
   ]),
   message: z.string().trim().min(1).max(600),
   details: z.unknown().optional(),
@@ -463,7 +544,7 @@ export const ComposeMealsResponseSchema = z.object({
     .object({
       requestId: z.string().min(1),
       promptVersion: MealCompositionPromptVersionSchema,
-      policyVersion: z.literal(MEAL_COMPOSITION_POLICY_VERSION),
+      policyVersion: MealCompositionPolicyVersionSchema,
       componentRecipePromptVersion: z.literal(COMPONENT_RECIPE_PROMPT_VERSION).optional(),
       stage: ComposeMealsStageSchema.optional(),
       provider: z.string().min(1),
@@ -484,6 +565,12 @@ export type MealComponentSource = z.infer<typeof MealComponentSourceSchema>;
 export type MealConceptComponentSource = z.infer<typeof MealConceptComponentSourceSchema>;
 export type MealComponentQuantityMode = z.infer<typeof MealComponentQuantityModeSchema>;
 export type ComponentDefinitionKind = z.infer<typeof ComponentDefinitionKindSchema>;
+export type NutritionOwnership = z.infer<typeof NutritionOwnershipSchema>;
+export type MealForm = z.infer<typeof MealFormSchema>;
+export type MealNeed = z.infer<typeof MealNeedSchema>;
+export type CulinaryConfidence = z.infer<typeof CulinaryConfidenceSchema>;
+export type UnderstoodMealComponent = z.infer<typeof UnderstoodMealComponentSchema>;
+export type MealUnderstanding = z.infer<typeof MealUnderstandingSchema>;
 export type CompositionPresence = z.infer<typeof CompositionPresenceSchema>;
 export type CompositionNutritionSignals = z.infer<typeof CompositionNutritionSignalsSchema>;
 export type MealCompositionProfile = z.infer<typeof MealCompositionProfileSchema>;
@@ -514,3 +601,4 @@ export type ComposeMealsStage = z.infer<typeof ComposeMealsStageSchema>;
 export type ComposeMealsRequest = z.infer<typeof ComposeMealsRequestSchema>;
 export type ComposeMealsResponse = z.infer<typeof ComposeMealsResponseSchema>;
 export type MealCompositionPromptVersion = z.infer<typeof MealCompositionPromptVersionSchema>;
+export type MealCompositionPolicyVersion = z.infer<typeof MealCompositionPolicyVersionSchema>;

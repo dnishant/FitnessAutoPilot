@@ -5,6 +5,8 @@ import type {
   RecipeNutritionResult,
   ResolvedRecipe,
 } from "../../contracts/index.ts";
+import { isEdibleFoodIdentity } from "../meal-composition/edible-identity.ts";
+import { isUnresolvedPlaceholderName } from "../meal-composition/placeholders.ts";
 import {
   defaultRoleYieldGrams,
   roleStructuralNutritionForGrams,
@@ -91,6 +93,10 @@ export function buildLocalDemoNutritionMaps(input: {
 
     for (const component of meal.components) {
       if (component.role === "main") continue;
+      if ((component.nutritionOwnership ?? "independent") === "parent_owned") continue;
+      if (!isEdibleFoodIdentity(component.name) || isUnresolvedPlaceholderName(component.name)) {
+        continue;
+      }
       const definition = component.definition ?? component.resolution?.definition;
       let yieldGrams =
         definition?.kind === "recipe_component"
