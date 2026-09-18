@@ -16,3 +16,7 @@ export * from "./complete-meal-nutrition.ts";
 export * from "./local-demo-nutrition.ts";
 export * from "./executability.ts";
 export * from "./canonical-meal-integrity.ts";
+export * from "./validation-policy.ts";
+export * from "./validate-weekly-nutrition-plan.ts";
+export * from "./repair-weekly-nutrition-plan.ts";
+export * from "./finalize-weekly-nutrition-plan.ts";

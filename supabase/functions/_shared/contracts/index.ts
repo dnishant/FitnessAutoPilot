@@ -13,6 +13,7 @@ export * from "./generated-recipe-nutrition.ts";
 export * from "./food-resolution.ts";
 export * from "./meal-composition.ts";
 export * from "./meal-portioning.ts";
+export * from "./nutrition-plan-validation.ts";
 export * from "./weekly-strategy.ts";
 export * from "./culinary-discovery.ts";
 export * from "./candidate-ranking.ts";

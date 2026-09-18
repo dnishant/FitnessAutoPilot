@@ -9,14 +9,19 @@ personalized executable weekly nutrition prescription.
 Selected CompleteMeals + PLAN-009 trusted nutrition + daily targets
         ↓
 ★ PLAN-010 Weekly Nutrition Personalization
-   allocate → portion → reconcile → validate
+   allocate → portion → reconcile
         ↓
 PersonalizedWeeklyNutritionPlan
         ↓
-Consumer UI (Today / Plan / Meal / Recipe)
+★ PLAN-011 Validation & Finalization
+   validate → classify → finalize (bounded PLAN-010 repair)
+        ↓
+Finalized prescription → Consumer UI (Today / Plan / Meal / Recipe)
 ```
 
 PLAN-010 answers: *Exactly how much of the meals generated for THIS USER should they eat?*
+
+PLAN-011 answers: *Can we trust the resulting weekly prescription enough to make it active?*
 
 It does **not** invent foods, call LLMs for portions, or own grocery/prep optimization.
 
@@ -65,7 +70,7 @@ Assumptions:
 2. `PortionVariableBuilder` — role policy → recipe_scale / food_grams / count / fixed
 3. `MealPortionSolver` — coarse-to-fine deterministic search + practical rounding + post-round nutrition
 4. `DailyRebalancer` — evaluate lunch + dinner + reserved vs daily target; re-solve if improved
-5. `WeeklyPersonalizationValidator` — instance coverage, no foreign meals, status aggregation
+5. *(moved to PLAN-011)* `validateWeeklyNutritionPlan` / `finalizeWeeklyNutritionPlan` — integrity + nutrition quality gate before activation
 
 ## Status
 
@@ -85,7 +90,8 @@ Generate My Plan
   → resolveCompleteMealNutrition (plate USDA when FoodResolver present)
   → PLAN-009 main-recipe nutrition (when available)
   → PLAN-010 personalizeWeeklyNutritionPlan
-  → persist ConsumerWeeklyPlan (+ personalizedWeeklyPlan)
+  → PLAN-011 finalizeWeeklyNutritionPlan
+  → persist ConsumerWeeklyPlan (+ personalizedWeeklyPlan + validationReport)
   → Today / Plan / Meal Detail / Recipe
 ```
 

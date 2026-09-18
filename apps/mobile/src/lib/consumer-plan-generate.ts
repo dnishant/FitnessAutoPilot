@@ -28,8 +28,9 @@ import {
   buildLocalDemoNutritionMaps,
   buildNutritionMapsFromGeneratedRecipes,
   composeMealConcepts,
+  finalizeWeeklyNutritionPlan,
+  formatValidationReportForDiagnostics,
   isStructuralPortionBlockReason,
-  personalizeWeeklyNutritionPlan,
   plan008SimpleCandidateLookup,
   plan008SimpleRankedPools,
   plan008SimpleWeeklyStrategy,
@@ -38,6 +39,7 @@ import {
   recordExecutabilityFailures,
   replaceFailedCandidatesInStrategy,
   resolveSelectedCompleteMeals,
+  type PersonalizeWeeklyNutritionPlanInput,
 } from "@fitness-autopilot/domain";
 import {
   addDaysIso,
@@ -160,7 +162,7 @@ async function resolveCompleteMealsLocally(input: {
   return resolved.result;
 }
 
-async function personalizeGeneratedPlan(input: {
+async function personalizeAndFinalizeGeneratedPlan(input: {
   generatedPlanId: string;
   weekStart: string;
   weekEnd: string;
@@ -174,8 +176,9 @@ async function personalizeGeneratedPlan(input: {
   >["componentNutritionByKey"];
   nutritionTarget: NutritionTarget | null;
   generatedAt: string;
+  onProgress?: GenerationProgressCallback;
 }): Promise<ConsumerWeeklyPlan> {
-  const personalizedWeeklyPlan = personalizeWeeklyNutritionPlan({
+  const personalizeInput: PersonalizeWeeklyNutritionPlanInput = {
     generatedPlanId: input.generatedPlanId,
     weekStart: input.weekStart,
     weekEnd: input.weekEnd,
@@ -188,7 +191,36 @@ async function personalizeGeneratedPlan(input: {
     nutritionTargetId: input.nutritionTarget?.id,
     nutritionTargetAlgorithmVersion: input.nutritionTarget?.algorithmVersion,
     generatedAt: input.generatedAt,
+  };
+
+  // Remove debug instrumentation
+  input.onProgress?.("personalizing_portions");
+  input.onProgress?.("finalizing_plan");
+
+  const finalized = finalizeWeeklyNutritionPlan({
+    personalizeInput,
+    generationContext: {
+      generatedPlanId: input.generatedPlanId,
+      completeMealsByCandidateId: input.completeMeals,
+      validatedAt: input.generatedAt,
+    },
   });
+
+  if (!finalized.ok) {
+    if (typeof console !== "undefined") {
+      console.warn(
+        "[PLAN-011] finalization failed:\n" +
+          formatValidationReportForDiagnostics(finalized.report),
+      );
+    }
+    throw Object.assign(
+      new Error(
+        `Weekly nutrition plan failed PLAN-011 validation (${finalized.status}): ` +
+          finalized.reasons.map((r) => r.ruleId).join(", "),
+      ),
+      { code: "PLAN_VALIDATION_FAILED", validationReport: finalized.report },
+    );
+  }
 
   const base: ConsumerWeeklyPlan = {
     generatedPlanId: input.generatedPlanId,
@@ -205,17 +237,24 @@ async function personalizeGeneratedPlan(input: {
       conceptsByCandidateId: input.conceptsByCandidateId,
       recipesByCandidateId: input.recipesByCandidateId,
     }),
+    validationReport: finalized.report,
   };
 
   return attachPersonalizedWeeklyPlan(
     base,
-    personalizedWeeklyPlan,
+    finalized.personalizedWeeklyPlan,
     input.conceptsByCandidateId,
     input.recipesByCandidateId,
   );
 }
 
 function assertReadyPlanIntegrity(plan: ConsumerWeeklyPlan): ConsumerWeeklyPlan {
+  if (plan.status === "ready" && !plan.personalizedWeeklyPlan?.finalization) {
+    throw Object.assign(
+      new Error("Refusing to activate weekly plan without PLAN-011 finalization metadata."),
+      { code: "PLAN_VALIDATION_FAILED" },
+    );
+  }
   const integrity = assertWeeklyConsumerPlanIntegrity(plan.meals ?? []);
   if (!integrity.ok) {
     throw Object.assign(
@@ -290,7 +329,6 @@ async function buildLocalDemoPlan(
   });
   const completeMeals = completeMealsByCandidateId(completeResult);
 
-  onProgress?.("personalizing_portions");
   // Prefer LLM-generated recipe.nutrition; fall back to structural demo maps.
   let nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
   const demoNutrition = buildLocalDemoNutritionMaps({
@@ -302,7 +340,7 @@ async function buildLocalDemoPlan(
   }
 
   return assertReadyPlanIntegrity(
-    await personalizeGeneratedPlan({
+    await personalizeAndFinalizeGeneratedPlan({
       generatedPlanId,
       weekStart,
       weekEnd,
@@ -314,6 +352,7 @@ async function buildLocalDemoPlan(
       componentNutritionByKey: demoNutrition.componentNutritionByKey,
       nutritionTarget: apis.nutritionTarget,
       generatedAt,
+      onProgress,
     }),
   );
 }
@@ -602,7 +641,6 @@ async function buildRemotePlan(
     );
   }
 
-  onProgress?.("personalizing_portions");
   if (Object.keys(nutritionByCandidateId).length === 0) {
     console.warn(
       "[consumer-plan-generate] No recipe.nutrition (llm_estimate) on resolved recipes; " +
@@ -610,7 +648,7 @@ async function buildRemotePlan(
     );
   }
 
-  const plan = await personalizeGeneratedPlan({
+  const plan = await personalizeAndFinalizeGeneratedPlan({
     generatedPlanId,
     weekStart,
     weekEnd,
@@ -622,6 +660,7 @@ async function buildRemotePlan(
     componentNutritionByKey,
     nutritionTarget: apis.nutritionTarget,
     generatedAt,
+    onProgress,
   });
 
   // Defense in depth: never publish a ready plan with unresolved mains / structural blocks.
@@ -642,6 +681,13 @@ async function buildRemotePlan(
           ".",
       ),
       { code: "PLAN_NOT_EXECUTABLE" },
+    );
+  }
+
+  if (!plan.personalizedWeeklyPlan?.finalization) {
+    throw Object.assign(
+      new Error("Refusing to activate weekly plan without PLAN-011 finalization."),
+      { code: "PLAN_VALIDATION_FAILED" },
     );
   }
 

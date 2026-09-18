@@ -47,6 +47,10 @@ export const GENERATION_STAGE_COPY: Record<
     label: "Personalizing your portions",
     doneLabel: "Personalizing your portions",
   },
+  finalizing_plan: {
+    label: "Finalizing your plan…",
+    doneLabel: "Finalizing your plan…",
+  },
   complete: {
     label: "Your week is ready",
     doneLabel: "Your week is ready",
@@ -60,6 +64,7 @@ export const GENERATION_STAGE_ORDER: ConsumerPlanGenerationStage[] = [
   "creating_week",
   "finalizing_recipes",
   "personalizing_portions",
+  "finalizing_plan",
   "complete",
 ];
 
@@ -173,10 +178,12 @@ export function humanizePlanGenerationError(message: string, code?: string): str
     code === "EXECUTABLE_REPLACEMENT_EXHAUSTED" ||
     code === "PLAN_NOT_EXECUTABLE" ||
     code === "CANONICAL_MEAL_INTEGRITY_FAILED" ||
+    code === "PLAN_VALIDATION_FAILED" ||
     lower.includes("not executable") ||
-    lower.includes("canonical meal integrity")
+    lower.includes("canonical meal integrity") ||
+    lower.includes("plan-011")
   ) {
-    return "We couldn't build a complete executable meal plan from the available recipes. Your preferences are saved — try generating again.";
+    return "We couldn't finish a reliable plan this time. Please try generating again.";
   }
   return "We couldn't finish your meal plan. Your preferences are saved. Try generating it again.";
 }
