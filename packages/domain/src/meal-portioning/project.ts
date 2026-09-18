@@ -38,6 +38,8 @@ function componentsFromConcept(
   ];
   for (const component of concept.components) {
     if (component.componentId === concept.main.componentId) continue;
+    // Intrinsic / parent-owned substructure belongs on Recipe Detail, not Your Meal.
+    if ((component.nutritionOwnership ?? "independent") === "parent_owned") continue;
     rows.push({
       componentId: component.componentId,
       displayName: component.name,

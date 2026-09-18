@@ -26,7 +26,13 @@ import {
   validateComponentDefinition,
 } from "./component-recipe.ts";
 import { resolveAddedComponent } from "./component-resolution.ts";
+import {
+  applyOwnershipToCompleteMeal,
+  resolveNutritionOwnership,
+} from "./nutrition-ownership.ts";
+import { isUnresolvedPlaceholderName } from "./placeholders.ts";
 import { summarizeMealConceptRepertoire } from "./repertoire.ts";
+import { validateCompleteMealStructure } from "./structure-validation.ts";
 import { resolveCompleteMealNutrition } from "../meal-portioning/complete-meal-nutrition.ts";
 
 export type ResolveSelectedCompleteMealsInput = {
@@ -72,6 +78,7 @@ function mapConceptSource(source: MealConceptComponent["source"]): CompleteMealC
 
 function conceptComponentToComplete(
   component: MealConceptComponent,
+  understanding: MealConcept["mealUnderstanding"],
 ): CompleteMealComponent {
   const source = mapConceptSource(component.source);
   return {
@@ -85,6 +92,9 @@ function conceptComponentToComplete(
       component.source === "composition_engine" ? "solver_determined" : "recipe_defined",
     definitionKind: component.definitionKind,
     normalizedComponentKey: component.normalizedComponentKey,
+    nutritionOwnership:
+      component.nutritionOwnership ??
+      resolveNutritionOwnership({ component, understanding }),
     resolution:
       component.source === "composition_engine"
         ? undefined
@@ -130,6 +140,7 @@ function collectUniqueAddedComponents(concepts: readonly MealConcept[]): UniqueA
   for (const concept of concepts) {
     for (const component of concept.components) {
       if (component.source !== "composition_engine") continue;
+      if ((component.nutritionOwnership ?? "independent") !== "independent") continue;
       if (seen.has(component.normalizedComponentKey)) continue;
       seen.add(component.normalizedComponentKey);
       unique.push({ key: component.normalizedComponentKey, component, concept });
@@ -141,11 +152,13 @@ function collectUniqueAddedComponents(concepts: readonly MealConcept[]): UniqueA
 function mergeRecipeCompanions(
   complete: CompleteMealComponent[],
   recipe: ResolvedRecipe | undefined,
+  understanding: MealConcept["mealUnderstanding"],
 ): CompleteMealComponent[] {
   if (!recipe) return complete;
   const next = [...complete];
   for (const mc of recipe.mealComponents) {
     if (mc.type === "main") continue;
+    if (isUnresolvedPlaceholderName(mc.name)) continue;
     const role =
       mc.type === "carb_side"
         ? "carbohydrate"
@@ -164,21 +177,30 @@ function mergeRecipeCompanions(
     ) {
       continue;
     }
+    const relationship =
+      mc.relationship === "intrinsic"
+        ? "intrinsic"
+        : mc.required
+          ? "required_companion"
+          : "recommended";
     next.push({
       componentId: mc.componentId,
       role,
       name: mc.name,
-      relationship:
-        mc.relationship === "intrinsic"
-          ? "intrinsic"
-          : mc.required
-            ? "required_companion"
-            : "recommended",
+      relationship,
       source: "existing_recipe_component",
       reason: mc.purpose,
       quantityMode: mc.relationship === "intrinsic" ? "recipe_defined" : "solver_determined",
       definitionKind: "atomic_food",
       normalizedComponentKey: key,
+      nutritionOwnership: resolveNutritionOwnership({
+        component: {
+          role,
+          relationship,
+          source: "existing_recipe_component",
+        },
+        understanding,
+      }),
       resolution: {
         status: "skipped_intrinsic",
         note: "PLAN-008 meal component retained.",
@@ -221,7 +243,7 @@ export async function resolveSelectedCompleteMeals(
   const sharedComponentsByKey: Record<string, CompleteMealComponent> = {};
 
   const resolvedUnique = await mapWithConcurrency(uniqueAdded, concurrency, async (entry) => {
-    const mapped = conceptComponentToComplete(entry.component);
+    const mapped = conceptComponentToComplete(entry.component, entry.concept.mealUnderstanding);
     const candidate =
       lookupCandidate(entry.concept.candidateId, input.candidatesById) ??
       fallbackCandidate(entry.concept);
@@ -257,9 +279,10 @@ export async function resolveSelectedCompleteMeals(
   const mealsByCandidateId: Record<string, CompleteMeal> = {};
   for (const concept of selectedConcepts) {
     let complete: CompleteMealComponent[] = [
-      conceptComponentToComplete(concept.main),
+      conceptComponentToComplete(concept.main, concept.mealUnderstanding),
     ];
     for (const component of concept.components) {
+      if (isUnresolvedPlaceholderName(component.name)) continue;
       if (
         complete.some(
           (c) =>
@@ -277,18 +300,21 @@ export async function resolveSelectedCompleteMeals(
                 ...shared,
                 componentId: component.componentId,
                 reason: component.reason,
+                nutritionOwnership: component.nutritionOwnership ?? "independent",
               }
-            : conceptComponentToComplete(component),
+            : conceptComponentToComplete(component, concept.mealUnderstanding),
         );
       } else {
-        complete.push(conceptComponentToComplete(component));
+        complete.push(conceptComponentToComplete(component, concept.mealUnderstanding));
       }
     }
     complete = mergeRecipeCompanions(
       complete,
       input.recipesByCandidateId?.[concept.candidateId],
+      concept.mealUnderstanding,
     );
-    mealsByCandidateId[concept.candidateId] = {
+
+    let meal: CompleteMeal = applyOwnershipToCompleteMeal({
       mealId: `meal-${concept.candidateId}`,
       candidateId: concept.candidateId,
       mainRecipeId:
@@ -298,17 +324,32 @@ export async function resolveSelectedCompleteMeals(
       mealType: concept.mealType,
       components: complete,
       compositionProfile: concept.compositionProfile,
+      mealUnderstanding: concept.mealUnderstanding,
       metadata: {
         provider: concept.metadata.provider,
         model: concept.metadata.model,
-        promptVersion: MEAL_COMPOSITION_PROMPT_VERSION,
+        promptVersion: concept.metadata.promptVersion,
         policyVersion: MEAL_COMPOSITION_POLICY_VERSION,
         componentRecipePromptVersion: COMPONENT_RECIPE_PROMPT_VERSION,
         requestId: concept.metadata.requestId,
         durationMs: concept.metadata.durationMs,
         createdAt: concept.metadata.createdAt,
       },
-    };
+    });
+
+    const structure = validateCompleteMealStructure(meal);
+    if (!structure.ok) {
+      failures.push({
+        candidateId: concept.candidateId,
+        candidateName: concept.name,
+        code: structure.error.code,
+        message: structure.error.message,
+        details: structure.error.details,
+      });
+      continue;
+    }
+    meal = structure.value;
+    mealsByCandidateId[concept.candidateId] = meal;
   }
 
   if (input.foodResolver && input.resolveAddedComponents === true) {

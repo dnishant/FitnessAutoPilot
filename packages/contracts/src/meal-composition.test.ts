@@ -3,15 +3,29 @@ import {
   CompleteMealSchema,
   ComposeMealsRequestSchema,
   FIBER_POLICY_VERSION,
+  MEAL_COMPOSITION_POLICY_VERSION,
   MEAL_COMPOSITION_PROMPT_VERSION,
   MealConceptSchema,
   MealCompositionProposalSchema,
 } from "./meal-composition";
 
+const minimalUnderstanding = {
+  mealForm: "main_only" as const,
+  isStandaloneMeal: false,
+  dishSummary: "Main needing companions",
+  howItIsEaten: "With sides",
+  existingComponents: [{ name: "Chicken Tikka", role: "main" as const, integration: "integrated_in_dish" as const }],
+  satisfiedNeeds: ["protein_structure" as const],
+  missingNeeds: ["carbohydrate_accompaniment" as const],
+  additionsRecommended: true,
+  confidence: "high" as const,
+};
+
 describe("PLAN-009.5 meal composition contracts", () => {
   it("rejects authoritative nutrition on composition proposals", () => {
     const parsed = MealCompositionProposalSchema.safeParse({
       mealName: "Chicken Tikka",
+      mealUnderstanding: minimalUnderstanding,
       alreadySatisfiedRoles: ["main"],
       missingRoles: ["carbohydrate"],
       addedComponents: [
@@ -52,6 +66,7 @@ describe("PLAN-009.5 meal composition contracts", () => {
           quantityMode: "recipe_defined",
           definitionKind: "recipe_component",
           normalizedComponentKey: "main:chicken-tikka",
+          nutritionOwnership: "independent",
         },
         {
           componentId: "carb",
@@ -63,6 +78,7 @@ describe("PLAN-009.5 meal composition contracts", () => {
           quantityMode: "solver_determined",
           definitionKind: "atomic_food",
           normalizedComponentKey: "carbohydrate:basmati-rice",
+          nutritionOwnership: "independent",
           definition: {
             kind: "atomic_food",
             name: "basmati rice",
@@ -85,7 +101,7 @@ describe("PLAN-009.5 meal composition contracts", () => {
       },
       metadata: {
         promptVersion: MEAL_COMPOSITION_PROMPT_VERSION,
-        policyVersion: "meal-composition-v1",
+        policyVersion: MEAL_COMPOSITION_POLICY_VERSION,
         createdAt: "2026-09-16T00:00:00.000Z",
       },
     });
@@ -94,7 +110,8 @@ describe("PLAN-009.5 meal composition contracts", () => {
   });
 
   it("accepts a lightweight meal concept without quantities or instructions", () => {
-    expect(MEAL_COMPOSITION_PROMPT_VERSION).toBe("meal-composition-v2");
+    expect(MEAL_COMPOSITION_PROMPT_VERSION).toBe("meal-composition-v3");
+    expect(MEAL_COMPOSITION_POLICY_VERSION).toBe("meal-composition-v2");
     const concept = MealConceptSchema.parse({
       candidateId: "tikka-chicken",
       name: "Chicken Tikka",
@@ -132,8 +149,8 @@ describe("PLAN-009.5 meal composition contracts", () => {
         addedComponentRoles: ["carbohydrate"],
       },
       metadata: {
-        promptVersion: "meal-composition-v2",
-        policyVersion: "meal-composition-v1",
+        promptVersion: MEAL_COMPOSITION_PROMPT_VERSION,
+        policyVersion: MEAL_COMPOSITION_POLICY_VERSION,
         createdAt: "2026-09-16T00:00:00.000Z",
       },
     });

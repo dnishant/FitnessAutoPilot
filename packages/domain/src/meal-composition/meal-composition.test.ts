@@ -206,6 +206,17 @@ describe("PLAN-009.5 composition", () => {
     const provider = new MockMealCompositionProvider({
       "tikka-chicken": {
         mealName: "Chicken Tikka plate",
+        mealUnderstanding: {
+          mealForm: "main_only",
+          isStandaloneMeal: false,
+          dishSummary: "Dry grilled chicken needing companions",
+          howItIsEaten: "With rice and salad",
+          existingComponents: [{ name: "Chicken Tikka", role: "main", integration: "integrated_in_dish" }],
+          satisfiedNeeds: ["protein_structure"],
+          missingNeeds: ["carbohydrate_accompaniment", "fresh_vegetable_accompaniment"],
+          additionsRecommended: true,
+          confidence: "high",
+        },
         alreadySatisfiedRoles: ["main"],
         missingRoles: ["carbohydrate", "vegetable"],
         addedComponents: [
@@ -214,6 +225,8 @@ describe("PLAN-009.5 composition", () => {
             role: "carbohydrate",
             relationship: "required_companion",
             reason: "Traditional starch",
+            culinaryReason: "Needs starch companion",
+            satisfiesMissingNeed: "carbohydrate_accompaniment",
             definitionKind: "atomic_food",
             preparation: "steamed",
             measurementState: "cooked",
@@ -223,6 +236,8 @@ describe("PLAN-009.5 composition", () => {
             role: "vegetable",
             relationship: "required_companion",
             reason: "Fresh salad",
+            culinaryReason: "Needs fresh vegetable companion",
+            satisfiesMissingNeed: "fresh_vegetable_accompaniment",
             definitionKind: "recipe_component",
           },
         ],
@@ -264,6 +279,17 @@ describe("PLAN-009.5 composition", () => {
     const provider = new MockMealCompositionProvider({
       "tikka-chicken": {
         mealName: "Chicken Tikka",
+        mealUnderstanding: {
+          mealForm: "main_only",
+          isStandaloneMeal: false,
+          dishSummary: "Main needing sauce",
+          howItIsEaten: "With condiment",
+          existingComponents: [{ name: "Chicken Tikka", role: "main", integration: "integrated_in_dish" }],
+          satisfiedNeeds: ["protein_structure"],
+          missingNeeds: ["moisture_sauce"],
+          additionsRecommended: true,
+          confidence: "high",
+        },
         alreadySatisfiedRoles: ["main"],
         missingRoles: ["sauce_condiment"],
         addedComponents: [
@@ -272,6 +298,8 @@ describe("PLAN-009.5 composition", () => {
             role: "sauce_condiment",
             relationship: "recommended",
             reason: "test",
+            culinaryReason: "test",
+            satisfiesMissingNeed: "moisture_sauce",
             definitionKind: "recipe_component",
           },
         ],
@@ -318,6 +346,17 @@ describe("PLAN-009.5 composition", () => {
     const validated = validateMealCompositionProposal(
       {
         mealName: "x",
+        mealUnderstanding: {
+          mealForm: "main_only",
+          isStandaloneMeal: false,
+          dishSummary: "x",
+          howItIsEaten: "x",
+          existingComponents: [],
+          satisfiedNeeds: ["protein_structure"],
+          missingNeeds: ["carbohydrate_accompaniment"],
+          additionsRecommended: true,
+          confidence: "high",
+        },
         alreadySatisfiedRoles: ["main"],
         missingRoles: [],
         addedComponents: [
@@ -351,6 +390,17 @@ describe("PLAN-009.5 composition", () => {
     const validated = validateMealCompositionProposal(
       {
         mealName: "x",
+        mealUnderstanding: {
+          mealForm: "main_only",
+          isStandaloneMeal: false,
+          dishSummary: "x",
+          howItIsEaten: "x",
+          existingComponents: [],
+          satisfiedNeeds: ["protein_structure"],
+          missingNeeds: ["fresh_vegetable_accompaniment"],
+          additionsRecommended: true,
+          confidence: "high",
+        },
         alreadySatisfiedRoles: ["main"],
         missingRoles: ["vegetable"],
         addedComponents: [
@@ -570,16 +620,19 @@ describe("lightweight meal-composition-v2", () => {
     expect(resolved.uniqueComponentRecipesResolved).toBeGreaterThan(0);
   });
 
-  it("treats shrimp tacos as already complete", async () => {
+  it("treats shrimp tacos as already complete when recipe structure is complete", async () => {
     const provider = new MockMealCompositionProvider();
+    const recipe = makeIntrinsicTacoResolvedRecipe();
     const detected = detectExistingCandidateRoles(SHRIMP_TACOS);
-    expect(detected.profile.hasMeaningfulCarbohydrate).toBe(true);
-    expect(detected.profile.hasMeaningfulVegetableOrFruit).toBe(true);
-    expect(detected.profile.hasSauceOrMoistureComponent).toBe(true);
+    // Candidate-only detection must not invent placeholders.
+    expect(detected.existingComponents).toHaveLength(1);
+    expect(detected.existingComponents.every((c) => c.role === "main")).toBe(true);
+
     const result = await composeMealConcept(
       {
         mealType: "dinner",
         candidate: SHRIMP_TACOS,
+        recipe,
         allergies: [],
         dietaryRestrictions: [],
         dislikes: [],

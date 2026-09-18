@@ -20,7 +20,11 @@ export type MealCompositionErrorCode =
   | "COMPONENT_RESOLUTION_FAILED"
   | "INVALID_COMPOSITION_REQUEST"
   | "LLM_CONFIGURATION_ERROR"
-  | "RATE_LIMITED";
+  | "RATE_LIMITED"
+  | "MEAL_STRUCTURE_UNRESOLVED"
+  | "DUPLICATE_COMPONENT_OWNERSHIP"
+  | "UNRESOLVED_COMPONENT_IDENTITY"
+  | "SEMANTIC_DUPLICATE_COMPONENT";
 
 export type MealCompositionError = {
   code: MealCompositionErrorCode;
@@ -163,6 +167,15 @@ export function validateMealCompositionProposal(
   }
 
   const proposal = parsed.data;
+  if (!proposal.mealUnderstanding) {
+    return err(
+      mealCompositionError(
+        "MEAL_STRUCTURE_UNRESOLVED",
+        "Culinary Meal Architect proposal is missing mealUnderstanding.",
+      ),
+    );
+  }
+
   const allergyTokens = constraintTokens(request.allergies);
   const restrictionTokens = constraintTokens(request.dietaryRestrictions);
   const dislikeTokens = constraintTokens(request.dislikes);

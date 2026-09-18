@@ -7,6 +7,7 @@ import type {
   RecipeNutritionResult,
   ResolvedRecipe,
 } from "../../contracts/index.ts";
+import { isUnresolvedPlaceholderName } from "../meal-composition/placeholders.ts";
 import { matchDiscreteStapleEstimate } from "./staple-estimates.ts";
 import {
   roleStructuralEstimateForComponent,
@@ -137,6 +138,22 @@ function coefficientForComponent(
     { nutrition: IngredientNutrition; referenceYieldGrams?: number; baseServings?: number }
   >,
 ): CoefficientBuildResult {
+  // Parent-owned intrinsic structure is informational only — never a second owner.
+  if ((component.nutritionOwnership ?? "independent") === "parent_owned") {
+    return { ok: true, components: [] };
+  }
+
+  if (isUnresolvedPlaceholderName(component.name)) {
+    return {
+      ok: false,
+      error: {
+        code: "unquantifiable_component",
+        message: `Placeholder "${component.name}" cannot enter PLAN-010 portioning.`,
+        componentId: component.componentId,
+      },
+    };
+  }
+
   if (component.role === "garnish") {
     const fixedNutrition =
       component.resolution?.ingredientNutrition ??
@@ -456,12 +473,7 @@ function coefficientForComponent(
     }
   }
 
-  // Last resort for required non-main sides: role-structural-estimate-v1 (never for main
-  // or recommended — recommended failures are skipped by the meal builder).
-  if (component.role !== "main" && component.relationship !== "recommended") {
-    return roleStructuralCoefficient(component);
-  }
-
+  // Do not invent role-structural macros for unresolved / unknown foods.
   return {
     ok: false,
     error: {
@@ -473,6 +485,7 @@ function coefficientForComponent(
 }
 
 function roleStructuralCoefficient(component: CompleteMealComponent): CoefficientBuildResult {
+  // Retained for tests / explicit callers — not used as a silent production fallback.
   if (isDiscreteComponent(component)) {
     const staple = matchDiscreteStapleEstimate(component.name);
     if (staple) {
@@ -507,7 +520,6 @@ function roleStructuralCoefficient(component: CompleteMealComponent): Coefficien
   });
 
   if (isDiscreteComponent(component)) {
-    // Unknown discrete name: treat one unit ≈ role default yield / typical piece mass.
     const perUnit = roleStructuralEstimateForComponent({
       role: component.role,
       referenceYieldGrams: Math.min(estimate.referenceYieldGrams, 40),
@@ -590,6 +602,19 @@ export function buildCoefficientsFromCompleteMeal(input: {
 }): CoefficientBuildResult {
   const components: ComponentNutritionCoefficient[] = [];
   for (const component of input.meal.components) {
+    if ((component.nutritionOwnership ?? "independent") === "parent_owned") {
+      continue;
+    }
+    if (isUnresolvedPlaceholderName(component.name)) {
+      return {
+        ok: false,
+        error: {
+          code: "unquantifiable_component",
+          message: `Placeholder "${component.name}" blocked before portioning.`,
+          componentId: component.componentId,
+        },
+      };
+    }
     if (component.relationship === "recommended" && component.role === "garnish") {
       // Soft garnish may be omitted when unquantifiable — try fixed path first.
     }
@@ -605,14 +630,12 @@ export function buildCoefficientsFromCompleteMeal(input: {
       if (component.relationship === "recommended") {
         continue;
       }
-      // Required non-main sides: last-resort role estimate instead of blocking the meal.
+      // Required non-main sides without trusted nutrition: block — do not invent
+      // role-structural macros for unresolved placeholders or unknown foods.
       if (component.role !== "main") {
-        const roleBuilt = roleStructuralCoefficient(component);
-        if (roleBuilt.ok) {
-          components.push(...roleBuilt.components);
-          continue;
-        }
-        continue;
+        // Discrete staples may still use versioned staple estimates inside coefficientForComponent.
+        // If that failed, skip recommended-like softness already handled; required → fail meal.
+        return built;
       }
       return built;
     }

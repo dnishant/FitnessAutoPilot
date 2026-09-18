@@ -11,3 +11,6 @@ export * from "./candidate-role-detection";
 export * from "./repertoire";
 export * from "./component-recipe";
 export * from "./selected-resolution";
+export * from "./placeholders";
+export * from "./nutrition-ownership";
+export * from "./structure-validation";

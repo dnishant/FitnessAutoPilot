@@ -986,7 +986,7 @@ describe("discrete-staple-estimate-v1", () => {
     expect(adjusted!.personalizedNutrition!.caloriesKcal).toBe(Math.round(300 + 130 * 1.5));
   });
 
-  it("uses role-structural-estimate-v1 for required sides without USDA or staple match", () => {
+  it("blocks required sides without USDA, staple match, or keyed nutrition (no silent role-structural macros)", () => {
     const meal: CompleteMeal = {
       mealId: "complete-role-estimate",
       candidateId: "cand-role-estimate",
@@ -1003,6 +1003,7 @@ describe("discrete-staple-estimate-v1", () => {
           quantityMode: "solver_determined",
           definitionKind: "recipe_component",
           normalizedComponentKey: "main:roasted chicken",
+          nutritionOwnership: "independent",
           definition: {
             kind: "recipe_component",
             name: "Roasted Chicken",
@@ -1028,27 +1029,20 @@ describe("discrete-staple-estimate-v1", () => {
           },
         },
         {
-          componentId: "side",
+          componentId: "mystery",
           role: "vegetable",
           name: "Garden Relish Medley",
           relationship: "required_companion",
           source: "composition_engine",
           reason: "veg",
           quantityMode: "solver_determined",
-          definitionKind: "atomic_food",
+          definitionKind: "recipe_component",
           normalizedComponentKey: "vegetable:garden relish medley",
+          nutritionOwnership: "independent",
           definition: {
-            kind: "atomic_food",
+            kind: "recipe_component",
             name: "Garden Relish Medley",
-            measurementState: "cooked",
-          },
-          resolution: {
-            status: "unresolved",
-            definition: {
-              kind: "atomic_food",
-              name: "Garden Relish Medley",
-              measurementState: "cooked",
-            },
+            ingredients: [{ name: "unknown greens", quantity: 100, unit: "g" }],
           },
         },
       ],
@@ -1061,82 +1055,40 @@ describe("discrete-staple-estimate-v1", () => {
         addedComponentRoles: ["vegetable"],
       },
       metadata: {
-        promptVersion: "meal-composition-v2",
-        policyVersion: "meal-composition-v1",
-        createdAt: "2026-09-17T12:00:00.000Z",
+        promptVersion: "meal-composition-v3",
+        policyVersion: "meal-composition-v2",
+        createdAt: new Date().toISOString(),
       },
     };
 
     const coeffs = buildCoefficientsFromCompleteMeal({
       meal,
-      nutritionByCandidateId: {
+      recipesByCandidateId: {
         [meal.candidateId]: {
-          recipeId: meal.mainRecipeId,
           candidateId: meal.candidateId,
-          recipeName: meal.name,
+          recipeId: meal.mainRecipeId,
           baseServings: 1,
-          ingredients: [],
-          mealComponents: [],
           nutrition: {
+            source: "llm_estimate",
             total: {
               caloriesKcal: 260,
               proteinGrams: 40,
               carbohydrateGrams: 0,
               fatGrams: 10,
             },
-            perBaseServing: {
+            perServing: {
               caloriesKcal: 260,
               proteinGrams: 40,
               carbohydrateGrams: 0,
               fatGrams: 10,
               fiberGrams: 0,
             },
-            ingredientBreakdown: [
-              {
-                ingredientId: "main",
-                ingredientName: "Roasted Chicken",
-                grams: 170,
-                status: "resolved",
-              },
-            ],
-            resolutionQuality: {
-              status: "complete",
-              totalIngredientCount: 1,
-              resolvedIngredientCount: 1,
-              ambiguousIngredientCount: 0,
-              unresolvedIngredientCount: 0,
-              highConfidenceCount: 1,
-              mediumConfidenceCount: 0,
-              directMassConversionCount: 1,
-              providerMeasureConversionCount: 0,
-              lowConfidenceConversionCount: 0,
-              pendingPortioningComponentCount: 0,
-            },
           },
-          resolutionQuality: {
-            status: "complete",
-            totalIngredientCount: 1,
-            resolvedIngredientCount: 1,
-            ambiguousIngredientCount: 0,
-            unresolvedIngredientCount: 0,
-            highConfidenceCount: 1,
-            mediumConfidenceCount: 0,
-            directMassConversionCount: 1,
-            providerMeasureConversionCount: 0,
-            lowConfidenceConversionCount: 0,
-            pendingPortioningComponentCount: 0,
-          },
-          policyVersions: {
-            foodResolution: "food-resolution-v1",
-            nutritionCalculation: "nutrition-calculation-v1",
-            quantityNormalization: "quantity-normalization-v1",
-          },
-        },
+        } as import("@fitness-autopilot/contracts").ResolvedRecipe,
       },
     });
-    expect(coeffs.ok).toBe(true);
-    if (!coeffs.ok) return;
-    expect(coeffs.components.some((c) => c.role === "vegetable")).toBe(true);
-    expect(coeffs.components.some((c) => c.kind === "food_grams")).toBe(true);
+    expect(coeffs.ok).toBe(false);
+    if (coeffs.ok) return;
+    expect(coeffs.error.code).toMatch(/missing_canonical_nutrition|unquantifiable_component/);
   });
 });

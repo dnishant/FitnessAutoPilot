@@ -25,7 +25,8 @@ future PLAN-010 Portion solver
 Composition answers: *What belongs on this plate?*  
 It does **not** answer: *How is each side cooked, what USDA food is it, or how many grams should this user eat?*
 
-Policy version remains `meal-composition-v1`. Prompt version is `meal-composition-v2`.
+Policy version remains `meal-composition-v2` (nutrition ownership + structural validation).
+Prompt version is `meal-composition-v3` (Culinary Meal Architect).
 
 ## Responsibility split
 
@@ -57,8 +58,8 @@ Intrinsic components already present on the candidate (taco tortillas + slaw + s
 
 | Policy | Version |
 | --- | --- |
-| Meal composition | `meal-composition-v1` |
-| Lightweight composition prompt | `meal-composition-v2` |
+| Meal composition | `meal-composition-v2` |
+| Culinary Meal Architect prompt | `meal-composition-v3` |
 | Component recipe prompt | `component-recipe-v1` |
 | Fiber target | `fiber-policy-v1` (~14 g / 1000 kcal daily) |
 | Weekly strategy prompt | `weekly-strategy-ranked-v1.3.0` |
