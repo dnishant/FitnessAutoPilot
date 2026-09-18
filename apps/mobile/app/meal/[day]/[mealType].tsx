@@ -255,10 +255,16 @@ export default function MealDetailScreen() {
                 ? " · structural chicken fallback suspected"
                 : ""}
             </Text>
-            <ScrollView horizontal nestedScrollEnabled>
-              <Text selectable style={styles.jsonText}>
-                {compositionJson}
-              </Text>
+            <ScrollView
+              style={styles.jsonScroll}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
+              <ScrollView horizontal nestedScrollEnabled>
+                <Text selectable style={styles.jsonText}>
+                  {compositionJson}
+                </Text>
+              </ScrollView>
             </ScrollView>
           </View>
         ) : null}
@@ -413,8 +419,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     padding: spacing.md,
-    maxHeight: 420,
     gap: spacing.sm,
+  },
+  jsonScroll: {
+    maxHeight: 420,
   },
   jsonHint: {
     ...typography.caption,
