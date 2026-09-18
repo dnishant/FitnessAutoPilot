@@ -181,7 +181,7 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     await expect(provider.discover(sampleRequest)).rejects.toMatchObject({
       code: "DISCOVERY_NOT_GROUNDED",
     });
-    expect(generateContent).toHaveBeenCalledTimes(3);
+    expect(generateContent).toHaveBeenCalledTimes(2);
     const secondCall = generateContent.mock.calls.at(1)?.at(0) as
       | { contents?: string }
       | undefined;
@@ -265,7 +265,7 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
       join(repoRoot, "supabase/functions/culinary-discovery/index.ts"),
       "utf8",
     );
-    expect(edgeFn).toContain("maxGroundingAttempts: 3");
+    expect(edgeFn).toContain("maxGroundingAttempts: 2");
   });
 
   it("requests minimal thinking and Google Search on every discovery call", async () => {

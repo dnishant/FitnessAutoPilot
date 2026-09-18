@@ -6,6 +6,8 @@ import type {
 } from "@fitness-autopilot/contracts";
 import { err, ok, type Result } from "@fitness-autopilot/validation";
 import type { FoodResolver } from "../food-resolution/food-resolver";
+import { calculateNutritionForGrams } from "../food-resolution/nutrition-arithmetic";
+import { matchDiscreteStapleEstimate } from "../meal-portioning/staple-estimates";
 import { looksLikeCompoundComponent } from "./component-identity";
 import { mealCompositionError, type MealCompositionError } from "./validate";
 
@@ -134,6 +136,12 @@ export async function resolveAddedComponent(
     });
 
     if (foodResolution.status === "resolved") {
+      const staple = matchDiscreteStapleEstimate(component.name);
+      const grams = staple?.approximateGramsPerUnit ?? 100;
+      const ingredientNutrition = calculateNutritionForGrams(
+        foodResolution.food.nutrientsPer100g,
+        grams,
+      );
       return {
         ...component,
         definition,
@@ -141,7 +149,8 @@ export async function resolveAddedComponent(
           status: "canonical_food_resolved",
           definition,
           foodResolution,
-          note: "Canonical food identity resolved; quantity pending PLAN-010.",
+          ingredientNutrition,
+          note: "Canonical food identity resolved; per-unit nutrition derived for PLAN-010.",
         },
       };
     }

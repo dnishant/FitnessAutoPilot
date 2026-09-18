@@ -28,6 +28,15 @@ import { buildNormalizedComponentKey, namesLikelyEquivalent } from "./component-
 import { subjectCandidateFromRequest } from "./prompt.ts";
 import type { MealCompositionProvider } from "./provider.ts";
 import { summarizeMealConceptRepertoire } from "./repertoire.ts";
+
+/** Cap neighbor names passed into composition prompts to avoid O(n²) token growth. */
+export const MAX_COMPOSITION_NEIGHBOR_MEAL_NAMES = 5;
+
+function neighborMealNames(allNames: readonly string[], currentName: string): string[] {
+  return allNames
+    .filter((name) => name !== currentName)
+    .slice(0, MAX_COMPOSITION_NEIGHBOR_MEAL_NAMES);
+}
 import { missingRolesFromProfile } from "./role-detection.ts";
 import {
   mealCompositionError,
@@ -333,7 +342,7 @@ export async function composeMealConcepts(
           candidate,
           recipe: input.recipesByCandidateId?.[candidate.candidateId],
         }).profile,
-        otherSelectedMealNames: otherNames.filter((name) => name !== candidate.name),
+        otherSelectedMealNames: neighborMealNames(otherNames, candidate.name),
         existingComponentKeys: [...sharedKeys],
       },
     };
@@ -341,7 +350,7 @@ export async function composeMealConcepts(
       provider: input.provider,
       providerMeta: input.providerMeta,
       existingComponentKeys: [...sharedKeys],
-      otherSelectedMealNames: otherNames.filter((name) => name !== candidate.name),
+      otherSelectedMealNames: neighborMealNames(otherNames, candidate.name),
     });
     return { rankedItem, composed };
   });

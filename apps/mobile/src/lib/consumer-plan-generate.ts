@@ -1,26 +1,36 @@
 import type {
   CandidateRankingRequest,
+  CompleteMeal,
   ConsumerPlanGenerationStage,
   ConsumerWeeklyPlan,
   CookingPreferences,
   CulinaryDiscoveryCandidate,
   CulinaryDiscoveryRequest,
+  MealConcept,
   MealPreferences,
   NutritionTarget,
   RankedCulinaryCandidate,
   RankedWeeklyStrategy,
   RankedWeeklyStrategyRequest,
+  RecipeNutritionResult,
   ResolvedRecipe,
+  WeeklyMealCompositionResult,
   WeeklyMealConceptResult,
 } from "@fitness-autopilot/contracts";
 import {
+  MockComponentRecipeProvider,
   MockMealCompositionProvider,
+  attachPersonalizedWeeklyPlan,
+  buildComponentNutritionByKeyFromCompleteMeals,
+  buildLocalDemoNutritionMaps,
   composeMealConcepts,
+  personalizeWeeklyNutritionPlan,
   plan008SimpleCandidateLookup,
   plan008SimpleRankedPools,
   plan008SimpleWeeklyStrategy,
   makeResolvedRecipeFixture,
   plan009SimpleResolvedRecipes,
+  resolveSelectedCompleteMeals,
 } from "@fitness-autopilot/domain";
 import {
   addDaysIso,
@@ -76,14 +86,137 @@ export type PlanGenerationApis = {
         result?: { recipesByCandidateId: Record<string, ResolvedRecipe> };
       }
   >;
+  resolveSelectedCompleteMeals?: (input: {
+    mealConcepts: MealConcept[];
+    selectedCandidateIds: string[];
+    recipes: ResolvedRecipe[];
+    targetCalories?: number;
+  }) => Promise<
+    | { ok: true; result: WeeklyMealCompositionResult }
+    | { ok: false; error: string; code?: string; result?: WeeklyMealCompositionResult }
+  >;
+  resolveRecipeNutrition?: (input: {
+    recipes: ResolvedRecipe[];
+    uniqueCandidateIds?: string[];
+  }) => Promise<
+    | { ok: true; result: { recipesByCandidateId: Record<string, RecipeNutritionResult> } }
+    | {
+        ok: false;
+        error: string;
+        code?: string;
+        result?: { recipesByCandidateId: Record<string, RecipeNutritionResult> };
+      }
+  >;
 };
 
 export type GenerationProgressCallback = (stage: ConsumerPlanGenerationStage) => void;
 
+function newGeneratedPlanId(): string {
+  return `plan_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function defaultDailyTarget(nutritionTarget: NutritionTarget | null) {
+  if (nutritionTarget) return nutritionTarget;
+  return {
+    caloriesKcal: 2200,
+    proteinGrams: 160,
+    carbsGrams: 220,
+    fatGrams: 70,
+    fiberGrams: 30,
+  };
+}
+
+function completeMealsByCandidateId(
+  result: WeeklyMealCompositionResult,
+): Record<string, CompleteMeal> {
+  const out: Record<string, CompleteMeal> = {};
+  for (const meal of Object.values(result.mealsByCandidateId)) {
+    out[meal.candidateId] = meal;
+  }
+  return out;
+}
+
+async function resolveCompleteMealsLocally(input: {
+  conceptsByCandidateId: Record<string, MealConcept>;
+  selectedCandidateIds: string[];
+  recipesByCandidateId: Record<string, ResolvedRecipe>;
+  targetCalories?: number;
+}): Promise<WeeklyMealCompositionResult> {
+  const resolved = await resolveSelectedCompleteMeals({
+    concepts: input.conceptsByCandidateId,
+    selectedCandidateIds: input.selectedCandidateIds,
+    recipesByCandidateId: input.recipesByCandidateId,
+    componentRecipeProvider: new MockComponentRecipeProvider(),
+    resolveAddedComponents: true,
+    targetCalories: input.targetCalories,
+  });
+  return resolved.result;
+}
+
+async function personalizeGeneratedPlan(input: {
+  generatedPlanId: string;
+  weekStart: string;
+  weekEnd: string;
+  strategy: RankedWeeklyStrategy;
+  conceptsByCandidateId: Record<string, MealConcept>;
+  recipesByCandidateId: Record<string, ResolvedRecipe>;
+  completeMeals: Record<string, CompleteMeal>;
+  nutritionByCandidateId?: Record<string, RecipeNutritionResult>;
+  componentNutritionByKey?: ReturnType<
+    typeof buildLocalDemoNutritionMaps
+  >["componentNutritionByKey"];
+  nutritionTarget: NutritionTarget | null;
+  generatedAt: string;
+}): Promise<ConsumerWeeklyPlan> {
+  const personalizedWeeklyPlan = personalizeWeeklyNutritionPlan({
+    generatedPlanId: input.generatedPlanId,
+    weekStart: input.weekStart,
+    weekEnd: input.weekEnd,
+    strategy: input.strategy,
+    completeMealsByCandidateId: input.completeMeals,
+    recipesByCandidateId: input.recipesByCandidateId,
+    nutritionByCandidateId: input.nutritionByCandidateId,
+    componentNutritionByKey: input.componentNutritionByKey,
+    dailyTarget: defaultDailyTarget(input.nutritionTarget),
+    nutritionTargetId: input.nutritionTarget?.id,
+    nutritionTargetAlgorithmVersion: input.nutritionTarget?.algorithmVersion,
+    generatedAt: input.generatedAt,
+  });
+
+  const base: ConsumerWeeklyPlan = {
+    generatedPlanId: input.generatedPlanId,
+    weekStart: input.weekStart,
+    weekEnd: input.weekEnd,
+    status: "ready",
+    generatedAt: input.generatedAt,
+    generationStage: "complete",
+    strategy: input.strategy,
+    conceptsByCandidateId: input.conceptsByCandidateId,
+    recipesByCandidateId: input.recipesByCandidateId,
+    meals: buildConsumerMealsFromStrategy({
+      strategy: input.strategy,
+      conceptsByCandidateId: input.conceptsByCandidateId,
+      recipesByCandidateId: input.recipesByCandidateId,
+    }),
+  };
+
+  return attachPersonalizedWeeklyPlan(
+    base,
+    personalizedWeeklyPlan,
+    input.conceptsByCandidateId,
+    input.recipesByCandidateId,
+  );
+}
+
 async function buildLocalDemoPlan(
+  apis: PlanGenerationApis,
   onProgress?: GenerationProgressCallback,
 ): Promise<ConsumerWeeklyPlan> {
   const weekStart = startOfWeekMonday();
+  const weekEnd = addDaysIso(weekStart, 6);
+  const generatedPlanId = newGeneratedPlanId();
+  const generatedAt = new Date().toISOString();
+
   onProgress?.("understanding_preferences");
   await delay(280);
   onProgress?.("finding_meals");
@@ -94,7 +227,7 @@ async function buildLocalDemoPlan(
     rankedCandidates: [...pools.lunchCandidates, ...pools.dinnerCandidates],
     provider: new MockMealCompositionProvider(),
     providerMeta: { provider: "mock", model: "local-fixture" },
-    targetCalories: 2250,
+    targetCalories: apis.nutritionTarget?.targetCalories ?? 2250,
   });
   onProgress?.("creating_week");
   await delay(280);
@@ -115,23 +248,34 @@ async function buildLocalDemoPlan(
       }
     }
   }
-  const meals = buildConsumerMealsFromStrategy({
-    strategy,
+
+  const completeResult = await resolveCompleteMealsLocally({
     conceptsByCandidateId: composed.result.conceptsByCandidateId,
+    selectedCandidateIds: strategy.uniqueCandidateIds,
+    recipesByCandidateId,
+    targetCalories: apis.nutritionTarget?.targetCalories,
+  });
+  const completeMeals = completeMealsByCandidateId(completeResult);
+
+  onProgress?.("personalizing_portions");
+  const demoNutrition = buildLocalDemoNutritionMaps({
+    completeMealsByCandidateId: completeMeals,
     recipesByCandidateId,
   });
-  onProgress?.("complete");
-  return {
+
+  return personalizeGeneratedPlan({
+    generatedPlanId,
     weekStart,
-    weekEnd: addDaysIso(weekStart, 6),
-    status: "ready",
-    generatedAt: new Date().toISOString(),
-    generationStage: "complete",
+    weekEnd,
     strategy,
     conceptsByCandidateId: composed.result.conceptsByCandidateId,
     recipesByCandidateId,
-    meals,
-  };
+    completeMeals,
+    nutritionByCandidateId: demoNutrition.nutritionByCandidateId,
+    componentNutritionByKey: demoNutrition.componentNutritionByKey,
+    nutritionTarget: apis.nutritionTarget,
+    generatedAt,
+  });
 }
 
 function buildDiscoveryRequest(
@@ -158,7 +302,7 @@ function buildDiscoveryRequest(
           maxFinishMinutes: cooking.maxFinishMinutes,
         }
       : undefined,
-    targetCandidateCount: 16,
+    targetCandidateCount: 12,
   };
 }
 
@@ -167,6 +311,10 @@ async function buildRemotePlan(
   onProgress?: GenerationProgressCallback,
 ): Promise<ConsumerWeeklyPlan> {
   const weekStart = startOfWeekMonday();
+  const weekEnd = addDaysIso(weekStart, 6);
+  const generatedPlanId = newGeneratedPlanId();
+  const generatedAt = new Date().toISOString();
+
   onProgress?.("understanding_preferences");
   await delay(200);
 
@@ -204,14 +352,14 @@ async function buildRemotePlan(
       candidates: lunchDiscover.result.candidates,
       userPreferences,
       cookingPreferences: cookingPrefs,
-      targetPoolSize: 12,
+      targetPoolSize: 10,
     }),
     apis.rankCulinaryCandidates({
       mealType: "dinner",
       candidates: dinnerDiscover.result.candidates,
       userPreferences,
       cookingPreferences: cookingPrefs,
-      targetPoolSize: 12,
+      targetPoolSize: 10,
     }),
   ]);
   if (!lunchRanked.ok) {
@@ -273,24 +421,83 @@ async function buildRemotePlan(
     ? resolved.result.recipesByCandidateId
     : (resolved.result?.recipesByCandidateId ?? {});
 
-  const meals = buildConsumerMealsFromStrategy({
-    strategy: strategyResult.strategy,
-    conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
-    recipesByCandidateId,
-  });
+  // Selected-only complete meal resolution (discarded candidates are not resolved).
+  let completeMeals: Record<string, CompleteMeal> = {};
+  if (apis.resolveSelectedCompleteMeals) {
+    const selected = await apis.resolveSelectedCompleteMeals({
+      mealConcepts: Object.values(composed.concepts.conceptsByCandidateId),
+      selectedCandidateIds: strategyResult.strategy.uniqueCandidateIds,
+      recipes: Object.values(recipesByCandidateId),
+      targetCalories: apis.nutritionTarget?.targetCalories,
+    });
+    if (selected.ok) {
+      completeMeals = completeMealsByCandidateId(selected.result);
+    } else if (selected.result) {
+      completeMeals = completeMealsByCandidateId(selected.result);
+    }
+  }
+  if (Object.keys(completeMeals).length === 0) {
+    const local = await resolveCompleteMealsLocally({
+      conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+      selectedCandidateIds: strategyResult.strategy.uniqueCandidateIds,
+      recipesByCandidateId,
+      targetCalories: apis.nutritionTarget?.targetCalories,
+    });
+    completeMeals = completeMealsByCandidateId(local);
+  }
 
-  onProgress?.("complete");
-  return {
+  onProgress?.("personalizing_portions");
+  let nutritionByCandidateId: Record<string, RecipeNutritionResult> | undefined;
+
+  if (apis.resolveRecipeNutrition && Object.keys(recipesByCandidateId).length > 0) {
+    const nutrition = await apis.resolveRecipeNutrition({
+      recipes: Object.values(recipesByCandidateId),
+      uniqueCandidateIds: strategyResult.strategy.uniqueCandidateIds,
+    });
+    if (nutrition.ok) {
+      nutritionByCandidateId = nutrition.result.recipesByCandidateId;
+    } else if (nutrition.result?.recipesByCandidateId) {
+      nutritionByCandidateId = nutrition.result.recipesByCandidateId;
+    }
+  }
+
+  // Plate nutrition from CompleteMeal resolutions (USDA when enriched). Role/staple
+  // estimates live inside the coefficient builder — do not prefill demo maps remotely.
+  const fromMeals = buildComponentNutritionByKeyFromCompleteMeals(completeMeals);
+  const componentNutritionByKey: Record<
+    string,
+    { nutrition: import("@fitness-autopilot/contracts").IngredientNutrition; referenceYieldGrams?: number; baseServings?: number }
+  > = {};
+  for (const [key, entry] of Object.entries(fromMeals)) {
+    componentNutritionByKey[key] = {
+      nutrition: entry.nutrition,
+      referenceYieldGrams: entry.referenceYieldGrams,
+      baseServings: entry.baseServings,
+    };
+  }
+
+  if (!nutritionByCandidateId || Object.keys(nutritionByCandidateId).length === 0) {
+    // Offline / failed nutrition: structural main nutrition only for local fallback.
+    const structural = buildLocalDemoNutritionMaps({
+      completeMealsByCandidateId: completeMeals,
+      recipesByCandidateId,
+    });
+    nutritionByCandidateId = structural.nutritionByCandidateId;
+  }
+
+  return personalizeGeneratedPlan({
+    generatedPlanId,
     weekStart,
-    weekEnd: addDaysIso(weekStart, 6),
-    status: "ready",
-    generatedAt: new Date().toISOString(),
-    generationStage: "complete",
+    weekEnd,
     strategy: strategyResult.strategy,
     conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
     recipesByCandidateId,
-    meals,
-  };
+    completeMeals,
+    nutritionByCandidateId,
+    componentNutritionByKey,
+    nutritionTarget: apis.nutritionTarget,
+    generatedAt,
+  });
 }
 
 export async function generateConsumerWeeklyPlan(
@@ -303,7 +510,7 @@ export async function generateConsumerWeeklyPlan(
   const weekStart = startOfWeekMonday();
   try {
     const plan = apis.useLocalMode
-      ? await buildLocalDemoPlan(onProgress)
+      ? await buildLocalDemoPlan(apis, onProgress)
       : await buildRemotePlan(apis, onProgress);
     return { ok: true, plan };
   } catch (error) {

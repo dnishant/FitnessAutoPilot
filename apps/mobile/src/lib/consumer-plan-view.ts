@@ -43,6 +43,10 @@ export const GENERATION_STAGE_COPY: Record<
     label: "Finalizing recipes",
     doneLabel: "Finalizing recipes",
   },
+  personalizing_portions: {
+    label: "Personalizing your portions",
+    doneLabel: "Personalizing your portions",
+  },
   complete: {
     label: "Your week is ready",
     doneLabel: "Your week is ready",
@@ -55,6 +59,7 @@ export const GENERATION_STAGE_ORDER: ConsumerPlanGenerationStage[] = [
   "building_complete_meals",
   "creating_week",
   "finalizing_recipes",
+  "personalizing_portions",
   "complete",
 ];
 
@@ -225,7 +230,8 @@ export function buildConsumerMealsFromStrategy(input: {
             ].filter(Boolean)
           : undefined,
         components: componentsFromConcept(concept, slot.name),
-        // personalizedNutrition intentionally omitted until PLAN-010
+        mealInstanceId: undefined,
+        // personalizedNutrition applied by PLAN-010 personalizeWeeklyNutritionPlan
       });
     }
   }

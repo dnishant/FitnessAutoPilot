@@ -44,12 +44,14 @@ import type {
   WeeklyMealConceptResult,
   ConsumerWeeklyPlan,
   ConsumerPlanGenerationStage,
+  DayOfWeek,
 } from "@fitness-autopilot/contracts";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   completeOnboarding as completeOnboardingDomain,
   composeMealConcepts as composeMealConceptsDomain,
   MockMealCompositionProvider,
+  applyDiscretePortionAdjustment,
 } from "@fitness-autopilot/domain";
 import { supabase, useLocalPlanner } from "../lib/supabase";
 import {
@@ -128,6 +130,12 @@ type SessionValue = {
     | { ok: false; error: string; plan: ConsumerWeeklyPlan }
   >;
   clearWeeklyPlan: () => Promise<void>;
+  adjustDiscreteMealComponent: (input: {
+    day: DayOfWeek;
+    mealType: "lunch" | "dinner";
+    componentId: string;
+    amount: number;
+  }) => Promise<{ ok: true } | { ok: false; error: string }>;
   signIn: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signUp: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
   signOut: () => Promise<void>;
@@ -534,6 +542,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       weeklyPlan,
       async clearWeeklyPlan() {
         await persistWeeklyPlan(null);
+      },
+      async adjustDiscreteMealComponent({ day, mealType, componentId, amount }) {
+        const plan = weeklyPlan;
+        if (!plan?.meals?.length) return { ok: false as const, error: "No weekly plan loaded." };
+        const index = plan.meals.findIndex((m) => m.day === day && m.mealType === mealType);
+        if (index < 0) return { ok: false as const, error: "Meal not found on this plan." };
+        const current = plan.meals[index]!;
+        const nextMeal = applyDiscretePortionAdjustment({
+          meal: current,
+          componentId,
+          amount,
+        });
+        if (!nextMeal) {
+          return { ok: false as const, error: "That portion cannot be adjusted." };
+        }
+        const meals = plan.meals.slice();
+        meals[index] = nextMeal;
+        await persistWeeklyPlan({ ...plan, meals });
+        return { ok: true as const };
       },
       async signIn(email, password) {
         if (useLocalPlanner) {
@@ -1311,7 +1338,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           }
           return {
             ok: true,
-            concepts: result.concepts,
+            concepts: result.concepts!,
             meta: result.meta,
           };
         } catch (e) {
@@ -1343,6 +1370,65 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             composeMealConcepts: api.composeMealConcepts,
             generateRankedWeeklyStrategy: api.generateRankedWeeklyStrategy,
             resolveWeeklyRecipes: api.resolveWeeklyRecipes,
+            resolveRecipeNutrition: api.resolveRecipeNutrition,
+            resolveSelectedCompleteMeals: async (input) => {
+              try {
+                if (useLocalPlanner) {
+                  return {
+                    ok: false,
+                    error: "Selected resolution uses local domain path in local planner mode.",
+                  };
+                }
+                if (!supabase || !user) {
+                  return { ok: false, error: "Not signed in" };
+                }
+                const client = supabase;
+                const result = await invokeComposeMeals(
+                  async (functionName, options) => {
+                    const invoked = await client.functions.invoke(functionName, {
+                      body: options.body,
+                    });
+                    return {
+                      data: invoked.data,
+                      error: invoked.error
+                        ? {
+                            message: invoked.error.message,
+                            context:
+                              "context" in invoked.error
+                                ? (invoked.error as { context?: unknown }).context
+                                : undefined,
+                          }
+                        : null,
+                    };
+                  },
+                  {
+                    stage: "selected_resolution",
+                    mealConcepts: input.mealConcepts,
+                    selectedCandidateIds: input.selectedCandidateIds,
+                    recipes: input.recipes,
+                    targetCalories: input.targetCalories,
+                    resolveAddedComponents: true,
+                  },
+                );
+                if (!result.ok) {
+                  return {
+                    ok: false,
+                    error: result.error.message,
+                    code: result.error.code,
+                  };
+                }
+                if (!result.composition) {
+                  return { ok: false, error: "Selected resolution returned no complete meals." };
+                }
+                return { ok: true, result: result.composition };
+              } catch (e) {
+                return {
+                  ok: false,
+                  error:
+                    e instanceof Error ? e.message : "Failed to resolve selected complete meals",
+                };
+              }
+            },
           },
           async (stage: ConsumerPlanGenerationStage) => {
             await persistWeeklyPlan({

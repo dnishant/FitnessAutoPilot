@@ -300,7 +300,9 @@ describe("generation UX helpers", () => {
     expect(result.plan.meals?.length).toBe(14);
     const tikka = result.plan.meals?.find((m) => m.candidateId === "tikka-chicken");
     expect(tikka?.components.length).toBeGreaterThan(1);
-    expect(tikka?.personalizedNutrition).toBeUndefined();
+    expect(tikka?.personalizedNutrition?.caloriesKcal).toBeGreaterThan(0);
+    expect(tikka?.components.some((c) => c.amount != null)).toBe(true);
+    expect(result.plan.personalizedWeeklyPlan?.generatedPlanId).toBeTruthy();
     expect(result.plan.groceryList).toBeUndefined();
   }, 15000);
 });
