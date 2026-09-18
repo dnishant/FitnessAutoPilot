@@ -12,8 +12,11 @@ import {
 
 /**
  * Local-planner / offline demo nutrition only.
- * Meal-name agnostic role coefficients — NOT a production USDA substitute.
- * Production Generate My Plan must use resolve-recipe-nutrition + plate nutrition.
+ * Meal-name agnostic role coefficients — NOT a production substitute.
+ *
+ * WARNING: `main` uses lean-chicken macros (~42.5g protein / 170g).
+ * Never use this for remote Generate My Plan — it inflates protein on
+ * rice/veg/yogurt dishes (e.g. curd rice showing ~50g protein).
  */
 
 function nutritionForGrams(

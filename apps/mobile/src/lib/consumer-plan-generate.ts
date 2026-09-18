@@ -497,12 +497,13 @@ async function buildRemotePlan(
   }
 
   if (Object.keys(nutritionByCandidateId).length === 0) {
-    // Last-resort structural maps when neither LLM nor USDA nutrition is available.
-    const structural = buildLocalDemoNutritionMaps({
-      completeMealsByCandidateId: completeMeals,
-      recipesByCandidateId,
-    });
-    nutritionByCandidateId = structural.nutritionByCandidateId;
+    // Do NOT fall back to role-structural "lean chicken" mains for remote plans.
+    // That path was assigning ~42g protein / serving to every dish (including curd rice),
+    // which inflated protein across the week. Prefer blocked meals over fake macros.
+    console.warn(
+      "[consumer-plan-generate] No recipe.nutrition (llm_estimate) on resolved recipes; " +
+        "skipping structural chicken fallback. Meals without trusted nutrition will be blocked.",
+    );
   }
 
   return personalizeGeneratedPlan({
