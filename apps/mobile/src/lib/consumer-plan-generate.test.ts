@@ -75,6 +75,15 @@ describe("PLAN-010/011 consumer generation orchestration", () => {
     expect(sample.mealInstanceId).toContain(result.plan.generatedPlanId!);
     // No fixture meal-name gate — whatever the strategy selected is personalized.
     expect(sample.name.length).toBeGreaterThan(0);
+    // PLAN-012: grocery list derived from finalized plan (no fixtures / no LLM).
+    expect(result.plan.groceryList?.available).toBe(true);
+    expect(result.plan.groceryList?.aggregationPolicyVersion).toBe(
+      "grocery-aggregation-policy-v1",
+    );
+    expect(result.plan.groceryList?.generatedPlanId).toBe(result.plan.generatedPlanId);
+    const groceryItems = result.plan.groceryList!.sections.flatMap((s) => s.items);
+    expect(groceryItems.length).toBeGreaterThan(0);
+    expect(result.plan.groceryList?.diagnostics?.droppedRequirementCount).toBe(0);
   });
 
   it("does not leak Plan A instance ids into a second generation", async () => {

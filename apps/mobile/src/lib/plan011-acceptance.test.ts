@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { generateConsumerWeeklyPlan } from "./consumer-plan-generate";
 import type { PlanGenerationApis } from "./consumer-plan-generate";
-import { formatValidationReportForDiagnostics } from "@fitness-autopilot/domain";
+import {
+  formatGroceryListDiagnostics,
+  formatValidationReportForDiagnostics,
+} from "@fitness-autopilot/domain";
 
-describe("PLAN-011 fresh local acceptance", () => {
-  it("finalizes a local Generate My Plan week and reports day/week nutrition", async () => {
+describe("PLAN-011/012 fresh local acceptance", () => {
+  it("finalizes a local Generate My Plan week and derives groceries", async () => {
     const apis: PlanGenerationApis = {
       useLocalMode: true,
       nutritionTarget: {
@@ -59,7 +62,7 @@ describe("PLAN-011 fresh local acceptance", () => {
       const abs = Math.abs(day.deviations?.calorieDeltaPct ?? 0);
       if (abs <= 0.05) preferredCal += 1;
       else if (abs <= 0.1) acceptableCal += 1;
-      else outsideHard += 1; // may still finalize via best_feasible extended band
+      else outsideHard += 1;
 
       const proRatio =
         day.target.proteinGrams > 0
@@ -68,6 +71,22 @@ describe("PLAN-011 fresh local acceptance", () => {
       if (proRatio >= 0.95) preferredPro += 1;
       if (proRatio >= 0.9) hardPro += 1;
     }
+
+    const grocery = result.plan.groceryList;
+    expect(grocery?.available).toBe(true);
+    expect(grocery?.aggregationPolicyVersion).toBe("grocery-aggregation-policy-v1");
+    expect(grocery?.diagnostics?.droppedRequirementCount).toBe(0);
+    expect(grocery?.diagnostics?.duplicateRequirementCount).toBe(0);
+    const groceryItems = grocery!.sections.flatMap((s) => s.items);
+    expect(groceryItems.length).toBeGreaterThan(0);
+    expect(
+      groceryItems.every(
+        (item) =>
+          item.provenance.length > 0 ||
+          item.sourceRecipeIds.length > 0 ||
+          item.sourceMealInstanceIds.length > 0,
+      ),
+    ).toBe(true);
 
     console.log("\n=== PLAN-011 ACCEPTANCE ===");
     console.log(formatValidationReportForDiagnostics(report));
@@ -84,6 +103,23 @@ describe("PLAN-011 fresh local acceptance", () => {
           warnings: report.warningCount,
           repairs: report.repairAttempts,
           finalStatus: report.status,
+        },
+        null,
+        2,
+      ),
+    );
+    console.log("\n=== PLAN-012 GROCERY ===");
+    console.log(formatGroceryListDiagnostics(grocery!));
+    console.log(
+      JSON.stringify(
+        {
+          itemCount: groceryItems.length,
+          sourceRequirements: grocery!.diagnostics?.sourceIngredientRequirementCount,
+          aggregated: grocery!.diagnostics?.aggregatedItemCount,
+          dropped: grocery!.diagnostics?.droppedRequirementCount,
+          duplicates: grocery!.diagnostics?.duplicateRequirementCount,
+          excludedNonPurchased: grocery!.diagnostics?.excludedNonPurchasedCount,
+          incompatibleLines: grocery!.diagnostics?.incompatibleQuantityLineCount,
         },
         null,
         2,

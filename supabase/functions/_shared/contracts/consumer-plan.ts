@@ -126,7 +126,10 @@ export const ConsumerWeeklyPlanSchema = z.object({
    * Never shown raw to consumers.
    */
   validationReport: z.custom<WeeklyPlanValidationReport>().optional(),
-  /** Grocery aggregation is future — usually absent / unavailable. */
+  /**
+   * PLAN-012 grocery list derived from the finalized personalized plan.
+   * Absent until finalization succeeds; never invent quantities in the client.
+   */
   groceryList: GroceryListSchema.optional(),
 });
 
