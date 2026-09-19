@@ -640,10 +640,10 @@ describe("recipe nutrition service", () => {
       recipes: [recipe, recipe, recipe],
       uniqueCandidateIds: ["tikka-chicken"],
       resolver,
-      slotCount: 14,
+      slotCount: 12,
     });
     expect(weekly.recipeCount).toBe(1);
-    expect(weekly.slotCount).toBe(14);
+    expect(weekly.slotCount).toBe(12);
     expect(provider.searchCalls).toBe(1);
   });
 });

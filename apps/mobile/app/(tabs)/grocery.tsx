@@ -147,11 +147,11 @@ export default function GroceryTabScreen() {
         subtitle={
           available && totalCount > 0
             ? allComplete
-              ? "All set for this week"
-              : `${readyCount} of ${totalCount} items ready`
+              ? "All set · 4 meals · 12 portions · 6 days"
+              : `${readyCount} of ${totalCount} items · 4 meals · 12 portions · 6 days`
             : weeklyPlan?.status === "ready"
-              ? "Building your list…"
-              : undefined
+              ? "Building your list for 4 meals · 12 portions · 6 days…"
+              : "From your 4-meal · 12-portion · 6-day plan"
         }
       />
 

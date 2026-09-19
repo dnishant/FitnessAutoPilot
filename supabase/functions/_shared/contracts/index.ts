@@ -21,4 +21,6 @@ export * from "./ranked-weekly-strategy.ts";
 export * from "./plan.ts";
 export * from "./grocery.ts";
 export * from "./consumer-plan.ts";
+export * from "./ingredient-economy.ts";
+export * from "./v1-meal-prep.ts";
 export * from "./api.ts";

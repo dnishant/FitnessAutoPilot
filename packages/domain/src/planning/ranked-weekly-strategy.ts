@@ -21,6 +21,10 @@ import {
   PrepIntentSchema,
   RANKED_WEEKLY_STRATEGY_PROMPT_VERSION,
   RankedWeeklyStrategyRequestSchema,
+  V1_CORE_MEAL_COUNT,
+  V1_COVERED_DAY_COUNT,
+  V1_COVERED_DAYS,
+  V1_FLEXIBLE_DAY_DEFAULT,
   WEEKLY_VARIETY_COMPLEXITY_POLICY,
   WEEK_DAYS,
   getWeeklyVarietyComplexityPolicy,
@@ -65,7 +69,7 @@ export type RankedWeeklyStrategyError = {
 
 /**
  * Provider-independent PLAN-007 weekly strategist.
- * One call produces seven lunches + seven dinners from ranked candidate IDs.
+ * One call produces six covered days of lunch+dinner (12 slots) from a four-meal repertoire.
  * Must not invent dishes or call RecipeGenerator.
  */
 export interface RankedWeeklyStrategyGenerator {
@@ -137,7 +141,7 @@ const VARIETY_GUIDANCE: Record<
     "Use strong strategic repetition.",
     "Prefer a small number of reliable meals repeated across the week.",
     "Avoid unnecessary new cooking workflows.",
-    "Preferred unique candidates for 14 lunch+dinner slots: roughly 5–7 (hard max 8).",
+    "V1: exactly 4 unique core meals across 12 lunch+dinner slots (Simple = more overlap).",
   ].join(" "),
   balanced: [
     "Create noticeable variety without requiring a different recipe for nearly every meal.",
@@ -146,13 +150,13 @@ const VARIETY_GUIDANCE: Record<
     "Space repeats apart when possible.",
     "Do not introduce a new candidate merely to increase variety.",
     "Prefer an intentional repeat over another independent recipe when both would be equally satisfying.",
-    "Preferred unique candidates for 14 lunch+dinner slots: roughly 7–9 (hard max 10).",
+    "V1: exactly 4 unique core meals across 12 lunch+dinner slots (Balanced diversity/overlap).",
   ].join(" "),
   high: [
     "Allow more unique culinary experiences and less repetition.",
     "Accept somewhat higher weekly prep complexity in exchange for variety,",
     "while still avoiding obviously impractical planning.",
-    "Preferred unique candidates for 14 lunch+dinner slots: roughly 9–12 (hard max 13).",
+    "V1: exactly 4 unique core meals across 12 lunch+dinner slots (High = more diversity between the four).",
   ].join(" "),
 };
 
@@ -412,8 +416,8 @@ export function buildRankedWeeklyStrategyPrompt(
   const systemInstruction = [
     "You are Fitness Autopilot's weekly meal strategy planner (PLAN-007 / PLAN-007.1).",
     "Select and schedule meal concepts from the supplied ranked culinary candidate pools.",
-    "Return structured JSON matching the schema. One week: Monday through Sunday.",
-    "Plan ONLY lunch and dinner — 7 lunches + 7 dinners. Do not plan breakfast or snacks.",
+    "Return structured JSON matching the schema. One week: Monday through Saturday (Sunday flexible / omitted).",
+    "Plan ONLY lunch and dinner — 6 lunches + 6 dinners (12 slots). Do not plan breakfast or snacks.",
     "",
     "Architecture:",
     "- PLAN-005 discovered these dishes (broad, exciting pool).",
@@ -434,7 +438,7 @@ export function buildRankedWeeklyStrategyPrompt(
     "- Do not cross pools. If the same candidate exists in both pools, it may be used in either pool it was supplied in.",
     "",
     "Week structure:",
-    "- Exactly seven days: monday, tuesday, wednesday, thursday, friday, saturday, sunday.",
+    "- Exactly six covered days: monday, tuesday, wednesday, thursday, friday, saturday (sunday is flexible / omitted).",
     "- Each day appears exactly once and has exactly one lunch and one dinner.",
     "",
     "PRIMARY PLANNING OBJECTIVE:",
@@ -445,13 +449,13 @@ export function buildRankedWeeklyStrategyPrompt(
     "",
     "WEEKLY REPERTOIRE FIRST:",
     "Do not choose meals independently one slot at a time.",
-    "Before assigning Monday–Sunday meals, first mentally choose a compact weekly repertoire from the supplied candidate pools.",
-    `For ${varietyLevel}: prefer ${policy.minPreferredUniqueCandidates}–${policy.maxPreferredUniqueCandidates} unique candidates overall.`,
+    "Before assigning Monday–Saturday meals, first mentally choose a compact weekly repertoire from the supplied candidate pools.",
+    `For ${varietyLevel}: prefer exactly ${policy.minPreferredUniqueCandidates} unique candidates overall.`,
     `Absolute hard maximum: ${policy.maxHardUniqueCandidates} unique candidates.`,
     "The hard maximum is not guidance. A strategy above the hard maximum is INVALID and will be rejected by the server.",
     repertoireSplitNote,
     "Once the repertoire provides sufficient culinary variety, stop adding new dishes.",
-    "Then schedule ONLY from that chosen repertoire across all 14 meal slots.",
+    "Then schedule ONLY from that chosen four-meal repertoire across all 12 lunch/dinner slots.",
     "Repeating a repertoire member is usually preferable to introducing another independent recipe merely for novelty.",
     "",
     "Do not create a restaurant tasting-menu week.",
@@ -467,8 +471,7 @@ export function buildRankedWeeklyStrategyPrompt(
     "Does introducing this meal add enough culinary value to justify another independent prep workflow?",
     "If not, prefer a suitable repeat from the repertoire.",
     "Once the week already has enough culinary diversity, stop adding new dishes simply to increase variety.",
-    "Do not always force the minimum unique count — an eighth candidate may be better than seven when it",
-    "materially improves satisfaction without significant complexity, as long as you stay at or under the hard maximum.",
+    "V1 always uses exactly four unique core meals — optimize which four and how they schedule, not the unique count.",
     "Optimize practicality, not a single counter.",
     "",
     "Priorities, in order:",
@@ -492,7 +495,7 @@ export function buildRankedWeeklyStrategyPrompt(
     "",
     "COMPOSITION COMPLEXITY (diagnostic, not a hard quota):",
     "The unique-main-dish cap still applies.",
-    "Also notice component explosion: a Simple week with 6 mains plus ~18 completely unique sides/sauces can be operationally terrible even if mains stay inside the hard max.",
+    "Also notice component explosion: a Simple week with 4 mains plus ~18 completely unique sides/sauces can be operationally terrible even if mains stay inside the hard max.",
     "Prefer a compact reusable component set over a large collection of unique sides when culinary fit remains good.",
     "Do not invent numeric component quotas. Treat this as a ranking/diagnostic signal.",
     "",
@@ -507,8 +510,8 @@ export function buildRankedWeeklyStrategyPrompt(
     "Operational variety semantics:",
     `- varietyLevel=${varietyLevel}: ${varietyNote}`,
     `- Complexity policy: ${formatComplexityPolicy(policy)}.`,
-    `- Preferred unique range ${policy.minPreferredUniqueCandidates}–${policy.maxPreferredUniqueCandidates} is a soft target.`,
-    `- Exactly at hard max ${policy.maxHardUniqueCandidates} is allowed only when justified.`,
+    `- Preferred unique count is exactly ${policy.minPreferredUniqueCandidates} (V1 fixed repertoire size).`,
+    `- Hard max ${policy.maxHardUniqueCandidates} is REQUIRED — not merely preferred.`,
     `- Above hard max ${policy.maxHardUniqueCandidates} is INVALID.`,
     "- Cuisine count and flavor-family count are NOT hard constraints.",
     "",
@@ -516,7 +519,7 @@ export function buildRankedWeeklyStrategyPrompt(
     "- Variety is culinary experience: cuisineFamily, regionalStyle, flavorFamilies, cookingTechniques, dishFormat, textureTags, experienceTags, primaryProtein.",
     "- Protein change alone is not variety. Chicken Tikka / Paneer Tikka / Fish Tikka should not dominate a week.",
     "- Kerala Meen Pollichathu, Pescado Zarandeado, Pescado a la Veracruzana, and Cajun Blackened Fish MAY coexist — they are different culinary experiences despite all being fish.",
-    "- Goal: strategic repetition + flavor rotation — NOT the same chicken dish every day, and NOT 14 unrelated recipes.",
+    "- Goal: strategic repetition + flavor rotation — NOT the same chicken dish every day, and NOT 12 unrelated recipes.",
     "",
     "Adjacent meal similarity:",
     "- First create a practical repertoire. Then arrange that repertoire to avoid monotonous adjacent meals.",
@@ -607,8 +610,9 @@ export function buildRankedWeeklyStrategyPrompt(
         ].join("\n");
 
   const userPrompt = [
-    "Generate a 7-day lunch+dinner weekly meal strategy by selecting supplied candidate IDs.",
+    "Generate a 6-day lunch+dinner weekly meal strategy by selecting supplied candidate IDs.",
     "Optimize for practical meal-prep complexity first; keep variety sufficient to prevent boredom.",
+    "Use exactly 4 unique core meals across 12 lunch/dinner slots. Sunday is flexible (omit).",
     "",
     "Nutrition (qualitative / contextual only — not per-meal targets):",
     `targetCaloriesPerDay: ${nutrition.targetCaloriesPerDay}`,
@@ -648,7 +652,7 @@ export function buildRankedWeeklyStrategyPrompt(
     "",
     compositionBlock,
     "",
-    "Return exactly seven days with lunch and dinner slots.",
+    "Return exactly six covered days with lunch and dinner slots (omit sunday).",
     "Each slot: candidateId, prepIntent, planningReason; lunch may include lunchPreparationStrategy.",
     "Do not invent candidate IDs. Do not rename dishes. Do not output nutrition fields.",
   ].join("\n");
@@ -723,7 +727,7 @@ export function buildComplexityRetryFeedback(
   const preferredMax = policy.maxPreferredUniqueCandidates;
   const hardMax = policy.maxHardUniqueCandidates;
   return [
-    `Your previous ${varietyLevel} plan used ${evaluation.uniqueCandidateCount} unique candidates across 14 meal slots.`,
+    `Your previous ${varietyLevel} plan used ${evaluation.uniqueCandidateCount} unique candidates across 12 meal slots.`,
     `This violates the ${varietyLevel} hard maximum of ${hardMax} unique candidates and is too complex for once-weekly meal prep.`,
     "Regenerate the week.",
     "First choose a compact weekly repertoire, then schedule only from that repertoire.",
@@ -1170,13 +1174,13 @@ function parseModelPayload(input: unknown): Result<RankedWeeklyModelPayload, Ran
   if (!Array.isArray(record.days)) {
     return err({
       code: "INVALID_WEEK_STRUCTURE",
-      message: "Expected exactly 7 days.",
+      message: `Expected exactly ${V1_COVERED_DAY_COUNT} covered days.`,
     });
   }
-  if (record.days.length !== 7) {
+  if (record.days.length !== V1_COVERED_DAY_COUNT) {
     return err({
       code: "INVALID_WEEK_STRUCTURE",
-      message: `Expected exactly 7 days, received ${record.days.length}.`,
+      message: `Expected exactly ${V1_COVERED_DAY_COUNT} covered days, received ${record.days.length}.`,
     });
   }
 
@@ -1289,17 +1293,23 @@ function validateHydratedWeek(
   const dinnerPool = indexRankedCandidates(request.dinnerCandidates);
   const seenDays = new Set<string>();
 
-  if (days.length !== 7) {
+  if (days.length !== V1_COVERED_DAY_COUNT) {
     return rankedWeeklyStrategyError(
       "INVALID_WEEK_STRUCTURE",
-      `Expected exactly 7 days, received ${days.length}.`,
+      `Expected exactly ${V1_COVERED_DAY_COUNT} covered days, received ${days.length}.`,
     );
   }
 
-  for (const required of WEEK_DAYS) {
+  for (const required of V1_COVERED_DAYS) {
     if (!days.some((day) => day.day === required)) {
-      return rankedWeeklyStrategyError("INVALID_WEEK_STRUCTURE", `Missing day: ${required}.`);
+      return rankedWeeklyStrategyError("INVALID_WEEK_STRUCTURE", `Missing covered day: ${required}.`);
     }
+  }
+  if (days.some((day) => day.day === "sunday")) {
+    return rankedWeeklyStrategyError(
+      "INVALID_WEEK_STRUCTURE",
+      "Sunday is the V1 flexible day and must not have prescribed lunch/dinner slots.",
+    );
   }
 
   let directLeftovers = 0;
@@ -1472,10 +1482,20 @@ export function hydrateRankedWeeklyStrategy(
   const uniqueCandidateIds = [
     ...new Set(collectRankedMealSlots(days).map((slot) => slot.candidateId)),
   ];
+  if (uniqueCandidateIds.length !== V1_CORE_MEAL_COUNT) {
+    return err(
+      rankedWeeklyStrategyError(
+        "EXCESSIVE_WEEKLY_COMPLEXITY",
+        `V1 repertoire must contain exactly ${V1_CORE_MEAL_COUNT} unique core meals; received ${uniqueCandidateIds.length}.`,
+        { uniqueCandidateIds },
+      ),
+    );
+  }
 
   return ok({
     days,
     uniqueCandidateIds,
+    flexibleDay: V1_FLEXIBLE_DAY_DEFAULT,
     strategySummary: payload.strategySummary,
     metadata,
   });

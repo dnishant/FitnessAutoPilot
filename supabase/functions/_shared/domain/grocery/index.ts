@@ -1,5 +1,6 @@
 export * from "./policy.ts";
 export * from "./types.ts";
+export * from "./canonicalize.ts";
 export * from "./identity.ts";
 export * from "./units.ts";
 export * from "./expand.ts";

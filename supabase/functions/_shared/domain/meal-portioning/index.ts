@@ -8,6 +8,7 @@ export * from "./allocation.ts";
 export * from "./coefficients.ts";
 export * from "./reconcile.ts";
 export * from "./personalize.ts";
+export * from "./portion-consistency.ts";
 export * from "./project.ts";
 export * from "./arbitrary-meals.ts";
 export * from "./staple-estimates.ts";

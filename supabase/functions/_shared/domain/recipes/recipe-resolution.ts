@@ -323,7 +323,7 @@ export function buildRecipeResolutionPrompt(
 }
 
 /**
- * Extract unique candidate IDs from a ranked weekly strategy (14 slots → unique set).
+ * Extract unique candidate IDs from a ranked weekly strategy (12 slots → unique set).
  */
 export function getUniqueCandidatesFromWeeklyStrategy(
   strategy: RankedWeeklyStrategy,

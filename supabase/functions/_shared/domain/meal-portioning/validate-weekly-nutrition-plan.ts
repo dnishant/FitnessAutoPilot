@@ -12,7 +12,7 @@ import type {
   ValidationRuleResult,
   WeeklyPlanValidationReport,
 } from "../../contracts/index.ts";
-import { WEEK_DAYS } from "../../contracts/index.ts";
+import { V1_COVERED_DAYS } from "../../contracts/index.ts";
 import { isUnresolvedPlaceholderName } from "../meal-composition/placeholders.ts";
 import { isEdibleFoodIdentity } from "../meal-composition/edible-identity.ts";
 import { isStructuralPortionBlockReason } from "./executability.ts";
@@ -795,7 +795,7 @@ export function validateWeeklyNutritionPlan(input: {
   const ctx = input.generationContext ?? { generatedPlanId: plan.generatedPlanId };
   const validatedAt = ctx.validatedAt ?? new Date().toISOString();
   const repairAttempts = ctx.repairAttempts ?? 0;
-  const expectedDays = ctx.expectedDays ?? WEEK_DAYS;
+  const expectedDays = ctx.expectedDays ?? V1_COVERED_DAYS;
   const completeMeals = ctx.completeMealsByCandidateId ?? {};
 
   const structuralRules: ValidationRuleResult[] = [];

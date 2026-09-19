@@ -1,12 +1,10 @@
 import type { CulinaryMeasurementState } from "@fitness-autopilot/contracts";
-import {
-  inferMeasurementStateHint,
-  normalizeIngredientName,
-} from "../food-resolution/ingredient-key";
+import { canonicalizeGroceryIngredientName } from "./canonicalize";
 
 /**
  * Grocery aggregation identity — NOT nutrition resolution key.
  * Role must not split the same food across grocery rows.
+ * Uses canonicalizeGroceryIngredientName so prep annotations do not fork identity.
  */
 export function buildGroceryIdentityKey(input: {
   canonicalFoodId?: string | null;
@@ -14,17 +12,15 @@ export function buildGroceryIdentityKey(input: {
   measurementState?: CulinaryMeasurementState;
   preparation?: string | null;
 }): string {
-  if (input.canonicalFoodId) {
-    const state = input.measurementState ?? "unknown";
-    return `food:${input.canonicalFoodId}|${state}`;
-  }
-  const normalized = normalizeIngredientName(input.displayName);
-  const state = inferMeasurementStateHint({
-    name: input.displayName,
+  const canonical = canonicalizeGroceryIngredientName({
+    displayName: input.displayName,
     preparation: input.preparation ?? null,
     measurementState: input.measurementState,
   });
-  return `name:${normalized}|${state}`;
+  if (input.canonicalFoodId) {
+    return `food:${input.canonicalFoodId}|${canonical.measurementState}`;
+  }
+  return `name:${canonical.conceptKey}|${canonical.measurementState}`;
 }
 
 export function stableGroceryItemId(identityKey: string): string {

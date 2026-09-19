@@ -61,6 +61,12 @@ import {
 } from "../lib/consumer-plan-view";
 import { generateConsumerWeeklyPlan } from "../lib/consumer-plan-generate";
 import {
+  PLAN_GENERATION_CHECKPOINT_KEY,
+  buildPreferenceFingerprint,
+  parsePlanGenerationCheckpoint,
+  type PlanGenerationCheckpointStore,
+} from "../lib/plan-generation-checkpoint";
+import {
   ensureLocalUser,
   getLocalStore,
   hydrateLocalStore,
@@ -897,6 +903,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         setWeeklyPlan(null);
         try {
           await AsyncStorage.removeItem(CONSUMER_PLAN_STORAGE_KEY);
+          await AsyncStorage.removeItem(PLAN_GENERATION_CHECKPOINT_KEY);
         } catch {
           // ignore
         }
@@ -1603,12 +1610,45 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         } catch {
           // best-effort
         }
+        const checkpointStore: PlanGenerationCheckpointStore = {
+          async load() {
+            try {
+              const raw = await AsyncStorage.getItem(PLAN_GENERATION_CHECKPOINT_KEY);
+              return parsePlanGenerationCheckpoint(raw);
+            } catch {
+              return null;
+            }
+          },
+          async save(checkpoint) {
+            await AsyncStorage.setItem(
+              PLAN_GENERATION_CHECKPOINT_KEY,
+              JSON.stringify(checkpoint),
+            );
+          },
+          async clear() {
+            await AsyncStorage.removeItem(PLAN_GENERATION_CHECKPOINT_KEY);
+          },
+        };
+        const preferenceFingerprint = buildPreferenceFingerprint({
+          nutritionTargetId: nutritionTarget?.id,
+          mealPreferencesUpdatedAt: mealPreferences?.updatedAt,
+          cookingPreferencesUpdatedAt: cookingPreferences?.updatedAt,
+          varietyLevel: mealPreferences?.varietyLevel,
+          cuisines: mealPreferences?.cuisines,
+          allergies: mealPreferences?.allergies,
+          dietaryRestrictions: mealPreferences?.dietaryRestrictions,
+          dislikes: mealPreferences?.dislikes,
+          cookingStyle: cookingPreferences?.cookingStyle,
+          maxFinishMinutes: cookingPreferences?.maxFinishMinutes,
+        });
         const result = await generateConsumerWeeklyPlan(
           {
             useLocalMode: useLocalPlanner,
             nutritionTarget,
             mealPreferences,
             cookingPreferences,
+            checkpointStore,
+            preferenceFingerprint,
             discoverCulinaryCandidates: api.discoverCulinaryCandidates,
             rankCulinaryCandidates: api.rankCulinaryCandidates,
             composeMealConcepts: api.composeMealConcepts,

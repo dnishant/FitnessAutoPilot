@@ -100,30 +100,21 @@ describe("ranked weekly strategy request parsing", () => {
 });
 
 describe("ranked weekly strategy prompt", () => {
-  it("is versioned weekly-strategy-ranked-v1.3.0 and prioritizes repertoire-first practicality", () => {
+  it("is versioned weekly-strategy-ranked-v1.5.0 and prioritizes V1 four-meal repertoire", () => {
     const prompt = buildRankedWeeklyStrategyPrompt(sampleRankedWeeklyStrategyRequest());
-    expect(prompt.version).toBe("weekly-strategy-ranked-v1.3.0");
-    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1.3.0");
+    expect(prompt.version).toBe("weekly-strategy-ranked-v1.5.0");
+    expect(prompt.systemInstruction).toContain("weekly-strategy-ranked-v1.5.0");
     expect(prompt.systemInstruction).toContain("Do NOT invent");
     expect(prompt.systemInstruction).toContain("NO original_concept");
     expect(prompt.systemInstruction).toContain("Do NOT rename, healthify");
-    expect(prompt.systemInstruction).toContain("Variety is a constraint to prevent boredom");
+    expect(prompt.systemInstruction).toMatch(/4 unique|exactly 4/i);
     expect(prompt.systemInstruction).toContain("WEEKLY REPERTOIRE FIRST");
-    expect(prompt.systemInstruction).toContain("schedule ONLY from that chosen repertoire");
-    expect(prompt.systemInstruction).toContain("prefer 7–9 unique candidates overall");
-    expect(prompt.systemInstruction).toContain("Absolute hard maximum: 10 unique candidates");
-    expect(prompt.systemInstruction).toContain(
-      "A strategy above the hard maximum is INVALID and will be rejected by the server",
-    );
-    expect(prompt.systemInstruction).toContain("Above hard max 10 is INVALID");
-    expect(prompt.systemInstruction).toContain("3–4 unique lunch candidates");
-    expect(prompt.systemInstruction).toContain("4–5 unique dinner candidates");
-    expect(prompt.systemInstruction).toContain("LUNCH REPERTOIRE");
+    expect(prompt.systemInstruction).toContain("schedule ONLY from that chosen four-meal repertoire");
+    expect(prompt.systemInstruction).toContain("prefer exactly 4 unique candidates overall");
+    expect(prompt.systemInstruction).toContain("Absolute hard maximum: 4 unique candidates");
+    expect(prompt.systemInstruction).toContain("Above hard max 4 is INVALID");
     expect(prompt.systemInstruction).toContain("fully_prepped");
     expect(prompt.systemInstruction).toContain("component_prepped");
-    expect(prompt.systemInstruction).toContain(
-      "Similarity should affect scheduling of the repertoire",
-    );
     expect(prompt.systemInstruction).toContain(
       "Do not infer piggyback prep merely because two dishes probably contain aromatics",
     );
@@ -135,6 +126,8 @@ describe("ranked weekly strategy prompt", () => {
     expect(prompt.systemInstruction).toContain("COMPLETE MEAL CONCEPTS");
     expect(prompt.systemInstruction).toContain("Ingredient/component reuse is NOT meal repetition");
     expect(prompt.systemInstruction).toContain("Do NOT output calories, protein, carbs, fat, portion grams, or serving sizes");
+    expect(prompt.userPrompt).toContain("Generate a 6-day lunch+dinner");
+    expect(prompt.userPrompt).toContain("exactly 4 unique core meals");
     expect(prompt.userPrompt).not.toContain("caloriesKcal");
     expect(prompt.userPrompt).not.toMatch(/assign (authoritative )?(calories|macros)/i);
   });
@@ -164,25 +157,25 @@ describe("ranked weekly strategy prompt", () => {
 });
 
 describe("ranked weekly strategy validation", () => {
-  it("accepts a valid 7-day lunch+dinner week and hydrates names from candidate IDs", () => {
+  it("accepts a valid 6-day lunch+dinner week and hydrates names from candidate IDs", () => {
     const request = sampleRankedWeeklyStrategyRequest();
     const result = validateRankedWeeklyStrategy(clonePayload(), request, metadata);
     expect(result.ok).toBe(true);
     if (!result.ok) {
       return;
     }
-    expect(result.value.days).toHaveLength(7);
+    expect(result.value.days).toHaveLength(6);
     const slots = collectRankedMealSlots(result.value.days);
-    expect(slots).toHaveLength(14);
-    expect(slots.filter((slot) => slot.mealType === "lunch")).toHaveLength(7);
-    expect(slots.filter((slot) => slot.mealType === "dinner")).toHaveLength(7);
+    expect(slots).toHaveLength(12);
+    expect(slots.filter((slot) => slot.mealType === "lunch")).toHaveLength(6);
+    expect(slots.filter((slot) => slot.mealType === "dinner")).toHaveLength(6);
     expect(result.value.days[0]?.lunch.name).toBe("Andhra Green Chilli Chicken");
     expect(result.value.days[0]?.lunch.candidateId).toBe("andhra-green-chilli-chicken");
-    expect(result.value.uniqueCandidateIds.length).toBeGreaterThan(0);
-    expect(result.value.uniqueCandidateIds.length).toBeLessThan(14);
+    expect(result.value.uniqueCandidateIds).toHaveLength(4);
+    expect(result.value.flexibleDay).toBe("sunday");
   });
 
-  it("allows repeated candidates and does not require 14 unique recipes", () => {
+  it("allows repeated candidates and requires exactly 4 unique recipes", () => {
     const result = validateRankedWeeklyStrategy(
       clonePayload(),
       sampleRankedWeeklyStrategyRequest(),
@@ -192,11 +185,11 @@ describe("ranked weekly strategy validation", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.uniqueCandidateIds.length).toBeLessThan(14);
+    expect(result.value.uniqueCandidateIds).toHaveLength(4);
     const andhraLunches = result.value.days.filter(
       (day) => day.lunch.candidateId === "andhra-green-chilli-chicken",
     );
-    expect(andhraLunches.length).toBe(2);
+    expect(andhraLunches.length).toBe(3);
   });
 
   it("accepts a valid week from a small pool via repetition", () => {
@@ -209,14 +202,12 @@ describe("ranked weekly strategy validation", () => {
       ...day,
       lunch: {
         ...day.lunch,
-        candidateId: PLAN007_SMALL_LUNCH_POOL[index % PLAN007_SMALL_LUNCH_POOL.length]!.candidate
-          .candidateId,
+        candidateId: PLAN007_SMALL_LUNCH_POOL[index % 2]!.candidate.candidateId,
         lunchPreparationStrategy: "independent_meal_prep" as const,
       },
       dinner: {
         ...day.dinner,
-        candidateId: PLAN007_SMALL_DINNER_POOL[index % PLAN007_SMALL_DINNER_POOL.length]!.candidate
-          .candidateId,
+        candidateId: PLAN007_SMALL_DINNER_POOL[index % 2]!.candidate.candidateId,
         prepIntent: "fully_prepped" as const,
       },
     }));
@@ -225,13 +216,13 @@ describe("ranked weekly strategy validation", () => {
     if (!result.ok) {
       return;
     }
-    expect(result.value.days).toHaveLength(7);
-    expect(result.value.uniqueCandidateIds.length).toBeLessThanOrEqual(9);
+    expect(result.value.days).toHaveLength(6);
+    expect(result.value.uniqueCandidateIds).toHaveLength(4);
   });
 
-  it("rejects a week that is not exactly 7 days", () => {
+  it("rejects a week that is not exactly 6 covered days", () => {
     const payload = clonePayload();
-    payload.days = payload.days.slice(0, 6);
+    payload.days = payload.days.slice(0, 5);
     const result = validateRankedWeeklyStrategy(
       payload,
       sampleRankedWeeklyStrategyRequest(),
@@ -240,7 +231,7 @@ describe("ranked weekly strategy validation", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error.code).toBe("INVALID_WEEK_STRUCTURE");
-      expect(result.error.message).toMatch(/7 days/i);
+      expect(result.error.message).toMatch(/6 covered days/i);
     }
   });
 
@@ -293,11 +284,11 @@ describe("ranked weekly strategy validation", () => {
     expect(MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK).toBe(1);
     const payload = clonePayload();
     // Saturday lunch is already a leftover of Friday dinner. Add a second leftover
-    // using a dish present in both pools.
-    payload.days[5]!.dinner.candidateId = "thai-green-curry";
-    payload.days[5]!.dinner.prepIntent = "component_prepped";
-    payload.days[6]!.lunch.candidateId = "thai-green-curry";
-    payload.days[6]!.lunch.lunchPreparationStrategy = "direct_leftover";
+    // Wed→Thu using a dish present in both pools.
+    payload.days[2]!.dinner.candidateId = "thai-green-curry";
+    payload.days[2]!.dinner.prepIntent = "component_prepped";
+    payload.days[3]!.lunch.candidateId = "thai-green-curry";
+    payload.days[3]!.lunch.lunchPreparationStrategy = "direct_leftover";
     const result = validateRankedWeeklyStrategy(
       payload,
       sampleRankedWeeklyStrategyRequest(),
@@ -373,12 +364,12 @@ describe("ranked weekly strategy quality stats", () => {
       return;
     }
     const stats = calculateRankedWeeklyStrategyQualityStats(validated.value, request);
-    expect(stats.totalMealSlots).toBe(14);
+    expect(stats.totalMealSlots).toBe(12);
     expect(stats.uniqueCandidateCount).toBe(validated.value.uniqueCandidateIds.length);
-    expect(stats.uniqueCandidateCount).toBe(8);
-    expect(stats.uniqueLunchCandidateCount).toBe(4);
-    expect(stats.uniqueDinnerCandidateCount).toBe(5);
-    expect(stats.repeatedMealSlotCount).toBe(14 - stats.uniqueCandidateCount);
+    expect(stats.uniqueCandidateCount).toBe(4);
+    expect(stats.uniqueLunchCandidateCount).toBe(3);
+    expect(stats.uniqueDinnerCandidateCount).toBe(2);
+    expect(stats.repeatedMealSlotCount).toBe(12 - stats.uniqueCandidateCount);
     expect(stats.uniqueCuisineCount).toBeGreaterThan(1);
     expect(stats.uniqueProteinCount).toBeGreaterThan(1);
     expect(stats.uniqueCookingTechniqueCount).toBeGreaterThan(0);
@@ -386,19 +377,20 @@ describe("ranked weekly strategy quality stats", () => {
     expect(stats.fullyPreppedUniqueCandidateCount).toBeGreaterThan(0);
     expect(stats.directLeftoverLunchCount).toBe(1);
     expect(stats.piggybackLunchCount).toBe(1);
-    expect(stats.independentLunchCount).toBe(5);
+    expect(stats.independentLunchCount).toBe(4);
     expect(stats.complexityStatus).toBe("within_preferred_range");
-    expect(stats.preferredUniqueCandidateRange).toEqual({ min: 7, max: 9 });
-    expect(stats.hardMaxUniqueCandidates).toBe(10);
+    expect(stats.preferredUniqueCandidateRange).toEqual({ min: 4, max: 4 });
+    expect(stats.hardMaxUniqueCandidates).toBe(4);
     expect(stats.candidateUsage.length).toBe(stats.uniqueCandidateCount);
     expect(stats.averageCandidateRank).toBeGreaterThan(0);
     const andhraUsage = stats.candidateUsage.find(
       (item) => item.candidateId === "andhra-green-chilli-chicken",
     );
-    expect(andhraUsage?.count).toBe(2);
+    expect(andhraUsage?.count).toBe(3);
     expect(andhraUsage?.slots).toEqual([
       { day: "monday", mealType: "lunch" },
-      { day: "thursday", mealType: "lunch" },
+      { day: "wednesday", mealType: "lunch" },
+      { day: "friday", mealType: "lunch" },
     ]);
   });
 
@@ -515,7 +507,7 @@ describe("ranked weekly strategy quality stats", () => {
       return;
     }
     const pairs = collectAdjacentMealPairs(validated.value.days);
-    expect(pairs).toHaveLength(13);
+    expect(pairs).toHaveLength(11);
     expect(pairs[0]?.left.mealType).toBe("lunch");
     expect(pairs[0]?.right.mealType).toBe("dinner");
     expect(pairs[1]?.left.day).toBe("monday");
@@ -547,90 +539,60 @@ describe("ranked weekly strategy quality stats", () => {
 });
 
 describe("weekly variety complexity policy", () => {
-  it("centralizes simple/balanced/high preferred and hard ranges", () => {
+  it("centralizes V1 fixed 4-meal unique bands for every variety level", () => {
     expect(WEEKLY_VARIETY_COMPLEXITY_POLICY).toEqual({
       simple: {
-        minPreferredUniqueCandidates: 5,
-        maxPreferredUniqueCandidates: 7,
-        maxHardUniqueCandidates: 8,
+        minPreferredUniqueCandidates: 4,
+        maxPreferredUniqueCandidates: 4,
+        maxHardUniqueCandidates: 4,
         minPreferredUniqueLunchCandidates: 2,
-        maxPreferredUniqueLunchCandidates: 3,
-        minPreferredUniqueDinnerCandidates: 3,
+        maxPreferredUniqueLunchCandidates: 4,
+        minPreferredUniqueDinnerCandidates: 2,
         maxPreferredUniqueDinnerCandidates: 4,
       },
       balanced: {
-        minPreferredUniqueCandidates: 7,
-        maxPreferredUniqueCandidates: 9,
-        maxHardUniqueCandidates: 10,
-        minPreferredUniqueLunchCandidates: 3,
+        minPreferredUniqueCandidates: 4,
+        maxPreferredUniqueCandidates: 4,
+        maxHardUniqueCandidates: 4,
+        minPreferredUniqueLunchCandidates: 2,
         maxPreferredUniqueLunchCandidates: 4,
-        minPreferredUniqueDinnerCandidates: 4,
-        maxPreferredUniqueDinnerCandidates: 5,
+        minPreferredUniqueDinnerCandidates: 2,
+        maxPreferredUniqueDinnerCandidates: 4,
       },
       high: {
-        minPreferredUniqueCandidates: 9,
-        maxPreferredUniqueCandidates: 12,
-        maxHardUniqueCandidates: 13,
-        minPreferredUniqueLunchCandidates: 4,
-        maxPreferredUniqueLunchCandidates: 5,
-        minPreferredUniqueDinnerCandidates: 5,
-        maxPreferredUniqueDinnerCandidates: 6,
+        minPreferredUniqueCandidates: 4,
+        maxPreferredUniqueCandidates: 4,
+        maxHardUniqueCandidates: 4,
+        minPreferredUniqueLunchCandidates: 3,
+        maxPreferredUniqueLunchCandidates: 4,
+        minPreferredUniqueDinnerCandidates: 3,
+        maxPreferredUniqueDinnerCandidates: 4,
       },
     });
-    expect(getWeeklyVarietyComplexityPolicy("balanced").maxHardUniqueCandidates).toBe(10);
+    expect(getWeeklyVarietyComplexityPolicy("balanced").maxHardUniqueCandidates).toBe(4);
   });
 
-  it("classifies Balanced boundaries: 8/9 within, 10 above, 11+ excessive", () => {
+  it("classifies V1 Balanced boundaries: 4 within, 5+ excessive (preferred==hard)", () => {
     const policy = getWeeklyVarietyComplexityPolicy("balanced");
-    expect(classifyWeeklyComplexityStatus(8, policy)).toBe("within_preferred_range");
-    expect(classifyWeeklyComplexityStatus(9, policy)).toBe("within_preferred_range");
-    expect(classifyWeeklyComplexityStatus(10, policy)).toBe("above_preferred_range");
-    expect(classifyWeeklyComplexityStatus(11, policy)).toBe("excessive");
+    expect(classifyWeeklyComplexityStatus(4, policy)).toBe("within_preferred_range");
+    // When preferred max equals hard max, anything above 4 is excessive.
+    expect(classifyWeeklyComplexityStatus(5, policy)).toBe("excessive");
   });
 
-  it("classifies Simple and High analogous boundaries", () => {
+  it("classifies Simple and High with the same unique-meal hard max of 4", () => {
     const simple = getWeeklyVarietyComplexityPolicy("simple");
-    expect(classifyWeeklyComplexityStatus(7, simple)).toBe("within_preferred_range");
-    expect(classifyWeeklyComplexityStatus(8, simple)).toBe("above_preferred_range");
-    expect(classifyWeeklyComplexityStatus(9, simple)).toBe("excessive");
+    expect(classifyWeeklyComplexityStatus(4, simple)).toBe("within_preferred_range");
+    expect(classifyWeeklyComplexityStatus(5, simple)).toBe("excessive");
 
     const high = getWeeklyVarietyComplexityPolicy("high");
-    expect(classifyWeeklyComplexityStatus(12, high)).toBe("within_preferred_range");
-    expect(classifyWeeklyComplexityStatus(13, high)).toBe("above_preferred_range");
-    expect(classifyWeeklyComplexityStatus(14, high)).toBe("excessive");
+    expect(classifyWeeklyComplexityStatus(4, high)).toBe("within_preferred_range");
+    expect(classifyWeeklyComplexityStatus(5, high)).toBe("excessive");
   });
 
-  it("evaluates complexity stats for Balanced acceptance bands", () => {
-    const request = sampleRankedWeeklyStrategyRequest();
-    for (const [uniqueCount, status] of [
-      [8, "within_preferred_range"],
-      [9, "within_preferred_range"],
-      [10, "above_preferred_range"],
-      [11, "excessive"],
-    ] as const) {
-      const validated = validateRankedWeeklyStrategy(
-        sampleRankedWeekPayloadWithUniqueCount(uniqueCount),
-        request,
-        metadata,
-      );
-      expect(validated.ok).toBe(true);
-      if (!validated.ok) {
-        continue;
-      }
-      const evaluation = evaluateWeeklyComplexity(validated.value, request);
-      expect(evaluation.uniqueCandidateCount).toBe(uniqueCount);
-      expect(evaluation.status).toBe(status);
-      const stats = calculateRankedWeeklyStrategyQualityStats(validated.value, request);
-      expect(stats.complexityStatus).toBe(status);
-      expect(stats.uniqueLunchCandidateCount).toBeGreaterThan(0);
-      expect(stats.uniqueDinnerCandidateCount).toBeGreaterThan(0);
-    }
-  });
-
-  it("builds corrective retry feedback for excessive weeks", () => {
+  it("evaluates complexity stats for a valid V1 4-unique week", () => {
     const request = sampleRankedWeeklyStrategyRequest();
     const validated = validateRankedWeeklyStrategy(
-      sampleRankedWeekPayloadWithUniqueCount(13),
+      sampleRankedWeekPayloadWithUniqueCount(4),
       request,
       metadata,
     );
@@ -639,14 +601,47 @@ describe("weekly variety complexity policy", () => {
       return;
     }
     const evaluation = evaluateWeeklyComplexity(validated.value, request);
-    expect(evaluation.status).toBe("excessive");
-    const feedback = buildComplexityRetryFeedback(request, evaluation);
-    expect(feedback).toContain("13 unique candidates");
+    expect(evaluation.uniqueCandidateCount).toBe(4);
+    expect(evaluation.status).toBe("within_preferred_range");
+    const stats = calculateRankedWeeklyStrategyQualityStats(validated.value, request);
+    expect(stats.complexityStatus).toBe("within_preferred_range");
+    expect(stats.uniqueLunchCandidateCount).toBeGreaterThan(0);
+    expect(stats.uniqueDinnerCandidateCount).toBeGreaterThan(0);
+  });
+
+  it("rejects hydrate for weeks with more than 4 unique candidates", () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    const validated = validateRankedWeeklyStrategy(
+      sampleRankedWeekPayloadWithUniqueCount(5),
+      request,
+      metadata,
+    );
+    expect(validated.ok).toBe(false);
+    if (!validated.ok) {
+      expect(validated.error.code).toBe("EXCESSIVE_WEEKLY_COMPLEXITY");
+      expect(validated.error.message).toMatch(/exactly 4 unique/i);
+    }
+  });
+
+  it("builds corrective retry feedback with V1 4-unique bands", () => {
+    const request = sampleRankedWeeklyStrategyRequest();
+    const validated = validateRankedWeeklyStrategy(clonePayload(), request, metadata);
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    const evaluation = evaluateWeeklyComplexity(validated.value, request);
+    const excessive = {
+      ...evaluation,
+      uniqueCandidateCount: 5,
+      status: "excessive" as const,
+    };
+    const feedback = buildComplexityRetryFeedback(request, excessive);
+    expect(feedback).toContain("5 unique candidates");
+    expect(feedback).toContain("12 meal slots");
     expect(feedback).toContain("compact weekly repertoire");
-    expect(feedback).toContain("Preferred: 7–9 unique candidates total");
-    expect(feedback).toContain("Absolute maximum: 10 unique candidates total");
-    expect(feedback).toContain("3–4 unique lunch candidates");
-    expect(feedback).toContain("4–5 unique dinner candidates");
+    expect(feedback).toContain("Preferred: 4–4 unique candidates total");
+    expect(feedback).toContain("Absolute maximum: 4 unique candidates total");
+    expect(feedback).toContain("2–4 unique lunch candidates");
+    expect(feedback).toContain("2–4 unique dinner candidates");
     expect(feedback).toContain("Increase strategic repetition");
   });
 
@@ -666,8 +661,8 @@ describe("weekly variety complexity policy", () => {
     const dinnerRepeats = result.value.days.filter(
       (day) => day.dinner.candidateId === "kerala-meen-pollichathu",
     );
-    expect(lunchRepeats.length).toBe(2);
-    expect(dinnerRepeats.length).toBe(2);
+    expect(lunchRepeats.length).toBe(3);
+    expect(dinnerRepeats.length).toBe(3);
   });
 
   it("builds a compact complexity retry prompt from the prior week schedule", () => {

@@ -8,25 +8,27 @@ import {
 import { MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK } from "./cooking-preferences";
 
 describe("ranked weekly strategy contracts", () => {
-  it("versions the PLAN-007.1 prompt, leftover policy, and complexity bands", () => {
-    expect(RANKED_WEEKLY_STRATEGY_PROMPT_VERSION).toBe("weekly-strategy-ranked-v1.3.0");
+  it("versions the V1 meal-prep prompt, leftover policy, and fixed 4-meal bands", () => {
+    expect(RANKED_WEEKLY_STRATEGY_PROMPT_VERSION).toBe("weekly-strategy-ranked-v1.5.0");
     expect(MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK).toBe(1);
+    // V1: every variety level uses exactly 4 unique core meals.
     expect(WEEKLY_VARIETY_COMPLEXITY_POLICY.simple).toMatchObject({
-      minPreferredUniqueCandidates: 5,
-      maxPreferredUniqueCandidates: 7,
-      maxHardUniqueCandidates: 8,
+      minPreferredUniqueCandidates: 4,
+      maxPreferredUniqueCandidates: 4,
+      maxHardUniqueCandidates: 4,
     });
     expect(WEEKLY_VARIETY_COMPLEXITY_POLICY.balanced).toMatchObject({
-      minPreferredUniqueCandidates: 7,
-      maxPreferredUniqueCandidates: 9,
-      maxHardUniqueCandidates: 10,
+      minPreferredUniqueCandidates: 4,
+      maxPreferredUniqueCandidates: 4,
+      maxHardUniqueCandidates: 4,
     });
     expect(WEEKLY_VARIETY_COMPLEXITY_POLICY.high).toMatchObject({
-      minPreferredUniqueCandidates: 9,
-      maxPreferredUniqueCandidates: 12,
-      maxHardUniqueCandidates: 13,
+      minPreferredUniqueCandidates: 4,
+      maxPreferredUniqueCandidates: 4,
+      maxHardUniqueCandidates: 4,
     });
   });
+
 
   it("accepts a ranked weekly strategy request with lunch and dinner pools", () => {
     const parsed = RankedWeeklyStrategyRequestSchema.safeParse({

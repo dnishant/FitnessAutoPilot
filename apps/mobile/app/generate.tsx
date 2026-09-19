@@ -43,20 +43,21 @@ export default function GenerateScreen() {
     weeklyPlan?.status === "generating"
       ? (weeklyPlan.generationStage ?? localStage)
       : localStage;
-  const showProgress = busy || weeklyPlan?.status === "generating";
+  const showProgress =
+    busy || weeklyPlan?.status === "generating" || (error != null && localStage != null);
 
   async function submit() {
     setBusy(true);
     setError(null);
     setErrorDetail(null);
-    setLocalStage("understanding_preferences");
+    // Do not force stage 1 — checkpoint resume jumps progress via onProgress.
+    setLocalStage((prev) => prev ?? "understanding_preferences");
 
     const result = await generateWeeklyPlan();
     setBusy(false);
 
     if (!result.ok) {
-      setLocalStage(null);
-      // result.error is already consumer-safe from generateConsumerWeeklyPlan.
+      // Keep last known stage so "Try Again" does not visually restart at step 1.
       setError(result.error);
       setErrorDetail(
         ("detail" in result && result.detail) ||
@@ -111,7 +112,7 @@ export default function GenerateScreen() {
         </View>
       ) : null}
 
-      {showProgress && !error ? (
+      {showProgress ? (
         <View style={styles.stages}>
           {GENERATION_STAGE_ORDER.filter((stage) => stage !== "complete").map((stage) => {
             const status = stageStatus(stage);
