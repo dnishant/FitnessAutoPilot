@@ -32,6 +32,7 @@ import {
   type MealSolveBundle,
 } from "./reconcile";
 import { blockedPlan, solveMealPortions } from "./solver";
+import { preferConsistentPortionsAcrossRepeats } from "./portion-consistency";
 import { portionCacheKey } from "./weekly";
 
 export type PersonalizeWeeklyNutritionPlanInput = {
@@ -399,7 +400,7 @@ export function personalizeWeeklyNutritionPlan(
     }
   }
 
-  return {
+  const plan: PersonalizedWeeklyNutritionPlan = {
     generatedPlanId: input.generatedPlanId,
     weekStart: input.weekStart,
     weekEnd: input.weekEnd,
@@ -419,4 +420,7 @@ export function personalizeWeeklyNutritionPlan(
     totalPersonalizationTimeMs: nowMs() - started,
     generatedAt,
   };
+
+  // Soft operational objective: same practical portion for repeated core meals.
+  return preferConsistentPortionsAcrossRepeats(plan);
 }

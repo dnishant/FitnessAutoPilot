@@ -8,6 +8,7 @@ export * from "./allocation";
 export * from "./coefficients";
 export * from "./reconcile";
 export * from "./personalize";
+export * from "./portion-consistency";
 export * from "./project";
 export * from "./arbitrary-meals";
 export * from "./staple-estimates";

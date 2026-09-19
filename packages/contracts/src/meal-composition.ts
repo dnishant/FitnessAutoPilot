@@ -6,6 +6,7 @@ import {
   IngredientNutritionSchema,
   RecipeNutritionResultSchema,
 } from "./food-resolution";
+import { IngredientFootprintSchema } from "./ingredient-economy";
 import { ResolvedRecipeSchema } from "./recipe-resolution";
 
 /**
@@ -290,6 +291,11 @@ export const MealConceptSchema = z.object({
   compositionProfile: MealCompositionProfileSchema,
   compositionSummary: z.string().trim().min(1).max(600).optional(),
   mealUnderstanding: MealUnderstandingSchema.optional(),
+  /**
+   * Lightweight grocery footprint for repertoire selection (Stage A).
+   * Predictive only — PLAN-012 owns exact grocery demand after resolution.
+   */
+  ingredientFootprint: IngredientFootprintSchema.optional(),
   metadata: MealConceptMetadataSchema,
 });
 

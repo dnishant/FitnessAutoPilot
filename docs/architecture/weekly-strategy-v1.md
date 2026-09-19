@@ -2,15 +2,33 @@
 
 Provider-independent weekly meal strategy generation for Fitness Autopilot.
 
+## V1 meal-prep product shape (current Generate My Plan path)
+
+Standard week:
+
+| Constant | Value |
+| --- | --- |
+| Core meals | **4** |
+| Covered days | **6** (Mon–Sat) |
+| Lunch/dinner portions | **12** |
+| Flexible day | **Sunday** (no prescribed lunch/dinner) |
+
+Variety no longer changes unique-meal count. It only adjusts diversity vs grocery
+overlap pressure between the four meals (`V1_VARIETY_DIVERSITY_POLICY`).
+
+Selection is deterministic combinatorial set scoring (`buildV1WeeklyStrategy` in
+`packages/domain`), not an LLM unique-band week. Prompt version for ranked
+contracts remains `weekly-strategy-ranked-v1.5.0`. See [ADR-029](../adr/ADR-029-v1-four-meal-six-day-prep.md).
+
 ## PLAN-004 (unconstrained concepts)
 
 PLAN-004 is the original orchestration layer: Gemini invents 7 days of meal *concepts* from nutrition + PLAN-001/002 preferences. Prompt version: `weekly-strategy-v1`.
 
 This path remains available when `generate-weekly-strategy` receives a request **without** `lunchCandidates` / `dinnerCandidates`.
 
-## PLAN-007 (ranked candidate selection)
+## PLAN-007 (ranked candidate selection — legacy LLM path)
 
-PLAN-007 is the current weekly-planning slice:
+PLAN-007 is the ranked-candidate weekly-planning slice (still used by preview tooling):
 
 ```
 PLAN-005 grounded culinary discovery
@@ -21,7 +39,7 @@ Lightweight complete-meal composition (`meal-composition-v2`)
         ↓
 PLAN-007 whole-week selection + scheduling
         ↓
-7 lunches + 7 dinners (selected plates only then get detailed recipes / USDA)
+V1: 4 core meals → 12 lunch/dinner instances across 6 covered days
 ```
 
 It answers: “Which of these composed plates should this person eat this week, and when?”
@@ -32,17 +50,17 @@ It does **not** resolve detailed recipes, calculate authoritative nutrition, or 
 
 - Input: `RankedWeeklyStrategyRequest` (`packages/contracts`), including optional `mealConceptsByCandidateId`
 - Output: `RankedWeeklyStrategy` (candidate IDs + prep metadata) + deterministic `RankedWeeklyStrategyQualityStats` (including component reuse / composition complexity diagnostics)
-- Prompt version: `weekly-strategy-ranked-v1.3.0` (composed plates + PLAN-007.1 practicality + PLAN-008 automatic shared-prep semantics)
-- One Gemini call per week normally; at most one corrective retry when unique candidates exceed the variety-level hard max
+- Prompt version: `weekly-strategy-ranked-v1.5.0`
+- Generate My Plan uses `buildV1WeeklyStrategy` (deterministic). The Gemini ranked generator remains for previews / optional server paths.
 - `uniqueCandidateIds`, quality stats, and complexity status are calculated in code
 - Names are hydrated from the supplied candidate pools — Gemini cannot silently rename a dish
 - No per-meal calories/macros
-- Variety is a boredom constraint; weekly prep practicality outranks maximizing culinary variety
-- Central policy: `WEEKLY_VARIETY_COMPLEXITY_POLICY` (Simple 5–7 / hard 8, Balanced 7–9 / hard 10, High 9–12 / hard 13)
+- Variety is culinary diversity pressure within a **fixed 4-meal** repertoire; weekly prep practicality outranks maximizing unique dishes
+- Central policy: `WEEKLY_VARIETY_COMPLEXITY_POLICY` — **all variety levels: preferred/hard unique = 4** (V1)
 
 ### Pools and repetition
 
-Lunch slots choose from `lunchCandidates`. Dinner slots choose from `dinnerCandidates`. 14 slots does **not** mean 14 unique dishes. Repetition is allowed and often desirable. Empty lunch or dinner pools return `INSUFFICIENT_CANDIDATES` instead of asking Gemini to invent food.
+Lunch slots choose from `lunchCandidates`. Dinner slots choose from `dinnerCandidates`. 12 slots does **not** mean 12 unique dishes — V1 expects intentional repeats of exactly four cores. Empty lunch or dinner pools return `INSUFFICIENT_CANDIDATES` instead of asking Gemini to invent food.
 
 ### Planner defaults
 
@@ -51,6 +69,7 @@ Lunch slots choose from `lunchCandidates`. Dinner slots choose from `dinnerCandi
 | `MAX_DIRECT_LEFTOVER_LUNCHES_PER_WEEK` | `1` |
 | Minimum candidates per meal type | `1` |
 | Adjacent high-similarity threshold | PLAN-006 `SIMILARITY_PENALTY_THRESHOLD` |
+| Core meals / covered days / portions | 4 / 6 / 12 |
 
 Shared prep / `piggyback_prep` is always permitted when metadata evidence supports it (PLAN-008). Default remains `independent_meal_prep`. `useDinnerPrepForNextLunch` is deprecated and ignored.
 

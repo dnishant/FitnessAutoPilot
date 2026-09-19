@@ -170,16 +170,16 @@ function dinnerSlot(
 }
 
 /**
- * Valid 7-day lunch/dinner payload using supplied fixture IDs.
- * Balanced-friendly: 8 unique candidates with strategic lunch/dinner repeats.
+ * Valid V1 6-day lunch/dinner payload using supplied fixture IDs.
+ * Exactly 4 unique candidates with strategic lunch/dinner repeats.
  * Direct leftover uses lamb-kofta (present in both pools).
- * Finish-prep dinners stay within 10 minutes.
+ * Finish-prep dinners stay within 10 minutes. Sunday is omitted (flexible).
  */
 export function sampleRankedWeekPayload(): RankedWeeklyModelPayload {
   return {
     strategySummary: {
       varietyApproach:
-        "Enough culinary rotation to prevent boredom while keeping unique dishes in the Balanced preferred band.",
+        "Four-meal repertoire with strategic lunch/dinner repeats across six covered days.",
       prepApproach:
         "Batch-friendly lunches with intentional repeats, one plausible piggyback, one rare leftover, and dinners finished in about 10 minutes.",
       ingredientReuseApproach:
@@ -205,24 +205,12 @@ export function sampleRankedWeekPayload(): RankedWeeklyModelPayload {
           { lunchPreparationStrategy: "piggyback_prep" },
         ),
         dinner: dinnerSlot(
-          "cajun-blackened-redfish",
-          "Distinct blackened fish dinner experience spaced from banana-leaf roast.",
+          "lamb-kofta",
+          "Levantine lamb dinner diversifies flavor and can become Saturday's rare leftover.",
         ),
       },
       {
         day: "wednesday",
-        lunch: lunchSlot(
-          "pollo-pipian-verde",
-          "Pepita-sauce chicken lunch that stores well for midweek repetition.",
-          { prepIntent: "component_prepped" },
-        ),
-        dinner: dinnerSlot(
-          "tandoori-chicken",
-          "Adds a distinct fresh dinner experience without introducing a major additional prep burden.",
-        ),
-      },
-      {
-        day: "thursday",
         lunch: lunchSlot(
           "andhra-green-chilli-chicken",
           "Repeated intentionally to reuse the batch-prepped dish while spacing the meal several days from its first appearance.",
@@ -233,14 +221,25 @@ export function sampleRankedWeekPayload(): RankedWeeklyModelPayload {
         ),
       },
       {
-        day: "friday",
+        day: "thursday",
         lunch: lunchSlot(
           "kerala-beef-fry",
           "Repeated intentionally to reuse Friday-bound batch prep while keeping lunch effort low.",
         ),
         dinner: dinnerSlot(
           "lamb-kofta",
-          "Levantine lamb dinner diversifies flavor and can become Saturday's rare leftover.",
+          "Strategic dinner repeat of lamb kofta spaced from Tuesday.",
+        ),
+      },
+      {
+        day: "friday",
+        lunch: lunchSlot(
+          "andhra-green-chilli-chicken",
+          "Repeated intentionally to finish the week with a meal-prep-friendly lunch already prepared.",
+        ),
+        dinner: dinnerSlot(
+          "lamb-kofta",
+          "Levantine lamb dinner can become Saturday's rare leftover.",
           "component_prepped",
         ),
       },
@@ -252,20 +251,8 @@ export function sampleRankedWeekPayload(): RankedWeeklyModelPayload {
           { lunchPreparationStrategy: "direct_leftover" },
         ),
         dinner: dinnerSlot(
-          "quick-fresh-dinner",
-          "Chile-lime shrimp tacos keep Saturday dinner fast and distinct.",
-        ),
-      },
-      {
-        day: "sunday",
-        lunch: lunchSlot(
-          "pollo-pipian-verde",
-          "Repeated intentionally to finish the week with a meal-prep-friendly lunch already prepared.",
-          { prepIntent: "component_prepped" },
-        ),
-        dinner: dinnerSlot(
-          "cajun-blackened-redfish",
-          "Strategic dinner repeat that reuses an already-selected quick-finish fish without adjacent monotony.",
+          "kerala-meen-pollichathu",
+          "Strategic dinner repeat that reuses an already-selected fish without adjacent monotony.",
         ),
       },
     ],
@@ -275,12 +262,13 @@ export function sampleRankedWeekPayload(): RankedWeeklyModelPayload {
 /**
  * Build a structurally valid independent-prep week with exactly `uniqueCount`
  * unique candidates (using lunch-only / dinner-only IDs to avoid cross-pool issues).
+ * V1 covered days only (Mon–Sat). Unique counts other than 4 will fail V1 hydrate.
  */
 export function sampleRankedWeekPayloadWithUniqueCount(
   uniqueCount: number,
 ): RankedWeeklyModelPayload {
-  if (uniqueCount < 1 || uniqueCount > 14) {
-    throw new Error(`uniqueCount must be between 1 and 14 (received ${uniqueCount}).`);
+  if (uniqueCount < 1 || uniqueCount > 12) {
+    throw new Error(`uniqueCount must be between 1 and 12 (received ${uniqueCount}).`);
   }
 
   const lunchOnly = PLAN007_LUNCH_POOL.filter(
@@ -318,7 +306,6 @@ export function sampleRankedWeekPayloadWithUniqueCount(
     "thursday",
     "friday",
     "saturday",
-    "sunday",
   ] as const;
 
   return {

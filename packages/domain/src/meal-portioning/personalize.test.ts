@@ -223,7 +223,7 @@ describe("arbitrary generated meals", () => {
       generatedAt: "2026-09-17T12:00:00.000Z",
     });
 
-    expect(personalized.mealInstanceCount).toBe(14);
+    expect(personalized.mealInstanceCount).toBe(12);
     expect(personalized.blockedMealCount).toBe(0);
     const mondayLunch = personalized.days[0]!.meals.find((m) => m.mealType === "lunch");
     expect(mondayLunch?.personalizedPlan?.portions.length).toBeGreaterThanOrEqual(3);

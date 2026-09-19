@@ -11,11 +11,14 @@ import {
 } from "../../src/components/ui/primitives";
 import { MealCard } from "../../src/components/ui/meals";
 import {
+  coreMealsSummary,
   dayOfWeekFromDate,
   formatWeekRange,
+  isFlexibleDay,
   mealsForDay,
   nutritionHeaderLine,
   orderedWeekDays,
+  planWeekSummaryLine,
   shortDayLabel,
 } from "../../src/lib/consumer-plan-view";
 import { useSession } from "../../src/state/session";
@@ -33,6 +36,9 @@ export default function PlanTabScreen() {
     weeklyPlan?.weekStart && weeklyPlan?.weekEnd
       ? formatWeekRange(weeklyPlan.weekStart, weeklyPlan.weekEnd)
       : undefined;
+  const coreMeals = useMemo(() => coreMealsSummary(weeklyPlan), [weeklyPlan]);
+  const weekSummary = planWeekSummaryLine(weeklyPlan);
+  const flexibleSelected = isFlexibleDay(weeklyPlan, selectedDay);
 
   const recipesMissingNutrition =
     status === "ready" &&
@@ -82,7 +88,7 @@ export default function PlanTabScreen() {
       {status === "idle" || (!weeklyPlan?.meals?.length && status !== "generating" && status !== "failed") ? (
         <EmptyState
           title="No week planned yet"
-          body="Generate lunches and dinners for the week around your food and cooking preferences."
+          body="Generate four meals that cover six days of lunches and dinners around your food and cooking preferences."
           actionLabel="Build My Plan"
           onAction={() => router.push("/generate")}
         />
@@ -90,6 +96,28 @@ export default function PlanTabScreen() {
 
       {status === "ready" && weeklyPlan?.meals?.length ? (
         <View style={styles.stack}>
+          <View style={styles.heroCard}>
+            <Text style={styles.heroEyebrow}>YOUR WEEK</Text>
+            <Text style={styles.heroTitle}>{weekSummary}</Text>
+            <Text style={styles.heroBody}>
+              Four meals to prepare. They cover lunch and dinner for six days. One day stays flexible.
+            </Text>
+          </View>
+
+          {coreMeals.length > 0 ? (
+            <View style={styles.coreStack}>
+              <Text style={styles.sectionLabel}>THIS WEEK&apos;S MEALS</Text>
+              {coreMeals.map((meal) => (
+                <View key={meal.coreMealId} style={styles.coreRow}>
+                  <Text style={styles.coreName}>{meal.name}</Text>
+                  <Text style={styles.coreCount}>
+                    {meal.weeklyInstanceCount} meal{meal.weeklyInstanceCount === 1 ? "" : "s"}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -114,21 +142,33 @@ export default function PlanTabScreen() {
           </ScrollView>
 
           <View style={styles.mealStack}>
-            {lunch ? (
-              <MealCard
-                meal={lunch}
-                onPress={() => router.push(`/meal/${selectedDay}/lunch`)}
-              />
+            {flexibleSelected ? (
+              <View style={styles.flexibleCard}>
+                <Text style={styles.flexibleTitle}>Flexible Day</Text>
+                <Text style={styles.flexibleBody}>
+                  Use leftovers, eat out, or choose what works for you. No lunch or dinner is prescribed
+                  for this day.
+                </Text>
+              </View>
             ) : (
-              <Text style={styles.missing}>No lunch for this day.</Text>
-            )}
-            {dinner ? (
-              <MealCard
-                meal={dinner}
-                onPress={() => router.push(`/meal/${selectedDay}/dinner`)}
-              />
-            ) : (
-              <Text style={styles.missing}>No dinner for this day.</Text>
+              <>
+                {lunch ? (
+                  <MealCard
+                    meal={lunch}
+                    onPress={() => router.push(`/meal/${selectedDay}/lunch`)}
+                  />
+                ) : (
+                  <Text style={styles.missing}>No lunch for this day.</Text>
+                )}
+                {dinner ? (
+                  <MealCard
+                    meal={dinner}
+                    onPress={() => router.push(`/meal/${selectedDay}/dinner`)}
+                  />
+                ) : (
+                  <Text style={styles.missing}>No dinner for this day.</Text>
+                )}
+              </>
             )}
           </View>
 
@@ -153,6 +193,53 @@ const styles = StyleSheet.create({
   },
   stack: {
     gap: spacing.lg,
+  },
+  heroCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  heroEyebrow: {
+    ...typography.caption,
+    color: colors.textMuted,
+    letterSpacing: 1,
+  },
+  heroTitle: {
+    ...typography.title,
+    color: colors.text,
+  },
+  heroBody: {
+    ...typography.body,
+    color: colors.textSecondary,
+  },
+  coreStack: {
+    gap: spacing.sm,
+  },
+  sectionLabel: {
+    ...typography.caption,
+    color: colors.textMuted,
+    letterSpacing: 1,
+  },
+  coreRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
+  coreName: {
+    ...typography.bodyStrong,
+    color: colors.text,
+    flex: 1,
+    paddingRight: spacing.md,
+  },
+  coreCount: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
   warnCard: {
     backgroundColor: "#F8E8D8",
@@ -201,6 +288,22 @@ const styles = StyleSheet.create({
   },
   mealStack: {
     gap: spacing.md,
+  },
+  flexibleCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  flexibleTitle: {
+    ...typography.bodyStrong,
+    color: colors.text,
+  },
+  flexibleBody: {
+    ...typography.body,
+    color: colors.textSecondary,
   },
   missing: {
     ...typography.body,

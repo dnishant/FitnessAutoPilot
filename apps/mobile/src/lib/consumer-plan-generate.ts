@@ -21,23 +21,27 @@ import {
   MockComponentRecipeProvider,
   MockMealCompositionProvider,
   MAX_EXECUTABLE_REPLACEMENT_ROUNDS,
+  MAX_GROCERY_COMPLEXITY_REPAIR_ROUNDS,
   assessWeeklyPlanExecutability,
   assertWeeklyConsumerPlanIntegrity,
   attachPersonalizedWeeklyPlan,
   buildComponentNutritionByKeyFromCompleteMeals,
   buildLocalDemoNutritionMaps,
   buildNutritionMapsFromGeneratedRecipes,
+  buildV1WeeklyStrategy,
   composeMealConcepts,
   deriveGroceryList,
   finalizeWeeklyNutritionPlan,
   formatValidationReportForDiagnostics,
   isStructuralPortionBlockReason,
+  metricsFromResolvedRecipes,
   plan008SimpleCandidateLookup,
   plan008SimpleRankedPools,
   plan008SimpleWeeklyStrategy,
   makeResolvedRecipeFixture,
   plan009SimpleResolvedRecipes,
   recordExecutabilityFailures,
+  repairStrategyForGroceryComplexity,
   replaceFailedCandidatesInStrategy,
   resolveSelectedCompleteMeals,
   type PersonalizeWeeklyNutritionPlanInput,
@@ -252,6 +256,8 @@ async function personalizeAndFinalizeGeneratedPlan(input: {
     strategy: input.strategy,
     conceptsByCandidateId: input.conceptsByCandidateId,
     recipesByCandidateId: input.recipesByCandidateId,
+    coreRepertoire: input.strategy.coreRepertoire,
+    flexibleDay: input.strategy.flexibleDay ?? "sunday",
     meals: buildConsumerMealsFromStrategy({
       strategy: input.strategy,
       conceptsByCandidateId: input.conceptsByCandidateId,
@@ -486,24 +492,22 @@ async function buildRemotePlan(
   }
 
   onProgress?.("creating_week");
-  const rankedRequest = buildRankedWeeklyStrategyRequestFromPreview(
-    {
-      nutritionTarget: apis.nutritionTarget,
-      mealPreferences: apis.mealPreferences,
-      cookingPreferences: apis.cookingPreferences,
-    },
-    lunchRanked.result.selected,
-    dinnerRanked.result.selected,
+  // V1: deterministic four-meal repertoire + 12-slot assignment (not LLM top-N scheduling).
+  const v1Strategy = buildV1WeeklyStrategy({
+    lunchPool: lunchRanked.result.selected,
+    dinnerPool: dinnerRanked.result.selected,
+    conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
     varietyLevel,
-    composed.concepts.conceptsByCandidateId,
-  );
-  if (!rankedRequest) {
-    throw new Error("Could not build weekly planning request.");
+    cookingStyle: cooking?.cookingStyle,
+  });
+  if (!v1Strategy.ok) {
+    throw Object.assign(new Error(v1Strategy.error.message), {
+      code: v1Strategy.error.code,
+    });
   }
-  const strategyResult = await apis.generateRankedWeeklyStrategy(rankedRequest);
-  if (!strategyResult.ok) {
-    throw Object.assign(new Error(strategyResult.error), { code: strategyResult.code });
-  }
+  // Keep ranked request builder available for diagnostics / fallback tooling.
+  void buildRankedWeeklyStrategyRequestFromPreview;
+  void apis.generateRankedWeeklyStrategy;
 
   onProgress?.("finalizing_recipes");
   const candidateLookup = new Map<string, CulinaryDiscoveryCandidate>();
@@ -511,7 +515,7 @@ async function buildRemotePlan(
     candidateLookup.set(ranked.candidate.candidateId, ranked.candidate);
   }
 
-  let strategy = strategyResult.strategy;
+  let strategy = v1Strategy.value.strategy;
   let recipesByCandidateId: Record<string, ResolvedRecipe> = {};
   let completeMeals: Record<string, CompleteMeal> = {};
   let nutritionByCandidateId: Record<
@@ -660,6 +664,75 @@ async function buildRemotePlan(
       ),
       { code: "EXECUTABLE_REPLACEMENT_EXHAUSTED" },
     );
+  }
+
+  // Stage B: exact grocery complexity gate + bounded repertoire repair.
+  for (let groceryRound = 0; groceryRound <= MAX_GROCERY_COMPLEXITY_REPAIR_ROUNDS; groceryRound += 1) {
+    const groceryMetrics = metricsFromResolvedRecipes({
+      strategy,
+      recipesByCandidateId,
+      varietyLevel,
+    });
+    if (groceryMetrics.band !== "excessive") break;
+
+    if (groceryRound === MAX_GROCERY_COMPLEXITY_REPAIR_ROUNDS) {
+      throw Object.assign(
+        new Error(
+          `Weekly grocery complexity remains excessive after ${MAX_GROCERY_COMPLEXITY_REPAIR_ROUNDS} repair rounds ` +
+            `(weighted=${groceryMetrics.weightedComplexity}, unique=${groceryMetrics.uniqueCanonicalIngredients}).`,
+        ),
+        { code: "GROCERY_COMPLEXITY_REPAIR_EXHAUSTED", metrics: groceryMetrics },
+      );
+    }
+
+    const repaired = repairStrategyForGroceryComplexity({
+      strategy,
+      metrics: groceryMetrics,
+      lunchPool: lunchRanked.result.selected,
+      dinnerPool: dinnerRanked.result.selected,
+      conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+      excludedCandidateIds: failedCandidateIds,
+    });
+    if (!repaired.ok || !repaired.repaired) {
+      throw Object.assign(
+        new Error(
+          repaired.ok
+            ? "Grocery complexity is excessive and no lower-burden replacements were available."
+            : repaired.message,
+        ),
+        { code: "GROCERY_COMPLEXITY_REPAIR_EXHAUSTED", metrics: groceryMetrics },
+      );
+    }
+
+    strategy = repaired.strategy;
+    for (const rep of repaired.replacements) {
+      failedCandidateIds.add(rep.failedCandidateId);
+    }
+
+    // Resolve any newly introduced core meals before the next complexity check.
+    const missingIds = strategy.uniqueCandidateIds.filter((id) => !recipesByCandidateId[id]);
+    if (missingIds.length > 0) {
+      const toResolve = missingIds
+        .map((id) => candidateLookup.get(id))
+        .filter((c): c is CulinaryDiscoveryCandidate => c != null);
+      const resolved = await apis.resolveWeeklyRecipes({
+        candidates: toResolve,
+        uniqueCandidateIds: missingIds,
+      });
+      const partial = resolved.ok
+        ? resolved.result.recipesByCandidateId
+        : (resolved.result?.recipesByCandidateId ?? {});
+      recipesByCandidateId = { ...recipesByCandidateId, ...partial };
+      completeMeals = await resolveCompleteMealsForStrategy({
+        apis,
+        conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+        selectedCandidateIds: strategy.uniqueCandidateIds,
+        recipesByCandidateId,
+        targetCalories: apis.nutritionTarget?.targetCalories,
+      });
+      nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
+    }
+    onProgress?.("creating_week");
   }
 
   if (Object.keys(nutritionByCandidateId).length === 0) {

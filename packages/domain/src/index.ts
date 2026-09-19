@@ -28,5 +28,7 @@ export * from "./planning/planner";
 export * from "./planning/weekly-strategy";
 export * from "./planning/ranked-weekly-strategy";
 export * from "./planning/ranked-weekly-strategy-fixtures";
+export * from "./planning/four-meal-repertoire";
+export * from "./planning/ingredient-economy";
 export * from "./planning/meal-planning-pipeline";
 export * from "./planning/executable-candidate-recovery";

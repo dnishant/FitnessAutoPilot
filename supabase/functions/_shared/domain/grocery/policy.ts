@@ -54,7 +54,7 @@ export function categorizeGroceryItem(input: {
   }
 
   if (
-    /\b(chicken|turkey|beef|pork|lamb|salmon|shrimp|fish|tuna|cod|thigh|breast|ground meat|bacon)\b/.test(
+    /\b(chicken|turkey|beef|pork|lamb|salmon|shrimp|fish|tuna|cod|thigh|breast|ground meat|bacon|steak|flank|brisket|sirloin|ribeye|sausage|chorizo|scallop|crab|lobster)\b/.test(
       name,
     )
   ) {
@@ -68,7 +68,7 @@ export function categorizeGroceryItem(input: {
   }
 
   if (
-    /\b(rice|pasta|bread|roti|naan|tortilla|flour|oat|quinoa|couscous|noodle|bagel|bun|pita|cereal|grain)\b/.test(
+    /\b(rice|pasta|bread|roti|naan|tortilla|tortillas|flour|oat|quinoa|couscous|noodle|noodles|bagel|bun|pita|cereal|grain)\b/.test(
       name,
     )
   ) {
@@ -88,7 +88,7 @@ export function categorizeGroceryItem(input: {
   }
 
   if (
-    /\b(onion|tomato|garlic|ginger|lemon|lime|cilantro|parsley|spinach|lettuce|cucumber|carrot|pepper|avocado|banana|apple|herb|mint|cabbage|broccoli|potato|scallion|shallot|chili|chilli|celery|zucchini|mushroom|berry|berries|fruit|vegetable|eggplant|peas|bean|coconut)\b/.test(
+    /\b(onion|tomato|tomatoes|garlic|ginger|lemon|lime|cilantro|parsley|spinach|lettuce|cucumber|carrot|pepper|avocado|banana|apple|herb|mint|cabbage|broccoli|potato|scallion|shallot|chili|chilli|celery|zucchini|mushroom|berry|berries|fruit|vegetable|eggplant|peas|bean|coconut|asparagus|cherry tomato|cherry tomatoes|kale|arugula|radish|beet|corn|green bean|snap pea|bok choy|chard|fennel|leek|turnip|parsnip|squash|pumpkin|mango|pineapple|grape|orange|strawberry|blueberry|raspberry)\b/.test(
       name,
     )
   ) {

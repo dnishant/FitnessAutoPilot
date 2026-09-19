@@ -239,6 +239,15 @@ export function formatGroceryDisplay(input: {
   }
 
   const u = normalizeUnitToken(input.unit);
+  // Discrete count units: ceil for shoppable display without mutating exact demand.
+  if (family === "count" || COUNT_ALIASES.has(u)) {
+    const ceiled = Math.max(1, Math.ceil(input.quantity - Number.EPSILON));
+    return {
+      displayQuantity: ceiled,
+      displayUnit: u || input.unit,
+      displayLabel: `${formatNumber(ceiled)} ${u || input.unit}`,
+    };
+  }
   const rounded = roundDisplay(input.quantity, Number.isInteger(input.quantity) ? 0 : 2);
   const safe = rounded <= 0 ? roundDisplay(Math.max(input.quantity, 0.01), 2) : rounded;
   return {

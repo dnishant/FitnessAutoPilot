@@ -182,8 +182,10 @@ export function MealPreferenceSteps(props: {
 
       {view.step === "variety" ? (
         <>
-          <Text style={styles.title}>How much variety do you want during the week?</Text>
-          <Text style={styles.help}>This is intent only. We will not turn it into recipe counts yet.</Text>
+          <Text style={styles.title}>How different should your four meals feel?</Text>
+          <Text style={styles.help}>
+            You always get four meals for six days. This only changes how distinct those four meals are from each other.
+          </Text>
           {VARIETY_OPTIONS.map((option) => (
             <SelectionCard
               key={option.value}

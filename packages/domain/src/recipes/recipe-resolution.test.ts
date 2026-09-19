@@ -27,11 +27,11 @@ describe("PLAN-008 recipe resolution domain", () => {
     expect(DEFAULT_RECIPE_RESOLUTION_CONCURRENCY).toBe(2);
   });
 
-  it("extracts 6 unique candidates from the 14-slot Simple strategy", () => {
+  it("extracts 4 unique candidates from the 12-slot Simple strategy", () => {
     const strategy = plan008SimpleWeeklyStrategy();
     const unique = getUniqueCandidatesFromWeeklyStrategy(strategy);
-    expect(strategy.days).toHaveLength(7);
-    expect(unique).toHaveLength(6);
+    expect(strategy.days).toHaveLength(6);
+    expect(unique).toHaveLength(4);
     expect(unique).toEqual([...PLAN008_SIMPLE_UNIQUE_IDS]);
   });
 
@@ -200,12 +200,12 @@ describe("PLAN-008 recipe resolution domain", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.slotCount).toBe(14);
-      expect(result.value.uniqueCandidateIds).toHaveLength(6);
-      expect(result.value.resolverCallCount).toBe(6);
-      expect(result.value.resolvedCount).toBe(6);
-      expect(calls).toBe(6);
-      expect(Object.keys(result.value.recipesByCandidateId)).toHaveLength(6);
+      expect(result.value.slotCount).toBe(12);
+      expect(result.value.uniqueCandidateIds).toHaveLength(4);
+      expect(result.value.resolverCallCount).toBe(4);
+      expect(result.value.resolvedCount).toBe(4);
+      expect(calls).toBe(4);
+      expect(Object.keys(result.value.recipesByCandidateId)).toHaveLength(4);
     }
   });
 
@@ -269,8 +269,8 @@ describe("PLAN-008 recipe resolution domain", () => {
 
     expect(result.ok).toBe(true);
     if (result.ok) {
-      expect(result.value.resolvedCount).toBe(6);
-      expect(result.value.resolverCallCount).toBe(7);
+      expect(result.value.resolvedCount).toBe(4);
+      expect(result.value.resolverCallCount).toBe(5);
       expect(attempts.get("tikka-chicken")).toBe(2);
     }
   });

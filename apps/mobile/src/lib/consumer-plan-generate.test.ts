@@ -67,7 +67,7 @@ describe("PLAN-010/011 consumer generation orchestration", () => {
     );
     expect(result.plan.validationReport?.policyVersion).toBe("nutrition-validation-policy-v1");
     expect(result.plan.validationReport?.status).toBe("finalized");
-    expect(result.plan.meals?.length).toBe(14);
+    expect(result.plan.meals?.length).toBe(12);
     const withNutrition = result.plan.meals?.filter((m) => m.personalizedNutrition);
     expect((withNutrition?.length ?? 0) > 0).toBe(true);
     const sample = withNutrition![0]!;
