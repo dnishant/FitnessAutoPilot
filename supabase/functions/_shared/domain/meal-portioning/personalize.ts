@@ -388,12 +388,15 @@ export function personalizeWeeklyNutritionPlan(
   }
   if (blockedMealCount === 0 && bestFeasibleMealCount === 0) weekStatus = "solved";
 
-  const allowed = new Set(input.strategy.uniqueCandidateIds);
+  const allowed = new Set(
+    input.strategy.days.flatMap((d) => [d.lunch.candidateId, d.dinner.candidateId]),
+  );
   for (const day of days) {
     for (const meal of day.meals) {
       if (!allowed.has(meal.candidateId)) {
         weekStatus = "blocked";
         meal.status = "blocked";
+        meal.blockReason = "unquantifiable_component";
         meal.message = "Meal candidate is not part of the generated weekly strategy.";
         meal.personalizedPlan = undefined;
       }

@@ -836,6 +836,26 @@ async function buildRemotePlan(
       );
     }
 
+    // V1: rebuild the four-meal repertoire excluding failures (preserves eligibility
+    // + exactly-four invariant). Fall back to coherent single-ID slot replacement.
+    const rebuilt = buildV1WeeklyStrategy({
+      lunchPool: lunchRankedSelected,
+      dinnerPool: dinnerRankedSelected,
+      conceptsByCandidateId,
+      varietyLevel,
+      cookingStyle: cooking?.cookingStyle,
+      prepFrequency: cooking?.prepFrequency,
+      maxFinishMinutes: cooking?.maxFinishMinutes,
+      excludedCandidateIds: failedCandidateIds,
+      flexibleDay: activeStrategy.flexibleDay,
+    });
+
+    if (rebuilt.ok) {
+      activeStrategy = rebuilt.value.strategy;
+      onProgress?.("finalizing_recipes");
+      continue;
+    }
+
     const replacement = replaceFailedCandidatesInStrategy({
       strategy: activeStrategy,
       failures: assessment.failures,
@@ -843,6 +863,8 @@ async function buildRemotePlan(
       dinnerPool: dinnerRankedSelected,
       failedCandidateIds,
       conceptsByCandidateId,
+      prepFrequency: cooking?.prepFrequency,
+      maxFinishMinutes: cooking?.maxFinishMinutes,
     });
 
     if (!replacement.ok || replacement.replacements.length === 0) {
@@ -850,7 +872,9 @@ async function buildRemotePlan(
         new Error(
           replacement.ok === false
             ? replacement.message
-            : "No ranked replacements available for non-executable selected candidates.",
+            : rebuilt.ok === false
+              ? rebuilt.error.message
+              : "No ranked replacements available for non-executable selected candidates.",
         ),
         { code: "EXECUTABLE_REPLACEMENT_EXHAUSTED" },
       );
@@ -917,6 +941,8 @@ async function buildRemotePlan(
       dinnerPool: dinnerRankedSelected,
       conceptsByCandidateId,
       excludedCandidateIds: failedCandidateIds,
+      prepFrequency: cooking?.prepFrequency,
+      maxFinishMinutes: cooking?.maxFinishMinutes,
     });
     if (!repaired.ok || !repaired.repaired) {
       if (isPathologicalGroceryComplexity(groceryMetrics)) {
@@ -962,16 +988,51 @@ async function buildRemotePlan(
         ? resolved.result.recipesByCandidateId
         : (resolved.result?.recipesByCandidateId ?? {});
       recipesByCandidateId = { ...recipesByCandidateId, ...partial };
-      completeMeals = await resolveCompleteMealsForStrategy({
-        apis,
-        conceptsByCandidateId,
-        selectedCandidateIds: activeStrategy.uniqueCandidateIds,
-        recipesByCandidateId,
-        targetCalories: apis.nutritionTarget?.targetCalories,
-      });
-      nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
+    }
+
+    // Always refresh CompleteMeals + component nutrition for the *current* unique
+    // set. Skipping this when recipes already exist leaves personalize with a
+    // stale/partial map and PLAN-011 rejects the week as fully blocked.
+    completeMeals = await resolveCompleteMealsForStrategy({
+      apis,
+      conceptsByCandidateId,
+      selectedCandidateIds: activeStrategy.uniqueCandidateIds,
+      recipesByCandidateId,
+      targetCalories: apis.nutritionTarget?.targetCalories,
+    });
+    nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
+    const fromMealsAfterRepair = buildComponentNutritionByKeyFromCompleteMeals(completeMeals);
+    componentNutritionByKey = {};
+    for (const [key, entry] of Object.entries(fromMealsAfterRepair)) {
+      componentNutritionByKey[key] = {
+        nutrition: entry.nutrition,
+        referenceYieldGrams: entry.referenceYieldGrams,
+        baseServings: entry.baseServings,
+      };
     }
     onProgress?.("creating_week");
+  }
+
+  // Defense: grocery repair can introduce non-executable meals. Re-assess before
+  // personalize so we fail with EXECUTABLE_REPLACEMENT_EXHAUSTED instead of
+  // STRUCTURE_PERSONALIZATION_STATUS_BLOCKED.
+  {
+    const postGrocery = assessWeeklyPlanExecutability({
+      uniqueCandidateIds: activeStrategy.uniqueCandidateIds,
+      completeMealsByCandidateId: completeMeals,
+      recipesByCandidateId,
+      nutritionByCandidateId,
+      componentNutritionByKey,
+    });
+    if (postGrocery.failures.length > 0) {
+      throw Object.assign(
+        new Error(
+          `Weekly plan is not executable after grocery complexity repair. ` +
+            postGrocery.failures.map((f) => `${f.candidateId}:${f.code}`).join("; "),
+        ),
+        { code: "EXECUTABLE_REPLACEMENT_EXHAUSTED" },
+      );
+    }
   }
 
   if (Object.keys(nutritionByCandidateId).length === 0) {

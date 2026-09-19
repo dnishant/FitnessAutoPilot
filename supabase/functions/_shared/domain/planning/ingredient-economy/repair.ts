@@ -5,6 +5,7 @@ import type {
   GroceryComplexityMetrics,
   IngredientFootprint,
   MealConcept,
+  PrepFrequency,
   RankedCulinaryCandidate,
   RankedWeeklyStrategy,
   ResolvedRecipe,
@@ -18,6 +19,7 @@ import {
   V1_PLANNED_LUNCH_DINNER_SLOTS,
 } from "../../../contracts/index.ts";
 import { collectRankedMealSlots } from "../ranked-weekly-strategy.ts";
+import { isEligibleForBatchPrepRepertoire } from "../four-meal-repertoire.ts";
 import {
   collectExactIngredientUses,
   evaluateExactGroceryComplexity,
@@ -113,6 +115,8 @@ export function repairStrategyForGroceryComplexity(input: {
   conceptsByCandidateId?: Record<string, MealConcept>;
   /** Candidate IDs that must not be re-selected (failed executability, prior repairs). */
   excludedCandidateIds?: ReadonlySet<string>;
+  prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
 }): GroceryComplexityRepairResult {
   if (input.metrics.band !== "excessive") {
     return {
@@ -180,6 +184,8 @@ export function repairStrategyForGroceryComplexity(input: {
       currentMeals,
       // Accept any unused candidate that improves on the removed meal's economy.
       minScore: targetEconomy + 0.01,
+      prepFrequency: input.prepFrequency,
+      maxFinishMinutes: input.maxFinishMinutes,
     });
     if (!replacement) continue;
 
@@ -221,15 +227,12 @@ export function repairStrategyForGroceryComplexity(input: {
     });
   }
 
-  let uniqueCandidateIds = [
+  // Always derive unique IDs from day slots — never truncate independently of
+  // assignments (that desyncs strategy.uniqueCandidateIds from personalized meals
+  // and forces PLAN-011 STRUCTURE_PERSONALIZATION_STATUS_BLOCKED).
+  const uniqueCandidateIds = [
     ...new Set(collectRankedMealSlots(days).map((s) => s.candidateId)),
   ];
-
-  // V1 invariant: exactly 4 unique core meals. If a repair somehow expands the
-  // set, keep the first 4 by appearance order (slots already assigned).
-  if (uniqueCandidateIds.length > V1_CORE_MEAL_COUNT) {
-    uniqueCandidateIds = uniqueCandidateIds.slice(0, V1_CORE_MEAL_COUNT);
-  }
 
   const flexibleDay =
     input.strategy.flexibleDay ??
@@ -362,12 +365,24 @@ function pickLowerBurdenReplacement(input: {
   currentMeals: MealFootprintEntry[];
   /** Minimum netEconomyScore required (relative to removed meal). */
   minScore: number;
+  prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
 }): RankedCulinaryCandidate | null {
   let best: { ranked: RankedCulinaryCandidate; score: number } | null = null;
 
   for (const ranked of input.pool) {
     const id = ranked.candidate.candidateId;
     if (input.usedIds.has(id) || input.excluded.has(id)) continue;
+    if (
+      !isEligibleForBatchPrepRepertoire({
+        mealPrepAdaptability: ranked.candidate.mealPrepAdaptability,
+        estimatedFinishMinutesAfterPrep: ranked.candidate.estimatedFinishMinutesAfterPrep,
+        maxFinishMinutes: input.maxFinishMinutes,
+        prepFrequency: input.prepFrequency,
+      })
+    ) {
+      continue;
+    }
     // Prefer composed concepts when available, but do not require them —
     // heuristic footprints still allow repair when a ranked alternative exists.
     const entry = footprintForCandidate({

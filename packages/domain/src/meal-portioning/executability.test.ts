@@ -476,6 +476,58 @@ describe("bounded candidate replacement", () => {
     expect(dinnerIds.has(b.candidateId)).toBe(true);
   });
 
+  it("V1 — lunch/dinner pool split still replaces a core meal with one ID", () => {
+    const a = syntheticCandidate("cand-core-fail", "Broken Core");
+    const lunchOnly = syntheticCandidate("cand-lunch-alt", "Lunch Alt");
+    const dinnerOnly = syntheticCandidate("cand-dinner-alt", "Dinner Alt");
+    const shared = syntheticCandidate("cand-shared-alt", "Shared Alt");
+    // Distinct pool heads would previously pick different replacements per meal type,
+    // expanding uniqueCandidateIds past four and desyncing PLAN-011.
+    const lunchPool = [
+      makeRankedCandidate(a, 1),
+      makeRankedCandidate(lunchOnly, 2),
+      makeRankedCandidate(shared, 3),
+    ];
+    const dinnerPool = [
+      makeRankedCandidate(a, 1),
+      makeRankedCandidate(dinnerOnly, 2),
+      makeRankedCandidate(shared, 3),
+    ];
+    const base = plan008SimpleWeeklyStrategy();
+    const strategy: RankedWeeklyStrategy = {
+      ...base,
+      uniqueCandidateIds: [a.candidateId],
+      days: base.days.map((day) => ({
+        ...day,
+        lunch: { ...day.lunch, candidateId: a.candidateId, name: a.name },
+        dinner: { ...day.dinner, candidateId: a.candidateId, name: a.name },
+      })),
+    };
+
+    const replaced = replaceFailedCandidatesInStrategy({
+      strategy,
+      failures: [
+        {
+          code: "AUTHORITATIVE_NUTRITION_UNRESOLVED",
+          message: "blocked",
+          candidateId: a.candidateId,
+        },
+      ],
+      lunchPool,
+      dinnerPool,
+      failedCandidateIds: new Set(),
+      prepFrequency: "once_weekly",
+    });
+    expect(replaced.ok).toBe(true);
+    if (!replaced.ok) return;
+    const unique = new Set(
+      replaced.strategy.days.flatMap((d) => [d.lunch.candidateId, d.dinner.candidateId]),
+    );
+    expect(unique.size).toBe(1);
+    expect(unique.has(a.candidateId)).toBe(false);
+    expect(replaced.strategy.uniqueCandidateIds).toEqual([...unique]);
+  });
+
   it("Test I — exhausted replacements return typed failure", () => {
     const a = syntheticCandidate("cand-only", "Lone Unresolved Dish");
     const lunchPool = [makeRankedCandidate(a, 1)];
