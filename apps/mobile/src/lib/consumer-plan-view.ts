@@ -188,11 +188,44 @@ export function humanizePlanGenerationError(message: string, code?: string): str
   if (
     lower.includes("hard preference constraint") ||
     lower.includes("allergy constraint") ||
-    lower.includes("allerg") && lower.includes("blocked")
+    (lower.includes("allerg") && lower.includes("blocked"))
   ) {
     return "Something in your preferences blocked planning. Review food preferences, then try again.";
   }
   return "We couldn't finish your meal plan. Your preferences are saved. Try generating it again.";
+}
+
+/** Developer-facing detail appended under the consumer message while diagnosing generation. */
+export function formatPlanGenerationFailureDetail(input: {
+  code?: string;
+  message?: string;
+  validationReport?: {
+    hardFailureCount?: number;
+    repairableFailureCount?: number;
+    warningCount?: number;
+    structuralRules?: Array<{ ruleId: string; severity: string }>;
+    days?: Array<{ rules: Array<{ ruleId: string; severity: string }> }>;
+    weekly?: { rules?: Array<{ ruleId: string; severity: string }> };
+  } | null;
+}): string | null {
+  const parts: string[] = [];
+  if (input.code) parts.push(input.code);
+  const report = input.validationReport;
+  if (report) {
+    const hardIds = [
+      ...(report.structuralRules ?? []),
+      ...(report.days ?? []).flatMap((d) => d.rules),
+      ...(report.weekly?.rules ?? []),
+    ]
+      .filter((r) => r.severity === "hard_failure")
+      .map((r) => r.ruleId);
+    const unique = [...new Set(hardIds)].slice(0, 6);
+    if (unique.length > 0) parts.push(unique.join(", "));
+  } else if (input.message) {
+    const match = input.message.match(/PLAN-011 validation \([^)]+\):\s*(.+)$/i);
+    if (match?.[1]) parts.push(match[1].slice(0, 180));
+  }
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function componentsFromConcept(concept: MealConcept | undefined, fallbackName: string): ConsumerMealComponent[] {

@@ -15,6 +15,7 @@ import type {
 import { WEEK_DAYS } from "../../contracts/index.ts";
 import { isUnresolvedPlaceholderName } from "../meal-composition/placeholders.ts";
 import { isEdibleFoodIdentity } from "../meal-composition/edible-identity.ts";
+import { isStructuralPortionBlockReason } from "./executability.ts";
 import {
   getNutritionPlanValidationPolicy,
   NUTRITION_PLAN_VALIDATION_POLICY_V1,
@@ -832,13 +833,16 @@ export function validateWeeklyNutritionPlan(input: {
     );
   }
 
-  // Blocked week / blocked meals cannot finalize
-  if (plan.status === "blocked" || plan.blockedMealCount > 0) {
+  // Completely unusable week (every meal blocked) cannot finalize.
+  // Structural blocks on any meal are hard failures (handled per-meal below).
+  // Non-structural blocked meals (culinary infeasibility) warn and are omitted from
+  // nutrition recomputation — matching pre-PLAN-011 activation behavior for those slots.
+  if (plan.status === "blocked" || plan.blockedMealCount === plan.mealInstanceCount) {
     structuralRules.push(
       ruleResult({
         ruleId: "STRUCTURE_PERSONALIZATION_STATUS_BLOCKED",
         severity: "hard_failure",
-        message: `Weekly plan has blocked meal personalization and cannot finalize.`,
+        message: `Weekly plan has no executable personalized meals and cannot finalize.`,
         repairable: false,
         observed: plan.blockedMealCount,
       }),
@@ -913,11 +917,14 @@ export function validateWeeklyNutritionPlan(input: {
       }
 
       if (meal.status === "blocked") {
+        const structural = isStructuralPortionBlockReason(meal.blockReason);
         dayRules.push(
           ruleResult({
             ruleId: "STRUCTURE_MEAL_NOT_EXECUTABLE",
-            severity: "hard_failure",
-            message: `Meal ${meal.mealInstanceId} is blocked and not finalizable.`,
+            severity: structural ? "hard_failure" : "warning",
+            message: structural
+              ? `Meal ${meal.mealInstanceId} is structurally blocked (${meal.blockReason}) and not finalizable.`
+              : `Meal ${meal.mealInstanceId} is culinary-blocked (${meal.blockReason ?? "unknown"}); omitted from finalized nutrition totals.`,
             repairable: false,
             day: dayPlan.day,
             mealInstanceId: meal.mealInstanceId,

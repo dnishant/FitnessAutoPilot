@@ -374,18 +374,83 @@ describe("PLAN-011 structural validation", () => {
     expect(result.reasons.some((r) => r.ruleId === "STRUCTURE_STALE_PLAN_LINKAGE")).toBe(true);
   });
 
-  it("hard-fails blocked meals — cannot finalize best_feasible-only when blocked present", () => {
+  it("hard-fails when every meal is blocked; warns on culinary-blocked slots", () => {
     const { plan } = buildPersonalizedPlan("plan_blocked");
-    const mutated = clonePlan(plan);
-    mutated.blockedMealCount = 1;
-    mutated.status = "blocked";
-    mutated.days[0]!.meals[0]!.status = "blocked";
-    mutated.days[0]!.meals[0]!.personalizedPlan = undefined;
-    const result = validateWeeklyNutritionPlan({
-      personalizedWeeklyPlan: mutated,
+    const allBlocked = clonePlan(plan);
+    allBlocked.blockedMealCount = allBlocked.mealInstanceCount;
+    allBlocked.status = "blocked";
+    for (const day of allBlocked.days) {
+      for (const meal of day.meals) {
+        meal.status = "blocked";
+        meal.blockReason = "no_valid_combination";
+        meal.personalizedPlan = undefined;
+      }
+    }
+    expect(
+      validateWeeklyNutritionPlan({
+        personalizedWeeklyPlan: allBlocked,
+        generationContext: { generatedPlanId: "plan_blocked" },
+      }).status,
+    ).toBe("rejected");
+
+    const oneCulinaryBlocked = clonePlan(plan);
+    oneCulinaryBlocked.blockedMealCount = 1;
+    oneCulinaryBlocked.status = "best_feasible";
+    oneCulinaryBlocked.days[0]!.meals[0]!.status = "blocked";
+    oneCulinaryBlocked.days[0]!.meals[0]!.blockReason = "no_valid_combination";
+    oneCulinaryBlocked.days[0]!.meals[0]!.personalizedPlan = undefined;
+    // Recompute day aggregates without the blocked meal so arithmetic stays coherent.
+    const dinner = oneCulinaryBlocked.days[0]!.meals[1]!.personalizedPlan!.nutrition;
+    oneCulinaryBlocked.days[0]!.plannedNutrition = { ...dinner };
+    oneCulinaryBlocked.days[0]!.projectedDailyNutrition = {
+      caloriesKcal: Math.round(
+        dinner.caloriesKcal + oneCulinaryBlocked.days[0]!.reservedNutrition.caloriesKcal,
+      ),
+      proteinGrams:
+        Math.round(
+          (dinner.proteinGrams + oneCulinaryBlocked.days[0]!.reservedNutrition.proteinGrams) *
+            10,
+        ) / 10,
+      carbsGrams:
+        Math.round(
+          (dinner.carbsGrams + (oneCulinaryBlocked.days[0]!.reservedNutrition.carbsGrams ?? 0)) *
+            10,
+        ) / 10,
+      fatGrams:
+        Math.round(
+          (dinner.fatGrams + (oneCulinaryBlocked.days[0]!.reservedNutrition.fatGrams ?? 0)) * 10,
+        ) / 10,
+      fiberGrams:
+        Math.round(
+          ((dinner.fiberGrams ?? 0) +
+            (oneCulinaryBlocked.days[0]!.reservedNutrition.fiberGrams ?? 0)) *
+            10,
+        ) / 10,
+    };
+    const culinary = validateWeeklyNutritionPlan({
+      personalizedWeeklyPlan: oneCulinaryBlocked,
       generationContext: { generatedPlanId: "plan_blocked" },
     });
-    expect(result.status).toBe("rejected");
+    expect(culinary.status).not.toBe("rejected");
+    expect(
+      culinary.report.days[0]!.rules.some(
+        (r) =>
+          r.ruleId === "STRUCTURE_MEAL_NOT_EXECUTABLE" && r.severity === "warning",
+      ),
+    ).toBe(true);
+
+    const structuralBlocked = clonePlan(plan);
+    structuralBlocked.blockedMealCount = 1;
+    structuralBlocked.status = "best_feasible";
+    structuralBlocked.days[0]!.meals[0]!.status = "blocked";
+    structuralBlocked.days[0]!.meals[0]!.blockReason = "missing_canonical_nutrition";
+    structuralBlocked.days[0]!.meals[0]!.personalizedPlan = undefined;
+    expect(
+      validateWeeklyNutritionPlan({
+        personalizedWeeklyPlan: structuralBlocked,
+        generationContext: { generatedPlanId: "plan_blocked" },
+      }).status,
+    ).toBe("rejected");
   });
 });
 

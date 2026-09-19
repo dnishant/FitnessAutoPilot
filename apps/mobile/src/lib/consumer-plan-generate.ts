@@ -45,6 +45,7 @@ import {
   addDaysIso,
   buildConsumerMealsFromStrategy,
   createEmptyConsumerPlan,
+  formatPlanGenerationFailureDetail,
   humanizePlanGenerationError,
   startOfWeekMonday,
 } from "./consumer-plan-view";
@@ -746,7 +747,13 @@ export async function generateConsumerWeeklyPlan(
   onProgress?: GenerationProgressCallback,
 ): Promise<
   | { ok: true; plan: ConsumerWeeklyPlan }
-  | { ok: false; error: string; code?: string; plan: ConsumerWeeklyPlan }
+  | {
+      ok: false;
+      error: string;
+      code?: string;
+      detail?: string;
+      plan: ConsumerWeeklyPlan;
+    }
 > {
   const weekStart = startOfWeekMonday();
   try {
@@ -771,14 +778,20 @@ export async function generateConsumerWeeklyPlan(
           formatValidationReportForDiagnostics(validationReport),
       );
     }
+    const consumerError = humanizePlanGenerationError(message, code);
     return {
       ok: false,
-      error: humanizePlanGenerationError(message, code),
+      error: consumerError,
       code,
+      detail: formatPlanGenerationFailureDetail({
+        code,
+        message,
+        validationReport,
+      }) ?? undefined,
       plan: {
         ...createEmptyConsumerPlan(weekStart),
         status: "failed",
-        errorMessage: humanizePlanGenerationError(message, code),
+        errorMessage: consumerError,
         generationStage: undefined,
         validationReport,
       },
