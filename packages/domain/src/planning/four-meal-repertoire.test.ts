@@ -374,55 +374,93 @@ describe("four-meal repertoire (V1 matrix)", () => {
     expect(strategy.coreRepertoire!.coveredDays).toHaveLength(V1_COVERED_DAY_COUNT);
   });
 
-  it("excludes short-fridge non-freezer meals from once-weekly repertoire", () => {
-    const batchSafe = [1, 2, 3, 4].map((n) =>
-      rankedMeal(`batch-${n}`, {
-        name: `Batch Meal ${n}`,
-        cuisineFamily: ["Indian", "Mexican", "Thai", "Caribbean"][n - 1]!,
-        primaryProtein: ["Chicken", "Beef", "Shrimp", "Lamb"][n - 1]!,
-        dishFormat: `format-${n}`,
-        flavorFamilies: [`flavor-${n}`],
+  it("allows component_prepped and short quick_fresh_finish; excludes fresh_only and long finishes", () => {
+    const pool = [
+      rankedMeal("batch-1", {
+        name: "Batch 1",
+        cuisineFamily: "Indian",
+        primaryProtein: "Chicken",
+        dishFormat: "tikka",
         mealPrepAdaptability: "fully_prepped",
-        score: 90 - n,
-        rank: n,
+        score: 90,
+        rank: 1,
       }),
-    );
-    const unsafeFish = rankedMeal("andhra-fish", {
-      name: "Andhra Chepala Pulusu",
-      cuisineFamily: "Indian",
-      primaryProtein: "Fish",
-      dishFormat: "tamarind fish curry",
-      flavorFamilies: ["tangy", "chili"],
-      mealPrepAdaptability: "component_prepped",
-      score: 99,
-      rank: 1,
-    });
-    const freshOnly = rankedMeal("fresh-salad", {
-      name: "Crispy Fish Tacos",
-      cuisineFamily: "Mexican",
-      primaryProtein: "Fish",
-      dishFormat: "taco",
-      flavorFamilies: ["bright"],
-      mealPrepAdaptability: "quick_fresh_finish",
-      score: 98,
-      rank: 2,
-    });
+      rankedMeal("batch-2", {
+        name: "Batch 2",
+        cuisineFamily: "Mexican",
+        primaryProtein: "Beef",
+        dishFormat: "stew",
+        mealPrepAdaptability: "component_prepped",
+        estimatedFinishMinutesAfterPrep: 10,
+        score: 89,
+        rank: 2,
+      }),
+      rankedMeal("batch-3", {
+        name: "Batch 3",
+        cuisineFamily: "Thai",
+        primaryProtein: "Shrimp",
+        dishFormat: "curry",
+        mealPrepAdaptability: "quick_fresh_finish",
+        estimatedFinishMinutesAfterPrep: 12,
+        score: 88,
+        rank: 3,
+      }),
+      rankedMeal("batch-4", {
+        name: "Batch 4",
+        cuisineFamily: "Caribbean",
+        primaryProtein: "Chicken",
+        dishFormat: "jerk",
+        mealPrepAdaptability: "fully_prepped",
+        score: 87,
+        rank: 4,
+      }),
+      rankedMeal("andhra-fish", {
+        name: "Andhra Chepala Pulusu",
+        cuisineFamily: "Indian",
+        primaryProtein: "Fish",
+        dishFormat: "tamarind fish curry",
+        mealPrepAdaptability: "component_prepped",
+        estimatedFinishMinutesAfterPrep: 12,
+        score: 99,
+        rank: 1,
+      }),
+      rankedMeal("long-finish", {
+        name: "Long Fresh Roast",
+        cuisineFamily: "American",
+        primaryProtein: "Chicken",
+        dishFormat: "roast",
+        mealPrepAdaptability: "quick_fresh_finish",
+        estimatedFinishMinutesAfterPrep: 45,
+        score: 98,
+        rank: 2,
+      }),
+      rankedMeal("fresh-only", {
+        name: "Fragile Salad",
+        cuisineFamily: "American",
+        primaryProtein: "Tofu",
+        dishFormat: "salad",
+        mealPrepAdaptability: "fresh_only",
+        score: 97,
+        rank: 3,
+      }),
+    ];
 
     const selected = selectFourMealRepertoire({
-      lunchPool: [...batchSafe, unsafeFish, freshOnly],
-      dinnerPool: [...batchSafe, unsafeFish, freshOnly],
+      lunchPool: pool,
+      dinnerPool: pool,
       prepFrequency: "once_weekly",
+      maxFinishMinutes: 15,
       varietyLevel: "balanced",
     });
     expect(selected.ok).toBe(true);
     if (!selected.ok) return;
     const ids = selected.value.candidates.map((c) => c.ranked.candidate.candidateId);
-    expect(ids).not.toContain("andhra-fish");
-    expect(ids).not.toContain("fresh-salad");
-    expect(ids.every((id) => id.startsWith("batch-"))).toBe(true);
+    expect(ids).toContain("andhra-fish");
+    expect(ids).not.toContain("long-finish");
+    expect(ids).not.toContain("fresh-only");
   });
 
-  it("fails when fewer than four meals are batch-prep eligible", () => {
+  it("rejects quick_fresh_finish when mostly_ready (maxFinishMinutes=0)", () => {
     const pool = [1, 2, 3].map((n) =>
       rankedMeal(`only-${n}`, {
         name: `Only ${n}`,
@@ -434,19 +472,21 @@ describe("four-meal repertoire (V1 matrix)", () => {
         rank: n,
       }),
     );
-    const fish = rankedMeal("fish", {
-      name: "Fish Curry",
-      cuisineFamily: "Indian",
+    const quick = rankedMeal("quick", {
+      name: "Quick Finish",
+      cuisineFamily: "Mexican",
       primaryProtein: "Fish",
-      dishFormat: "curry",
-      mealPrepAdaptability: "component_prepped",
+      dishFormat: "taco",
+      mealPrepAdaptability: "quick_fresh_finish",
+      estimatedFinishMinutesAfterPrep: 10,
       score: 95,
       rank: 1,
     });
     const selected = selectFourMealRepertoire({
-      lunchPool: [...pool, fish],
-      dinnerPool: [...pool, fish],
+      lunchPool: [...pool, quick],
+      dinnerPool: [...pool, quick],
       prepFrequency: "once_weekly",
+      maxFinishMinutes: 0,
     });
     expect(selected.ok).toBe(false);
     if (selected.ok) return;

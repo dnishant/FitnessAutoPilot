@@ -385,7 +385,7 @@ describe("culinary discovery domain", () => {
     expect(prompt.userPrompt).toContain("Generic Rice Bowl");
     expect(prompt.userPrompt).toContain("Target candidate count (maximum/target, not an exact quota): 20");
     expect(prompt.userPrompt).toContain(CULINARY_DISCOVERY_PROMPT_VERSION);
-    expect(prompt.userPrompt).toContain("fully_prepped freezer-friendly");
+    expect(prompt.userPrompt).toContain("component_prepped");
     expect(prompt.userPrompt).toContain("Prep frequency constraint:");
     expect(prompt.userPrompt).toContain("Max finish minutes after prep: 15");
     expect(combined).toContain("What genuinely delicious food might this person want to eat?");

@@ -627,6 +627,46 @@ describe("PLAN-013 equipment + attention", () => {
   });
 });
 
+describe("PLAN-013 component / quick finish deferral", () => {
+  it("defers primary cook for component_prepped (store components, finish later)", () => {
+    const recipe = baseRecipe({
+      supportedPrepModes: [
+        {
+          mode: "component_prepped",
+          advanceTasks: ["Prep aromatics", "Marinate protein"],
+          finishTasks: ["Cook protein", "Assemble"],
+          finishTimeMinutes: 12,
+        },
+      ],
+    });
+    const tasks = extractTasksForRequirement({
+      requirement: {
+        coreMealId: "core_tikka",
+        candidateId: "tikka-chicken",
+        recipeId: recipe.recipeId,
+        name: recipe.name,
+        mealInstanceIds: ["m1", "m2"],
+        weeklyInstanceCount: 2,
+        requiredOutputServings: 2.2,
+        referenceYieldServings: 4,
+        plannedCookOutputServings: 2.2,
+        expectedExcessServings: 0,
+        prepIntent: "component_prepped",
+        instanceServings: [
+          { mealInstanceId: "m1", day: "monday", mealType: "lunch", personalServings: 1.1 },
+          { mealInstanceId: "m2", day: "thursday", mealType: "dinner", personalServings: 1.1 },
+        ],
+      },
+      recipe,
+      cookingStyle: "ready_lunch_fresh_dinner",
+      maxFinishMinutes: 15,
+    });
+    expect(tasks.some((t) => t.type === "cook")).toBe(false);
+    expect(tasks.some((t) => t.type === "fresh_finish")).toBe(true);
+    expect(tasks.some((t) => t.type === "portion_and_store")).toBe(true);
+  });
+});
+
 describe("PLAN-013 graph integrity", () => {
   it("detects cycles", () => {
     const tasks: PrepTask[] = [

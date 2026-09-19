@@ -688,9 +688,9 @@ export function buildDiscoveryMetadata(args: {
 
 const COOKING_STYLE_CONTEXT: Record<string, string> = {
   mostly_ready:
-    "Prefer candidates that batch/reheat/freeze well; mealPrepAdaptability should be fully_prepped (freezer-friendly batch meals). Do NOT return short-fridge seafood or fresh-only dishes.",
+    "Prefer fully_prepped batch meals, or component_prepped dishes whose weekday finish is essentially reheat/assemble. Avoid fresh_only and long quick_fresh_finish.",
   ready_lunch_fresh_dinner:
-    "For once-weekly meal prep, prefer fully_prepped freezer-friendly dishes. Avoid fish/shellfish and other meals that cannot safely hold or freeze across a 6-day prep week.",
+    "Once-weekly prep is fine with fully_prepped, component_prepped (store components; short finish later), or quick_fresh_finish when estimatedFinishMinutesAfterPrep is within maxFinishMinutes. Avoid fresh_only and long finishes.",
   fresh_focused:
     "Favor component-friendly or quick_fresh_finish dishes that cook from prepped ingredients.",
 };
@@ -710,8 +710,8 @@ export function buildCulinaryDiscoveryPrompt(
     prepFrequency === "throughout_week"
       ? "Prep happens throughout the week — shorter fridge-life dishes may be acceptable."
       : prepFrequency === "twice_weekly"
-        ? "Two prep sessions per week — dishes must safely hold ~4 days or be freezer-friendly."
-        : "Default once-weekly prep covers six eating days: ONLY return fully_prepped / freezer-friendly batch meals. Exclude component_prepped fish, quick_fresh_finish, and fresh_only from this pool.";
+        ? "Two prep sessions per week — fully_prepped, component_prepped, or short quick_fresh_finish are all welcome."
+        : "Once-weekly prep: return fully_prepped, component_prepped (prep components once; store; short finish later), or quick_fresh_finish only when estimatedFinishMinutesAfterPrep is truly short (within maxFinishMinutes). Exclude fresh_only and long fresh finishes.";
 
   const recentBlock =
     request.recentConcepts && request.recentConcepts.length > 0

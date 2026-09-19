@@ -66,6 +66,9 @@ const MAX_POOL_FOR_COMBINATIONS = 12;
 /** Days from Sunday prep session to last covered day (Saturday). */
 export const V1_ONCE_WEEKLY_STORAGE_HORIZON_DAYS = 6 as const;
 
+/** Default short-finish ceiling when maxFinishMinutes is unset (Flexible). */
+export const DEFAULT_QUICK_FINISH_ELIGIBILITY_MINUTES = 20 as const;
+
 export type MealPrepStorageProfile = {
   fridgeLifeDays: number;
   freezerFriendly: boolean;
@@ -74,6 +77,9 @@ export type MealPrepStorageProfile = {
 /**
  * Planning-time storage profile inferred from discovery mealPrepAdaptability.
  * Must stay aligned with CoreMeal fridge/freezer fields written onto the repertoire.
+ *
+ * Note: component_prepped / quick_fresh_finish store *components*, not fully cooked
+ * meals — fridge life here describes component hold quality, not cooked leftovers.
  */
 export function mealPrepStorageProfileFromAdaptability(
   adaptability: RankedCulinaryCandidate["candidate"]["mealPrepAdaptability"],
@@ -82,47 +88,47 @@ export function mealPrepStorageProfileFromAdaptability(
     return { fridgeLifeDays: 4, freezerFriendly: true };
   }
   if (adaptability === "component_prepped") {
-    return { fridgeLifeDays: 3, freezerFriendly: false };
+    return { fridgeLifeDays: 4, freezerFriendly: false };
   }
   if (adaptability === "quick_fresh_finish") {
-    return { fridgeLifeDays: 2, freezerFriendly: false };
+    return { fridgeLifeDays: 3, freezerFriendly: false };
   }
   return { fridgeLifeDays: 1, freezerFriendly: false };
 }
 
 /**
- * Max days after prep a meal can safely appear in a batch-prep week.
- * Freezer-friendly meals can cover the full V1 horizon.
- */
-export function maxSafeBatchPrepHorizonDays(profile: MealPrepStorageProfile): number {
-  if (profile.freezerFriendly) return V1_ONCE_WEEKLY_STORAGE_HORIZON_DAYS;
-  return profile.fridgeLifeDays;
-}
-
-/**
- * Required safe horizon for the user's prep cadence.
- * once_weekly (V1 default) must cover Mon–Sat from Sunday prep.
- */
-export function requiredBatchPrepHorizonDays(
-  prepFrequency: PrepFrequency | null | undefined,
-): number {
-  if (prepFrequency === "throughout_week") return 2;
-  if (prepFrequency === "twice_weekly") return 4;
-  return V1_ONCE_WEEKLY_STORAGE_HORIZON_DAYS;
-}
-
-/**
  * Hard eligibility for the V1 four-meal batch repertoire.
- * Meals that cannot safely hold (or freeze) through the prep horizon are excluded —
- * not scheduled as late-week fresh-only exceptions.
+ *
+ * Allowed:
+ * - fully_prepped — cook ahead; refrigerate/freeze cooked portions
+ * - component_prepped — prep once, store components, finish later
+ * - quick_fresh_finish — same, when the finish is truly within the user's finish budget
+ *
+ * Excluded:
+ * - fresh_only (cannot batch-prep meaningfully)
+ * - quick_fresh_finish when finish exceeds maxFinishMinutes (or mostly_ready / 0)
  */
 export function isEligibleForBatchPrepRepertoire(input: {
   mealPrepAdaptability: RankedCulinaryCandidate["candidate"]["mealPrepAdaptability"];
+  estimatedFinishMinutesAfterPrep?: number | null;
+  maxFinishMinutes?: number | null;
   prepFrequency?: PrepFrequency | null;
 }): boolean {
-  const profile = mealPrepStorageProfileFromAdaptability(input.mealPrepAdaptability);
-  const required = requiredBatchPrepHorizonDays(input.prepFrequency);
-  return maxSafeBatchPrepHorizonDays(profile) >= required;
+  const adapt = input.mealPrepAdaptability;
+  if (adapt === "fully_prepped" || adapt === "component_prepped") {
+    return true;
+  }
+  if (adapt === "quick_fresh_finish") {
+    const maxFinish = input.maxFinishMinutes;
+    if (maxFinish === 0) return false;
+    const finish =
+      input.estimatedFinishMinutesAfterPrep ??
+      (maxFinish == null ? DEFAULT_QUICK_FINISH_ELIGIBILITY_MINUTES : maxFinish);
+    const budget = maxFinish ?? DEFAULT_QUICK_FINISH_ELIGIBILITY_MINUTES;
+    return finish <= budget;
+  }
+  // fresh_only — only when cooking throughout the week
+  return input.prepFrequency === "throughout_week";
 }
 
 /**
@@ -134,6 +140,7 @@ export function buildRepertoireCandidates(input: {
   conceptsByCandidateId?: Record<string, MealConcept>;
   cookingStyle?: WeeklyCookingStyle;
   prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
   excludedCandidateIds?: ReadonlySet<string>;
 }): RepertoireCandidate[] {
   const byId = new Map<string, RankedCulinaryCandidate>();
@@ -143,6 +150,8 @@ export function buildRepertoireCandidates(input: {
     if (
       !isEligibleForBatchPrepRepertoire({
         mealPrepAdaptability: ranked.candidate.mealPrepAdaptability,
+        estimatedFinishMinutesAfterPrep: ranked.candidate.estimatedFinishMinutesAfterPrep,
+        maxFinishMinutes: input.maxFinishMinutes,
         prepFrequency: input.prepFrequency,
       })
     ) {
@@ -229,14 +238,14 @@ export function selectFourMealRepertoire(input: {
   varietyLevel?: VarietyLevel;
   cookingStyle?: WeeklyCookingStyle;
   prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
   excludedCandidateIds?: ReadonlySet<string>;
 }): Result<ScoredRepertoireSet, FourMealRepertoireError> {
   const pool = buildRepertoireCandidates(input);
   if (pool.length < V1_CORE_MEAL_COUNT) {
-    const required = requiredBatchPrepHorizonDays(input.prepFrequency);
     return err({
       code: "INSUFFICIENT_CANDIDATES",
-      message: `Need at least ${V1_CORE_MEAL_COUNT} batch-prep-eligible candidates (safe for a ${required}-day prep horizon); got ${pool.length}.`,
+      message: `Need at least ${V1_CORE_MEAL_COUNT} batch-prep-eligible candidates (fully_prepped, component_prepped, or short quick_fresh_finish); got ${pool.length}.`,
     });
   }
 
@@ -452,6 +461,7 @@ export function buildV1WeeklyStrategy(input: {
   varietyLevel?: VarietyLevel;
   cookingStyle?: WeeklyCookingStyle;
   prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
   excludedCandidateIds?: ReadonlySet<string>;
   flexibleDay?: DayOfWeek;
 }): Result<

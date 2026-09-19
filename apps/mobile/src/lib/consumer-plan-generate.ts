@@ -681,6 +681,7 @@ async function buildRemotePlan(
       varietyLevel,
       cookingStyle: cooking?.cookingStyle,
       prepFrequency: cooking?.prepFrequency,
+      maxFinishMinutes: cooking?.maxFinishMinutes,
     });
     if (!v1Strategy.ok) {
       throw Object.assign(new Error(v1Strategy.error.message), {

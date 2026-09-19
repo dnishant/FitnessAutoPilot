@@ -336,22 +336,25 @@ function shouldDeferPrimaryCook(input: {
   finishTimeMinutes?: number;
 }): boolean {
   const finish = input.finishTimeMinutes ?? 15;
-  const maxFinish = input.maxFinishMinutes ?? 15;
+  const maxFinish = input.maxFinishMinutes;
 
+  // Component-prepped: always prep/store components now; finish on the eating day.
+  if (input.prepIntent === "component_prepped") return true;
+
+  // Fresh / quick finish: defer when the finish fits the user's budget.
   if (input.prepIntent === "fresh") return true;
+  if (input.prepIntent === "quick_fresh_finish") {
+    if (maxFinish === 0) return false; // mostly_ready — should not be in repertoire
+    const budget = maxFinish ?? 20;
+    return finish <= budget;
+  }
+
   if (input.cookingStyle === "mostly_ready") return false;
   if (input.cookingStyle === "fresh_focused") {
-    return input.mealPrepQuality === "poor" || input.prepIntent === "quick_fresh_finish" || input.prepIntent === "fresh";
+    return input.mealPrepQuality === "poor";
   }
-  // ready_lunch_fresh_dinner / default: defer when quality is poor for reheating
-  // or prep intent is fresh-finish and finish time fits budget.
+  // ready_lunch_fresh_dinner / default for fully_prepped: cook ahead.
   if (input.mealPrepQuality === "poor") return true;
-  if (
-    (input.prepIntent === "quick_fresh_finish" || input.prepIntent === "fresh") &&
-    finish <= (maxFinish || 20)
-  ) {
-    return true;
-  }
   return false;
 }
 
