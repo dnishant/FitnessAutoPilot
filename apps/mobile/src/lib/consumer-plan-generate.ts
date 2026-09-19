@@ -694,10 +694,24 @@ async function buildRemotePlan(
       excludedCandidateIds: failedCandidateIds,
     });
     if (!repaired.ok || !repaired.repaired) {
+      if (typeof console !== "undefined") {
+        console.warn(
+          "[grocery-complexity] repair exhausted",
+          JSON.stringify({
+            band: groceryMetrics.band,
+            weighted: groceryMetrics.weightedComplexity,
+            unique: groceryMetrics.uniqueCanonicalIngredients,
+            fresh: groceryMetrics.uniqueFreshPerishables,
+            specialty: groceryMetrics.uniqueSpecialtyIngredients,
+            oneOffFresh: groceryMetrics.oneOffFreshPerishables,
+            oneOffSpecialty: groceryMetrics.oneOffSpecialtyIngredients,
+          }),
+        );
+      }
       throw Object.assign(
         new Error(
           repaired.ok
-            ? "Grocery complexity is excessive and no lower-burden replacements were available."
+            ? `Grocery complexity is excessive (weighted=${groceryMetrics.weightedComplexity}, unique=${groceryMetrics.uniqueCanonicalIngredients}) and no lower-burden replacements were available.`
             : repaired.message,
         ),
         { code: "GROCERY_COMPLEXITY_REPAIR_EXHAUSTED", metrics: groceryMetrics },

@@ -153,6 +153,9 @@ export function repairStrategyForGroceryComplexity(input: {
   }));
 
   // Replace up to 2 highest-burden meals per repair call.
+  // Search the union of lunch+dinner pools — V1 core meals are shared across slots.
+  const unionPool = uniqueRankedById([...input.lunchPool, ...input.dinnerPool]);
+
   for (const target of rankedBurden.slice(0, 2)) {
     const mealTypes = new Set<"lunch" | "dinner">();
     for (const slot of collectRankedMealSlots(days)) {
@@ -160,25 +163,33 @@ export function repairStrategyForGroceryComplexity(input: {
     }
     if (mealTypes.size === 0) continue;
 
-    let replaced = false;
-    for (const mealType of mealTypes) {
-      const pool = mealType === "lunch" ? input.lunchPool : input.dinnerPool;
-      const currentMeals = meals.filter((m) => m.candidateId !== target.candidateId);
-      const replacement = pickLowerBurdenReplacement({
-        pool,
-        usedIds,
-        excluded,
-        conceptsByCandidateId: input.conceptsByCandidateId,
-        currentMeals,
-        minImprovement: 0.5,
-      });
-      if (!replacement) continue;
+    const currentMeals = meals.filter((m) => m.candidateId !== target.candidateId);
+    const targetEntry = meals.find((m) => m.candidateId === target.candidateId);
+    const targetEconomy = targetEntry
+      ? scoreCandidateIngredientEconomy({
+          candidate: targetEntry,
+          selected: currentMeals,
+        }).netEconomyScore
+      : Number.NEGATIVE_INFINITY;
 
-      days = days.map((day) => {
-        const slot = day[mealType];
-        if (slot.candidateId !== target.candidateId) return day;
-        return {
-          ...day,
+    const replacement = pickLowerBurdenReplacement({
+      pool: unionPool,
+      usedIds,
+      excluded,
+      conceptsByCandidateId: input.conceptsByCandidateId,
+      currentMeals,
+      // Accept any unused candidate that improves on the removed meal's economy.
+      minScore: targetEconomy + 0.01,
+    });
+    if (!replacement) continue;
+
+    days = days.map((day) => {
+      let next = day;
+      for (const mealType of mealTypes) {
+        const slot = next[mealType];
+        if (slot.candidateId !== target.candidateId) continue;
+        next = {
+          ...next,
           [mealType]: {
             ...slot,
             candidateId: replacement.candidate.candidateId,
@@ -188,18 +199,26 @@ export function repairStrategyForGroceryComplexity(input: {
             planningReason: `Replaced high grocery-burden meal ${target.candidateId} to improve weekly ingredient economy.`,
           },
         };
+      }
+      return next;
+    });
+    usedIds.delete(target.candidateId);
+    usedIds.add(replacement.candidate.candidateId);
+    // Keep footprint list in sync for subsequent replacements this round.
+    const idx = meals.findIndex((m) => m.candidateId === target.candidateId);
+    if (idx >= 0) {
+      meals[idx] = footprintForCandidate({
+        candidateId: replacement.candidate.candidateId,
+        name: replacement.candidate.name,
+        concept: input.conceptsByCandidateId?.[replacement.candidate.candidateId],
+        ranked: replacement,
       });
-      usedIds.delete(target.candidateId);
-      usedIds.add(replacement.candidate.candidateId);
-      replacements.push({
-        failedCandidateId: target.candidateId,
-        replacementCandidateId: replacement.candidate.candidateId,
-        burdenScore: target.burdenScore,
-      });
-      replaced = true;
-      break;
     }
-    if (!replaced) continue;
+    replacements.push({
+      failedCandidateId: target.candidateId,
+      replacementCandidateId: replacement.candidate.candidateId,
+      burdenScore: target.burdenScore,
+    });
   }
 
   let uniqueCandidateIds = [
@@ -321,20 +340,36 @@ function rebuildCoreRepertoireAfterRepair(input: {
   };
 }
 
+function uniqueRankedById(
+  pool: readonly RankedCulinaryCandidate[],
+): RankedCulinaryCandidate[] {
+  const byId = new Map<string, RankedCulinaryCandidate>();
+  for (const ranked of pool) {
+    const id = ranked.candidate.candidateId;
+    const existing = byId.get(id);
+    if (!existing || ranked.rank < existing.rank) {
+      byId.set(id, ranked);
+    }
+  }
+  return [...byId.values()];
+}
+
 function pickLowerBurdenReplacement(input: {
   pool: readonly RankedCulinaryCandidate[];
   usedIds: Set<string>;
   excluded: Set<string>;
   conceptsByCandidateId?: Record<string, MealConcept>;
   currentMeals: MealFootprintEntry[];
-  minImprovement: number;
+  /** Minimum netEconomyScore required (relative to removed meal). */
+  minScore: number;
 }): RankedCulinaryCandidate | null {
   let best: { ranked: RankedCulinaryCandidate; score: number } | null = null;
 
   for (const ranked of input.pool) {
     const id = ranked.candidate.candidateId;
     if (input.usedIds.has(id) || input.excluded.has(id)) continue;
-    if (input.conceptsByCandidateId && !input.conceptsByCandidateId[id]) continue;
+    // Prefer composed concepts when available, but do not require them —
+    // heuristic footprints still allow repair when a ranked alternative exists.
     const entry = footprintForCandidate({
       candidateId: id,
       name: ranked.candidate.name,
@@ -350,6 +385,7 @@ function pickLowerBurdenReplacement(input: {
     }
   }
 
-  if (!best || best.score < input.minImprovement) return null;
+  if (!best) return null;
+  if (best.score < input.minScore) return null;
   return best.ranked;
 }

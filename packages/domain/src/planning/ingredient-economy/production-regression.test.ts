@@ -66,7 +66,8 @@ describe("production weekly plan regression (tmp/latest-weekly-plan.json)", () =
     // This production week is the motivating pathology — exact complexity should
     // still look high (upstream repair is what improves repertoire selection).
     expect(metrics.uniqueCanonicalIngredients).toBeGreaterThan(30);
-    expect(metrics.policyVersion).toBe("grocery-complexity-policy-v1");
+    expect(metrics.policyVersion).toBe("grocery-complexity-policy-v2");
+    expect(metrics.band).toBe("excessive");
 
     // Surface for completion report / tuning.
     // eslint-disable-next-line no-console

@@ -178,6 +178,78 @@ describe("ingredient economy — Stage B exact complexity", () => {
     expect(metrics.band).not.toBe("excessive");
     expect(metrics.ingredientReuseRatio).toBeGreaterThan(0.3);
   });
+
+  it("accepts a realistic four-recipe grocery footprint for balanced V1", () => {
+    // ~45 unique rows across 4 meals with shared aromatics — typical meal-prep week.
+    const shared = ["onion", "garlic", "olive oil", "salt", "black pepper", "cumin"];
+    const meals: Array<{ id: string; extras: string[] }> = [
+      {
+        id: "tikka",
+        extras: [
+          "chicken",
+          "yogurt",
+          "rice",
+          "cilantro",
+          "lime",
+          "ginger",
+          "turmeric",
+          "garam masala",
+          "tomato",
+        ],
+      },
+      {
+        id: "tacos",
+        extras: [
+          "chicken",
+          "tortillas",
+          "cabbage",
+          "cilantro",
+          "lime",
+          "chili powder",
+          "sour cream",
+          "avocado",
+        ],
+      },
+      {
+        id: "keema",
+        extras: [
+          "ground beef",
+          "rice",
+          "peas",
+          "tomato",
+          "ginger",
+          "coriander",
+          "turmeric",
+          "garam masala",
+        ],
+      },
+      {
+        id: "salmon",
+        extras: [
+          "salmon",
+          "potato",
+          "broccoli",
+          "lemon",
+          "parsley",
+          "butter",
+          "paprika",
+        ],
+      },
+    ];
+    const rows = meals.flatMap((meal) =>
+      [...shared, ...meal.extras].map((ingredientName) => ({
+        candidateId: meal.id,
+        ingredientName,
+      })),
+    );
+    const metrics = evaluateExactGroceryComplexity({
+      ingredientUses: collectExactIngredientUses(rows),
+      uniqueMealConcepts: 4,
+      varietyLevel: "balanced",
+    });
+    expect(metrics.uniqueCanonicalIngredients).toBeLessThanOrEqual(58);
+    expect(metrics.band).not.toBe("excessive");
+  });
 });
 
 describe("PLAN-012 grocery canonicalization", () => {

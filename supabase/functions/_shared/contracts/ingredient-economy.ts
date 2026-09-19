@@ -10,7 +10,7 @@ import type { VarietyLevel } from "./meal-preferences.ts";
  */
 
 export const INGREDIENT_ECONOMY_POLICY_VERSION = "ingredient-economy-policy-v1" as const;
-export const GROCERY_COMPLEXITY_POLICY_VERSION = "grocery-complexity-policy-v1" as const;
+export const GROCERY_COMPLEXITY_POLICY_VERSION = "grocery-complexity-policy-v2" as const;
 
 export const IngredientBurdenClassSchema = z.enum([
   "common_staple",
@@ -112,49 +112,52 @@ export type GroceryComplexityPolicy = {
 };
 
 /**
- * Versioned grocery-complexity policy.
- * Tuned so ~100-item pathological weeks fail all variety modes while
- * compact overlapping weeks pass Balanced.
+ * Versioned grocery-complexity policy for V1 four-meal weeks.
+ *
+ * Calibrated so a normal 4-recipe meal-prep basket (roughly a weekly grocery trip)
+ * passes Balanced, while pathological ~80–100 unique purchase weeks still fail.
+ * Limits are intentionally looser than early v1 drafts that rejected realistic
+ * four-meal resolved recipes.
  */
 export const GROCERY_COMPLEXITY_POLICY: GroceryComplexityPolicy = {
   version: GROCERY_COMPLEXITY_POLICY_VERSION,
   weights: {
     commonStaple: 0.05,
-    commonFresh: 0.6,
-    reusableWeekly: 0.45,
-    specialty: 2.2,
-    highWasteRisk: 2.8,
-    oneOffFreshMultiplier: 2.5,
-    oneOffSpecialtyMultiplier: 3.5,
+    commonFresh: 0.55,
+    reusableWeekly: 0.4,
+    specialty: 2.0,
+    highWasteRisk: 2.4,
+    oneOffFreshMultiplier: 2.0,
+    oneOffSpecialtyMultiplier: 3.0,
     reuseRewardPerSharedConcept: 0.15,
   },
   limitsByVariety: {
     simple: {
-      maxUniqueCanonicalIngredients: 28,
-      maxUniqueFreshPerishables: 12,
-      maxUniqueSpecialtyIngredients: 3,
-      maxOneOffFreshPerishables: 3,
-      maxOneOffSpecialtyIngredients: 1,
-      maxWeightedComplexity: 22,
-      minIngredientReuseRatio: 0.45,
+      maxUniqueCanonicalIngredients: 48,
+      maxUniqueFreshPerishables: 18,
+      maxUniqueSpecialtyIngredients: 5,
+      maxOneOffFreshPerishables: 10,
+      maxOneOffSpecialtyIngredients: 3,
+      maxWeightedComplexity: 48,
+      minIngredientReuseRatio: 0.3,
     },
     balanced: {
-      maxUniqueCanonicalIngredients: 40,
-      maxUniqueFreshPerishables: 16,
-      maxUniqueSpecialtyIngredients: 5,
-      maxOneOffFreshPerishables: 5,
-      maxOneOffSpecialtyIngredients: 2,
-      maxWeightedComplexity: 32,
-      minIngredientReuseRatio: 0.35,
+      maxUniqueCanonicalIngredients: 58,
+      maxUniqueFreshPerishables: 24,
+      maxUniqueSpecialtyIngredients: 8,
+      maxOneOffFreshPerishables: 14,
+      maxOneOffSpecialtyIngredients: 4,
+      maxWeightedComplexity: 58,
+      minIngredientReuseRatio: 0.22,
     },
     high: {
-      maxUniqueCanonicalIngredients: 52,
-      maxUniqueFreshPerishables: 22,
-      maxUniqueSpecialtyIngredients: 8,
-      maxOneOffFreshPerishables: 8,
-      maxOneOffSpecialtyIngredients: 3,
-      maxWeightedComplexity: 42,
-      minIngredientReuseRatio: 0.25,
+      maxUniqueCanonicalIngredients: 68,
+      maxUniqueFreshPerishables: 28,
+      maxUniqueSpecialtyIngredients: 10,
+      maxOneOffFreshPerishables: 18,
+      maxOneOffSpecialtyIngredients: 6,
+      maxWeightedComplexity: 68,
+      minIngredientReuseRatio: 0.15,
     },
   },
 };
