@@ -247,6 +247,15 @@ describe("generation UX helpers", () => {
     ).toMatch(/reliable plan/i);
   });
 
+  it("maps culinary discovery schema failures to a meal-ideas retry message", () => {
+    expect(
+      humanizePlanGenerationError(
+        "No candidates passed schema validation.",
+        "DISCOVERY_SCHEMA_VALIDATION_FAILED",
+      ),
+    ).toMatch(/meal ideas/i);
+  });
+
   it("builds ready summary from real preference state", () => {
     const lines = generateReadySummary({
       nutritionTarget: {

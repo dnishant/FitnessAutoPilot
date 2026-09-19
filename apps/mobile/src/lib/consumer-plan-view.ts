@@ -172,6 +172,15 @@ export function humanizePlanGenerationError(message: string, code?: string): str
     return "We couldn't finish a reliable plan this time. Please try generating again.";
   }
   if (
+    code === "DISCOVERY_SCHEMA_VALIDATION_FAILED" ||
+    code === "DISCOVERY_NOT_GROUNDED" ||
+    code === "LLM_INVALID_STRUCTURED_OUTPUT" ||
+    lower.includes("candidates passed schema") ||
+    lower.includes("empty candidates array")
+  ) {
+    return "We couldn't finish finding meal ideas this time. Your preferences are saved — try generating again.";
+  }
+  if (
     code === "LLM_CONFIGURATION_ERROR" ||
     lower.includes("gemini") ||
     lower.includes("api key")
