@@ -118,6 +118,24 @@ export default function PlanTabScreen() {
             </View>
           ) : null}
 
+          {weeklyPlan.mealPrepPlan?.available ? (
+            <PrimaryButton
+              label="Meal Prep"
+              onPress={() => router.push("/meal-prep")}
+            />
+          ) : weeklyPlan.mealPrepPlan && !weeklyPlan.mealPrepPlan.available ? (
+            <PrimaryButton
+              label="Meal Prep (needs attention)"
+              variant="secondary"
+              onPress={() => router.push("/meal-prep")}
+            />
+          ) : (
+            <PrimaryButton
+              label="Generate Meal Prep"
+              onPress={() => router.push("/meal-prep")}
+            />
+          )}
+
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}

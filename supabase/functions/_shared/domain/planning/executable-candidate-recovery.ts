@@ -1,15 +1,21 @@
 import type {
   MealConcept,
+  PrepFrequency,
   RankedCulinaryCandidate,
   RankedWeeklyMealSlot,
   RankedWeeklyStrategy,
 } from "../../contracts/index.ts";
 import { collectRankedMealSlots } from "./ranked-weekly-strategy.ts";
 import type { MealExecutabilityFailure } from "../meal-portioning/executability.ts";
+import { isEligibleForBatchPrepRepertoire } from "./four-meal-repertoire.ts";
 
 /**
  * Bounded candidate replacement when a SELECTED candidate fails executability.
  * Reuses the ranked lunch/dinner pools — does not invent a parallel ranking system.
+ *
+ * V1 note: a failed core meal is replaced with ONE candidate across every slot that
+ * referenced it (lunch and dinner). Splitting lunch/dinner replacements expands the
+ * unique set past four meals and desyncs uniqueCandidateIds from day slots.
  */
 
 export const MAX_EXECUTABLE_REPLACEMENT_ROUNDS = 8;
@@ -56,20 +62,43 @@ function mealTypesForCandidate(
   return types;
 }
 
+function uniqueRankedById(
+  pool: readonly RankedCulinaryCandidate[],
+): RankedCulinaryCandidate[] {
+  const byId = new Map<string, RankedCulinaryCandidate>();
+  for (const ranked of pool) {
+    const id = ranked.candidate.candidateId;
+    const existing = byId.get(id);
+    if (!existing || ranked.rank < existing.rank) {
+      byId.set(id, ranked);
+    }
+  }
+  return [...byId.values()].sort((a, b) => a.rank - b.rank);
+}
+
 function pickReplacement(input: {
-  mealType: "lunch" | "dinner";
   pool: readonly RankedCulinaryCandidate[];
   usedIds: Set<string>;
   failedIds: Set<string>;
   conceptsByCandidateId?: Record<string, MealConcept>;
-  /** IDs already chosen as replacements for the same failed candidate (may reuse). */
-  allowIds?: Set<string>;
+  prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
 }): RankedCulinaryCandidate | null {
   for (const ranked of input.pool) {
     const id = ranked.candidate.candidateId;
     if (input.failedIds.has(id)) continue;
-    if (input.usedIds.has(id) && !input.allowIds?.has(id)) continue;
+    if (input.usedIds.has(id)) continue;
     if (input.conceptsByCandidateId && !input.conceptsByCandidateId[id]) continue;
+    if (
+      !isEligibleForBatchPrepRepertoire({
+        mealPrepAdaptability: ranked.candidate.mealPrepAdaptability,
+        estimatedFinishMinutesAfterPrep: ranked.candidate.estimatedFinishMinutesAfterPrep,
+        maxFinishMinutes: input.maxFinishMinutes,
+        prepFrequency: input.prepFrequency,
+      })
+    ) {
+      continue;
+    }
     return ranked;
   }
   return null;
@@ -90,8 +119,8 @@ function hydrateSlotName(
 
 /**
  * Replace every slot that references a failed candidate with the next ranked
- * pool member of the same meal type. Same failed ID across multiple days is
- * replaced coherently (one replacement ID for all of that meal type).
+ * pool member. Same failed ID across lunch and dinner is replaced coherently
+ * with a single replacement ID (required for V1 four-meal weeks).
  */
 export function replaceFailedCandidatesInStrategy(input: {
   strategy: RankedWeeklyStrategy;
@@ -100,6 +129,8 @@ export function replaceFailedCandidatesInStrategy(input: {
   dinnerPool: readonly RankedCulinaryCandidate[];
   failedCandidateIds: Set<string>;
   conceptsByCandidateId?: Record<string, MealConcept>;
+  prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
 }): ReplaceFailedCandidatesResult {
   const failedCandidateIds = new Set(input.failedCandidateIds);
   const unresolvedFailures: CandidateFailureRecord[] = [];
@@ -114,6 +145,8 @@ export function replaceFailedCandidatesInStrategy(input: {
   const usedIds = new Set(
     collectRankedMealSlots(days).map((slot) => slot.candidateId),
   );
+
+  const unionPool = uniqueRankedById([...input.lunchPool, ...input.dinnerPool]);
 
   // Dedupe failures by candidateId (first typed reason wins).
   const uniqueFailures = new Map<string, MealExecutabilityFailure>();
@@ -130,66 +163,58 @@ export function replaceFailedCandidatesInStrategy(input: {
       continue;
     }
 
-    let replacedAny = false;
-    /** Replacements chosen for this failedId may be reused across lunch/dinner. */
-    const pendingReplacementIds = new Set<string>();
+    const ranked = pickReplacement({
+      pool: unionPool,
+      usedIds,
+      failedIds: failedCandidateIds,
+      conceptsByCandidateId: input.conceptsByCandidateId,
+      prepFrequency: input.prepFrequency,
+      maxFinishMinutes: input.maxFinishMinutes,
+    });
 
-    for (const mealType of mealTypes) {
-      const pool = mealType === "lunch" ? input.lunchPool : input.dinnerPool;
-      const ranked = pickReplacement({
-        mealType,
-        pool,
-        usedIds,
-        failedIds: failedCandidateIds,
-        conceptsByCandidateId: input.conceptsByCandidateId,
-        allowIds: pendingReplacementIds,
+    if (!ranked) {
+      unresolvedFailures.push({
+        candidateId: failedId,
+        code: failure.code,
+        message: `${failure.message} No batch-prep-eligible replacement available in ranked pools.`,
       });
-      if (!ranked) {
-        unresolvedFailures.push({
-          candidateId: failedId,
-          code: failure.code,
-          message: `${failure.message} No replacement available in ${mealType} pool.`,
-        });
-        continue;
-      }
+      continue;
+    }
 
-      const replacementId = ranked.candidate.candidateId;
-      let slotCount = 0;
-      days = days.map((day) => {
-        const slot = day[mealType];
-        if (slot.candidateId !== failedId) return day;
-        slotCount += 1;
-        return {
-          ...day,
+    const replacementId = ranked.candidate.candidateId;
+    days = days.map((day) => {
+      let next = day;
+      for (const mealType of mealTypes) {
+        const slot = next[mealType];
+        if (slot.candidateId !== failedId) continue;
+        next = {
+          ...next,
           [mealType]: hydrateSlotName(
             slot,
             ranked,
             input.conceptsByCandidateId?.[replacementId],
           ),
         };
-      });
-      pendingReplacementIds.add(replacementId);
-      replacements.push({
-        failedCandidateId: failedId,
-        replacementCandidateId: replacementId,
-        mealType,
-        slotCount,
-      });
-      replacedAny = true;
+      }
+      return next;
+    });
+
+    for (const mealType of mealTypes) {
+      const countForType = collectRankedMealSlots(days).filter(
+        (s) => s.mealType === mealType && s.candidateId === replacementId,
+      ).length;
+      if (countForType > 0) {
+        replacements.push({
+          failedCandidateId: failedId,
+          replacementCandidateId: replacementId,
+          mealType,
+          slotCount: countForType,
+        });
+      }
     }
 
     usedIds.delete(failedId);
-    for (const id of pendingReplacementIds) {
-      usedIds.add(id);
-    }
-
-    if (!replacedAny) {
-      unresolvedFailures.push({
-        candidateId: failedId,
-        code: failure.code,
-        message: failure.message,
-      });
-    }
+    usedIds.add(replacementId);
   }
 
   const uniqueCandidateIds = [

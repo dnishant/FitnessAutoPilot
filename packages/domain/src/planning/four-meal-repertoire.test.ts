@@ -65,7 +65,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         primaryProtein: "Chicken",
         dishFormat: "tikka kebab",
         flavorFamilies: ["tandoori"],
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         fitnessAdaptability: "easy",
         score: 82,
         rank: 5,
@@ -76,7 +76,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         primaryProtein: "Fish",
         dishFormat: "stew",
         flavorFamilies: ["tomato", "olive"],
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         fitnessAdaptability: "moderate",
         score: 81,
         rank: 6,
@@ -130,7 +130,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         primaryProtein: "Chicken",
         dishFormat: "tikka kebab",
         flavorFamilies: ["tandoori"],
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         score: 90,
         rank: n,
       }),
@@ -152,7 +152,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         primaryProtein: "Fish",
         dishFormat: "stew",
         flavorFamilies: ["bright"],
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         score: 87,
         rank: 2,
       }),
@@ -172,7 +172,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         primaryProtein: "Beef",
         dishFormat: "skillet",
         flavorFamilies: ["herby"],
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         score: 85,
         rank: 4,
       }),
@@ -207,7 +207,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         cuisineFamily: "Indian",
         primaryProtein: "Chicken",
         dishFormat: "tikka kebab",
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         score: 90,
         rank: 1,
       }),
@@ -234,7 +234,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         cuisineFamily: "Thai",
         primaryProtein: "Shrimp",
         dishFormat: "curry",
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         score: 84,
         rank: 4,
       }),
@@ -281,7 +281,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         cuisineFamily: "Mexican",
         primaryProtein: "Fish",
         dishFormat: "stew",
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         score: 88,
         rank: 2,
       }),
@@ -299,7 +299,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         cuisineFamily: "Italian",
         primaryProtein: "Beef",
         dishFormat: "skillet",
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         score: 84,
         rank: 4,
       }),
@@ -338,7 +338,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         cuisineFamily: "Mexican",
         primaryProtein: "Fish",
         dishFormat: "stew",
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         score: 88,
         rank: 2,
       }),
@@ -356,7 +356,7 @@ describe("four-meal repertoire (V1 matrix)", () => {
         cuisineFamily: "Italian",
         primaryProtein: "Beef",
         dishFormat: "skillet",
-        mealPrepAdaptability: "component_prepped",
+        mealPrepAdaptability: "fully_prepped",
         score: 84,
         rank: 4,
       }),
@@ -372,5 +372,124 @@ describe("four-meal repertoire (V1 matrix)", () => {
     expect(strategy.coreRepertoire!.flexibleDay).toBe("sunday");
     expect(strategy.coreRepertoire!.coveredDays).not.toContain("sunday");
     expect(strategy.coreRepertoire!.coveredDays).toHaveLength(V1_COVERED_DAY_COUNT);
+  });
+
+  it("allows component_prepped and short quick_fresh_finish; excludes fresh_only and long finishes", () => {
+    const pool = [
+      rankedMeal("batch-1", {
+        name: "Batch 1",
+        cuisineFamily: "Indian",
+        primaryProtein: "Chicken",
+        dishFormat: "tikka",
+        mealPrepAdaptability: "fully_prepped",
+        score: 90,
+        rank: 1,
+      }),
+      rankedMeal("batch-2", {
+        name: "Batch 2",
+        cuisineFamily: "Mexican",
+        primaryProtein: "Beef",
+        dishFormat: "stew",
+        mealPrepAdaptability: "component_prepped",
+        estimatedFinishMinutesAfterPrep: 10,
+        score: 89,
+        rank: 2,
+      }),
+      rankedMeal("batch-3", {
+        name: "Batch 3",
+        cuisineFamily: "Thai",
+        primaryProtein: "Shrimp",
+        dishFormat: "curry",
+        mealPrepAdaptability: "quick_fresh_finish",
+        estimatedFinishMinutesAfterPrep: 12,
+        score: 88,
+        rank: 3,
+      }),
+      rankedMeal("batch-4", {
+        name: "Batch 4",
+        cuisineFamily: "Caribbean",
+        primaryProtein: "Chicken",
+        dishFormat: "jerk",
+        mealPrepAdaptability: "fully_prepped",
+        score: 87,
+        rank: 4,
+      }),
+      rankedMeal("andhra-fish", {
+        name: "Andhra Chepala Pulusu",
+        cuisineFamily: "Indian",
+        primaryProtein: "Fish",
+        dishFormat: "tamarind fish curry",
+        mealPrepAdaptability: "component_prepped",
+        estimatedFinishMinutesAfterPrep: 12,
+        score: 99,
+        rank: 1,
+      }),
+      rankedMeal("long-finish", {
+        name: "Long Fresh Roast",
+        cuisineFamily: "American",
+        primaryProtein: "Chicken",
+        dishFormat: "roast",
+        mealPrepAdaptability: "quick_fresh_finish",
+        estimatedFinishMinutesAfterPrep: 45,
+        score: 98,
+        rank: 2,
+      }),
+      rankedMeal("fresh-only", {
+        name: "Fragile Salad",
+        cuisineFamily: "American",
+        primaryProtein: "Tofu",
+        dishFormat: "salad",
+        mealPrepAdaptability: "fresh_only",
+        score: 97,
+        rank: 3,
+      }),
+    ];
+
+    const selected = selectFourMealRepertoire({
+      lunchPool: pool,
+      dinnerPool: pool,
+      prepFrequency: "once_weekly",
+      maxFinishMinutes: 15,
+      varietyLevel: "balanced",
+    });
+    expect(selected.ok).toBe(true);
+    if (!selected.ok) return;
+    const ids = selected.value.candidates.map((c) => c.ranked.candidate.candidateId);
+    expect(ids).toContain("andhra-fish");
+    expect(ids).not.toContain("long-finish");
+    expect(ids).not.toContain("fresh-only");
+  });
+
+  it("rejects quick_fresh_finish when mostly_ready (maxFinishMinutes=0)", () => {
+    const pool = [1, 2, 3].map((n) =>
+      rankedMeal(`only-${n}`, {
+        name: `Only ${n}`,
+        cuisineFamily: "Indian",
+        primaryProtein: "Chicken",
+        dishFormat: `d-${n}`,
+        mealPrepAdaptability: "fully_prepped",
+        score: 90,
+        rank: n,
+      }),
+    );
+    const quick = rankedMeal("quick", {
+      name: "Quick Finish",
+      cuisineFamily: "Mexican",
+      primaryProtein: "Fish",
+      dishFormat: "taco",
+      mealPrepAdaptability: "quick_fresh_finish",
+      estimatedFinishMinutesAfterPrep: 10,
+      score: 95,
+      rank: 1,
+    });
+    const selected = selectFourMealRepertoire({
+      lunchPool: [...pool, quick],
+      dinnerPool: [...pool, quick],
+      prepFrequency: "once_weekly",
+      maxFinishMinutes: 0,
+    });
+    expect(selected.ok).toBe(false);
+    if (selected.ok) return;
+    expect(selected.error.code).toBe("INSUFFICIENT_CANDIDATES");
   });
 });

@@ -23,6 +23,7 @@ export * from "./food-resolution/index";
 export * from "./meal-composition/index";
 export * from "./meal-portioning/index";
 export * from "./grocery/index";
+export * from "./meal-prep/index";
 export * from "./planning/portioning";
 export * from "./planning/planner";
 export * from "./planning/weekly-strategy";

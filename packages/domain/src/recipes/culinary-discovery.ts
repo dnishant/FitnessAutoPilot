@@ -688,9 +688,9 @@ export function buildDiscoveryMetadata(args: {
 
 const COOKING_STYLE_CONTEXT: Record<string, string> = {
   mostly_ready:
-    "Prefer candidates that batch/reheat well; mealPrepAdaptability may lean fully_prepped or component_prepped.",
+    "Prefer fully_prepped batch meals, or component_prepped dishes whose weekday finish is essentially reheat/assemble. Avoid fresh_only and long quick_fresh_finish.",
   ready_lunch_fresh_dinner:
-    "Favor dishes that can finish fresh in a short weekday window when maxFinishMinutes is set.",
+    "Once-weekly prep is fine with fully_prepped, component_prepped (store components; short finish later), or quick_fresh_finish when estimatedFinishMinutesAfterPrep is within maxFinishMinutes. Avoid fresh_only and long finishes.",
   fresh_focused:
     "Favor component-friendly or quick_fresh_finish dishes that cook from prepped ingredients.",
 };
@@ -705,6 +705,13 @@ export function buildCulinaryDiscoveryPrompt(
       `Honor cooking style preference: ${cookingStyle}.`
     : "No cooking-style preference specified.";
   const maxFinish = request.cookingPreferences?.maxFinishMinutes;
+  const prepFrequency = request.cookingPreferences?.prepFrequency;
+  const prepFrequencyNote =
+    prepFrequency === "throughout_week"
+      ? "Prep happens throughout the week — shorter fridge-life dishes may be acceptable."
+      : prepFrequency === "twice_weekly"
+        ? "Two prep sessions per week — fully_prepped, component_prepped, or short quick_fresh_finish are all welcome."
+        : "Once-weekly prep: return fully_prepped, component_prepped (prep components once; store; short finish later), or quick_fresh_finish only when estimatedFinishMinutesAfterPrep is truly short (within maxFinishMinutes). Exclude fresh_only and long fresh finishes.";
 
   const recentBlock =
     request.recentConcepts && request.recentConcepts.length > 0
@@ -845,6 +852,7 @@ export function buildCulinaryDiscoveryPrompt(
     `Dietary restrictions (HARD — never include): ${listOrNone(request.dietaryRestrictions)}`,
     `Dislikes (soft avoid): ${listOrNone(request.dislikes)}`,
     `Cooking style context: ${cookingNote}`,
+    `Prep frequency constraint: ${prepFrequencyNote}`,
     `Max finish minutes after prep: ${maxFinish ?? "(not specified)"}`,
     `Rejected concepts (avoid): ${listOrNone(request.rejectedConcepts)}`,
     "",

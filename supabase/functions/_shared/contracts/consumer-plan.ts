@@ -4,6 +4,7 @@ import { MealConceptSchema } from "./meal-composition.ts";
 import { ResolvedRecipeSchema } from "./recipe-resolution.ts";
 import { RankedWeeklyStrategySchema } from "./ranked-weekly-strategy.ts";
 import { GroceryListSchema } from "./grocery.ts";
+import { MealPrepPlanSchema } from "./meal-prep-plan.ts";
 import type { PersonalizedWeeklyNutritionPlan } from "./meal-portioning.ts";
 import type { WeeklyPlanValidationReport } from "./nutrition-plan-validation.ts";
 
@@ -103,6 +104,7 @@ export const ConsumerPlanGenerationStageSchema = z.enum([
   "finalizing_recipes",
   "personalizing_portions",
   "finalizing_plan",
+  "building_meal_prep",
   "complete",
 ]);
 
@@ -147,6 +149,11 @@ export const ConsumerWeeklyPlanSchema = z.object({
    * Absent until finalization succeeds; never invent quantities in the client.
    */
   groceryList: GroceryListSchema.optional(),
+  /**
+   * PLAN-013 meal-prep execution plan derived from the finalized weekly prescription.
+   * Version-linked via generatedPlanId — must not attach to a regenerated week.
+   */
+  mealPrepPlan: MealPrepPlanSchema.optional(),
 });
 
 export type PersonalizedMealNutrition = z.infer<typeof PersonalizedMealNutritionSchema>;

@@ -3,11 +3,12 @@ import { generateConsumerWeeklyPlan } from "./consumer-plan-generate";
 import type { PlanGenerationApis } from "./consumer-plan-generate";
 import {
   formatGroceryListDiagnostics,
+  formatMealPrepDiagnostics,
   formatValidationReportForDiagnostics,
 } from "@fitness-autopilot/domain";
 
-describe("PLAN-011/012 fresh local acceptance", () => {
-  it("finalizes a local Generate My Plan week and derives groceries", async () => {
+describe("PLAN-011/012/013 fresh local acceptance", () => {
+  it("finalizes a local Generate My Plan week with groceries and meal prep", async () => {
     const apis: PlanGenerationApis = {
       useLocalMode: true,
       nutritionTarget: {
@@ -30,7 +31,16 @@ describe("PLAN-011/012 fresh local acceptance", () => {
         createdAt: "2026-09-17T00:00:00.000Z",
       },
       mealPreferences: null,
-      cookingPreferences: null,
+      cookingPreferences: {
+        userId: "00000000-0000-4000-8000-000000000011",
+        prepFrequency: "once_weekly",
+        maxPrepSessionMinutes: 90,
+        cookingStyle: "ready_lunch_fresh_dinner",
+        maxFinishMinutes: 15,
+        useDinnerPrepForNextLunch: false,
+        createdAt: "2026-09-17T00:00:00.000Z",
+        updatedAt: "2026-09-17T00:00:00.000Z",
+      },
       discoverCulinaryCandidates: async () => ({ ok: false, error: "unused" }),
       rankCulinaryCandidates: async () => ({ ok: false, error: "unused" }),
       composeMealConcepts: async () => ({ ok: false, error: "unused" }),
@@ -88,6 +98,21 @@ describe("PLAN-011/012 fresh local acceptance", () => {
       ),
     ).toBe(true);
 
+    const prep = result.plan.mealPrepPlan;
+    expect(prep).toBeTruthy();
+    expect(prep!.generatedPlanId).toBe(result.plan.generatedPlanId);
+    expect(prep!.available).toBe(true);
+    expect(prep!.policyVersion).toBe("meal-prep-policy-v1");
+    expect(prep!.weeklyRequirements.length).toBe(4);
+    expect(prep!.tasks.some((t) => t.type === "mise_en_place")).toBe(false);
+    expect(prep!.tasks.some((t) => t.type === "advance_prep" || t.type === "cook")).toBe(true);
+    expect(prep!.storageAssignments.length).toBe(12);
+    expect(prep!.reconciliation.dependencyCycles).toBe(0);
+    expect(prep!.reconciliation.missingDependencies).toBe(0);
+    expect(prep!.reconciliation.orphanPrepTasks).toBe(0);
+    expect(prep!.reconciliation.orphanFutureActions).toBe(0);
+    expect(prep!.reconciliation.stalePlanLinks).toBe(0);
+
     console.log("\n=== PLAN-011 ACCEPTANCE ===");
     console.log(formatValidationReportForDiagnostics(report));
     console.log(
@@ -125,6 +150,66 @@ describe("PLAN-011/012 fresh local acceptance", () => {
         2,
       ),
     );
+
+    console.log("\n=== PLAN-013 MEAL PREP ===");
+    console.log(formatMealPrepDiagnostics(prep!));
+    console.log("\n--- Core meals ---");
+    for (const req of prep!.weeklyRequirements) {
+      console.log(
+        JSON.stringify(
+          {
+            name: req.name,
+            weeklyInstances: req.weeklyInstanceCount,
+            requiredOutput: req.requiredOutputServings,
+            referenceYield: req.referenceYieldServings,
+            plannedCookOutput: req.plannedCookOutputServings,
+            expectedExcess: req.expectedExcessServings,
+            prepIntent: req.prepIntent,
+          },
+          null,
+          2,
+        ),
+      );
+    }
+    console.log("\n--- Guided steps (no mise phase) ---");
+    for (const id of prep!.sessionTaskOrder) {
+      const t = prep!.tasks.find((x) => x.id === id);
+      if (!t) continue;
+      console.log(
+        `• [${t.type}] ${t.title} active=${t.durationMinutes}m passive=${t.passiveMinutes ?? 0}m ingredients=${t.ingredients.length}`,
+      );
+    }
+    console.log("\n--- Advance prep ---");
+    for (const t of prep!.tasks.filter((x) => x.type === "advance_prep")) {
+      console.log(
+        `• ${t.title} active=${t.durationMinutes}m passive=${t.passiveMinutes ?? 0}m deps=${t.dependencies.join("|") || "none"}`,
+      );
+    }
+    console.log("\n--- Cook schedule ---");
+    for (const id of prep!.sessionTaskOrder) {
+      const t = prep!.tasks.find((x) => x.id === id);
+      if (!t || (t.type !== "cook" && t.type !== "advance_prep")) continue;
+      console.log(
+        `t+${t.timing?.startOffsetMinutes ?? "?"} ${t.title} active=${t.durationMinutes} passive=${t.passiveMinutes ?? 0} equip=${(t.equipment ?? []).join(",")}`,
+      );
+    }
+    console.log(
+      `hands-on=${prep!.schedule.handsOnMinutes}m elapsed=${prep!.schedule.elapsedMinutes}m naive=${prep!.schedule.naiveSummedMinutes}m`,
+    );
+    console.log("\n--- Storage ---");
+    for (const a of prep!.storageAssignments) {
+      console.log(
+        `${a.day} ${a.mealType} ${a.mealName}: ${a.disposition} (${a.reason.slice(0, 80)})`,
+      );
+    }
+    console.log("\n--- Future actions ---");
+    for (const a of prep!.futureActions) {
+      console.log(
+        `${a.scheduledDay} ${a.scheduledWindow}: ${a.type} → ${a.mealName ?? a.mealInstanceId} (~${a.durationMinutes ?? 0}m)`,
+      );
+    }
+    console.log("\n--- Reconciliation ---");
+    console.log(JSON.stringify(prep!.reconciliation, null, 2));
 
     expect(result.plan.meals?.every((m) => m.personalizationStatus !== "blocked")).toBe(true);
   });

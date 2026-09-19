@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { MealTypeSchema } from "./recipe.ts";
-import { WeeklyCookingStyleSchema } from "./cooking-preferences.ts";
+import { WeeklyCookingStyleSchema, PrepFrequencySchema } from "./cooking-preferences.ts";
 
 /**
  * PLAN-005: Search-grounded culinary discovery contracts.
@@ -53,6 +53,7 @@ export const RecentMealConceptSchema = z.object({
 export const CulinaryDiscoveryCookingPreferencesSchema = z.object({
   cookingStyle: WeeklyCookingStyleSchema.or(z.string().trim().min(1).max(80)).optional(),
   maxFinishMinutes: z.number().int().nonnegative().max(180).optional(),
+  prepFrequency: PrepFrequencySchema.optional(),
 });
 
 /**

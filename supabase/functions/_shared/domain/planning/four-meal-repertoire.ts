@@ -4,6 +4,7 @@ import type {
   DayOfWeek,
   IngredientFootprint,
   MealConcept,
+  PrepFrequency,
   RankedCulinaryCandidate,
   RankedWeeklyDay,
   RankedWeeklyMealSlot,
@@ -62,6 +63,74 @@ export type ScoredRepertoireSet = {
 
 const MAX_POOL_FOR_COMBINATIONS = 12;
 
+/** Days from Sunday prep session to last covered day (Saturday). */
+export const V1_ONCE_WEEKLY_STORAGE_HORIZON_DAYS = 6 as const;
+
+/** Default short-finish ceiling when maxFinishMinutes is unset (Flexible). */
+export const DEFAULT_QUICK_FINISH_ELIGIBILITY_MINUTES = 20 as const;
+
+export type MealPrepStorageProfile = {
+  fridgeLifeDays: number;
+  freezerFriendly: boolean;
+};
+
+/**
+ * Planning-time storage profile inferred from discovery mealPrepAdaptability.
+ * Must stay aligned with CoreMeal fridge/freezer fields written onto the repertoire.
+ *
+ * Note: component_prepped / quick_fresh_finish store *components*, not fully cooked
+ * meals — fridge life here describes component hold quality, not cooked leftovers.
+ */
+export function mealPrepStorageProfileFromAdaptability(
+  adaptability: RankedCulinaryCandidate["candidate"]["mealPrepAdaptability"],
+): MealPrepStorageProfile {
+  if (adaptability === "fully_prepped") {
+    return { fridgeLifeDays: 4, freezerFriendly: true };
+  }
+  if (adaptability === "component_prepped") {
+    return { fridgeLifeDays: 4, freezerFriendly: false };
+  }
+  if (adaptability === "quick_fresh_finish") {
+    return { fridgeLifeDays: 3, freezerFriendly: false };
+  }
+  return { fridgeLifeDays: 1, freezerFriendly: false };
+}
+
+/**
+ * Hard eligibility for the V1 four-meal batch repertoire.
+ *
+ * Allowed:
+ * - fully_prepped — cook ahead; refrigerate/freeze cooked portions
+ * - component_prepped — prep once, store components, finish later
+ * - quick_fresh_finish — same, when the finish is truly within the user's finish budget
+ *
+ * Excluded:
+ * - fresh_only (cannot batch-prep meaningfully)
+ * - quick_fresh_finish when finish exceeds maxFinishMinutes (or mostly_ready / 0)
+ */
+export function isEligibleForBatchPrepRepertoire(input: {
+  mealPrepAdaptability: RankedCulinaryCandidate["candidate"]["mealPrepAdaptability"];
+  estimatedFinishMinutesAfterPrep?: number | null;
+  maxFinishMinutes?: number | null;
+  prepFrequency?: PrepFrequency | null;
+}): boolean {
+  const adapt = input.mealPrepAdaptability;
+  if (adapt === "fully_prepped" || adapt === "component_prepped") {
+    return true;
+  }
+  if (adapt === "quick_fresh_finish") {
+    const maxFinish = input.maxFinishMinutes;
+    if (maxFinish === 0) return false;
+    const finish =
+      input.estimatedFinishMinutesAfterPrep ??
+      (maxFinish == null ? DEFAULT_QUICK_FINISH_ELIGIBILITY_MINUTES : maxFinish);
+    const budget = maxFinish ?? DEFAULT_QUICK_FINISH_ELIGIBILITY_MINUTES;
+    return finish <= budget;
+  }
+  // fresh_only — only when cooking throughout the week
+  return input.prepFrequency === "throughout_week";
+}
+
 /**
  * Build planning candidates with footprints for repertoire selection.
  */
@@ -70,12 +139,24 @@ export function buildRepertoireCandidates(input: {
   dinnerPool: readonly RankedCulinaryCandidate[];
   conceptsByCandidateId?: Record<string, MealConcept>;
   cookingStyle?: WeeklyCookingStyle;
+  prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
   excludedCandidateIds?: ReadonlySet<string>;
 }): RepertoireCandidate[] {
   const byId = new Map<string, RankedCulinaryCandidate>();
   for (const ranked of [...input.lunchPool, ...input.dinnerPool]) {
     const id = ranked.candidate.candidateId;
     if (input.excludedCandidateIds?.has(id)) continue;
+    if (
+      !isEligibleForBatchPrepRepertoire({
+        mealPrepAdaptability: ranked.candidate.mealPrepAdaptability,
+        estimatedFinishMinutesAfterPrep: ranked.candidate.estimatedFinishMinutesAfterPrep,
+        maxFinishMinutes: input.maxFinishMinutes,
+        prepFrequency: input.prepFrequency,
+      })
+    ) {
+      continue;
+    }
     const existing = byId.get(id);
     if (!existing || ranked.rank < existing.rank) {
       byId.set(id, ranked);
@@ -156,13 +237,15 @@ export function selectFourMealRepertoire(input: {
   conceptsByCandidateId?: Record<string, MealConcept>;
   varietyLevel?: VarietyLevel;
   cookingStyle?: WeeklyCookingStyle;
+  prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
   excludedCandidateIds?: ReadonlySet<string>;
 }): Result<ScoredRepertoireSet, FourMealRepertoireError> {
   const pool = buildRepertoireCandidates(input);
   if (pool.length < V1_CORE_MEAL_COUNT) {
     return err({
       code: "INSUFFICIENT_CANDIDATES",
-      message: `Need at least ${V1_CORE_MEAL_COUNT} distinct candidates for V1 repertoire; got ${pool.length}.`,
+      message: `Need at least ${V1_CORE_MEAL_COUNT} batch-prep-eligible candidates (fully_prepped, component_prepped, or short quick_fresh_finish); got ${pool.length}.`,
     });
   }
 
@@ -377,6 +460,8 @@ export function buildV1WeeklyStrategy(input: {
   conceptsByCandidateId?: Record<string, MealConcept>;
   varietyLevel?: VarietyLevel;
   cookingStyle?: WeeklyCookingStyle;
+  prepFrequency?: PrepFrequency | null;
+  maxFinishMinutes?: number | null;
   excludedCandidateIds?: ReadonlySet<string>;
   flexibleDay?: DayOfWeek;
 }): Result<
@@ -516,7 +601,7 @@ function buildCoreRepertoire(input: {
       flavorTags: meal.ranked.candidate.flavorFamilies.slice(0, 8),
       prepIntent: defaultPrepIntent(meal),
       fridgeLifeDays: inferFridgeLifeDays(meal),
-      freezerFriendly: meal.ranked.candidate.mealPrepAdaptability === "fully_prepped",
+      freezerFriendly: inferFreezerFriendly(meal),
       reheatingQuality:
         meal.ranked.candidate.mealPrepAdaptability === "fully_prepped"
           ? "excellent"
@@ -565,11 +650,13 @@ function defaultPrepIntent(
 }
 
 function inferFridgeLifeDays(candidate: RepertoireCandidate): number {
-  const adapt = candidate.ranked.candidate.mealPrepAdaptability;
-  if (adapt === "fully_prepped") return 4;
-  if (adapt === "component_prepped") return 3;
-  if (adapt === "quick_fresh_finish") return 2;
-  return 1;
+  return mealPrepStorageProfileFromAdaptability(candidate.ranked.candidate.mealPrepAdaptability)
+    .fridgeLifeDays;
+}
+
+function inferFreezerFriendly(candidate: RepertoireCandidate): boolean {
+  return mealPrepStorageProfileFromAdaptability(candidate.ranked.candidate.mealPrepAdaptability)
+    .freezerFriendly;
 }
 
 function combinations<T>(items: T[], k: number): T[][] {
