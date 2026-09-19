@@ -66,7 +66,6 @@ function selectPrepMode(recipe: ResolvedRecipe, prepIntent?: string) {
     const match = recipe.supportedPrepModes.find((m) => m.mode === prepIntent);
     if (match) return match;
   }
-  // Prefer batch-friendly modes for prep session.
   return (
     recipe.supportedPrepModes.find((m) => m.mode === "fully_prepped") ??
     recipe.supportedPrepModes.find((m) => m.mode === "component_prepped") ??
@@ -74,10 +73,16 @@ function selectPrepMode(recipe: ResolvedRecipe, prepIntent?: string) {
   );
 }
 
-function misePhaseGroup(ing: TaskIngredientRequirement): PrepTask["phaseGroup"] {
+function ingredientGroup(ing: TaskIngredientRequirement): PrepTask["phaseGroup"] {
   const name = normalizeIngredientKey(ing.displayName);
-  if (/chicken|beef|pork|lamb|fish|salmon|shrimp|turkey|tofu/.test(name)) return "proteins";
-  if (/onion|garlic|ginger|pepper|tomato|cabbage|lettuce|herb|cilantro|parsley|carrot|celery|lemon|lime/.test(name)) {
+  if (/chicken|beef|pork|lamb|fish|salmon|shrimp|turkey|tofu|paneer/.test(name)) {
+    return "proteins";
+  }
+  if (
+    /onion|garlic|ginger|pepper|tomato|cabbage|lettuce|herb|cilantro|parsley|carrot|celery|lemon|lime/.test(
+      name,
+    )
+  ) {
     return "produce";
   }
   if (/spice|cumin|paprika|chili|salt|pepper|yogurt|oil|vinegar|sauce|marinade/.test(name)) {
@@ -87,9 +92,40 @@ function misePhaseGroup(ing: TaskIngredientRequirement): PrepTask["phaseGroup"] 
   return "other";
 }
 
+function needsPhysicalPrep(ing: TaskIngredientRequirement): boolean {
+  const cut = ing.cutForm ?? inferCutForm(ing.preparation);
+  return Boolean(ing.preparation) || (cut !== "other" && cut !== "whole");
+}
+
+function prepInstructionFor(ing: TaskIngredientRequirement): string {
+  const cut = ing.cutForm ?? inferCutForm(ing.preparation);
+  const verb = cutFormVerb(cut === "other" || cut === "whole" ? "portioned" : cut);
+  const qty = ing.displayQuantityLabel ?? `${ing.quantity} ${ing.unit}`;
+  if (ing.preparation) {
+    return `${verb} ${qty} ${ing.displayName} (${ing.preparation}).`;
+  }
+  return `${verb} ${qty} ${ing.displayName}.`;
+}
+
+function ingredientMentionedInText(ing: TaskIngredientRequirement, text: string): boolean {
+  const name = normalizeIngredientKey(ing.displayName);
+  const hay = text.toLowerCase();
+  if (!name) return false;
+  // Match primary token(s) from the ingredient name.
+  const tokens = name.split(/\s+/).filter((t) => t.length > 2);
+  return tokens.some((t) => hay.includes(t));
+}
+
+function isMarinadeInstruction(text: string): boolean {
+  return looksLikeMarinade(text) || /marinade|marinate|coat.*and.*rest|rest\s+\d+\s*min/i.test(text);
+}
+
 /**
- * Extract per-recipe prep tasks from resolved recipe truth + weekly scale.
- * Quantities always come from scaled recipe ingredients — never LLM invention.
+ * Extract guided execution steps for one core meal.
+ *
+ * Just-in-time principle: ingredient preparation lives inside the step that uses it
+ * (or the immediately preceding marinate/cook step). No global mise-en-place phase.
+ * Quantities always come from scaled recipe ingredients.
  */
 export function extractTasksForRequirement(input: {
   requirement: WeeklyCookingRequirement;
@@ -114,95 +150,100 @@ export function extractTasksForRequirement(input: {
     }),
   );
 
-  // Mise en place from ingredients with preparation notes (or proteins needing trim/cube).
+  const instructionTexts = recipe.instructions.map((s) => s.text);
+  const marinadeTexts = [
+    ...(mode?.advanceTasks ?? []).filter((t) => isMarinadeInstruction(t) || looksLikeSauceOrDressing(t)),
+    ...instructionTexts.filter((t) => isMarinadeInstruction(t)),
+  ];
+  // Prefer mode advance tasks when present; fall back to instruction-derived marinade lines.
+  const advanceSource =
+    mode?.advanceTasks?.length && mode.advanceTasks.some((t) => isMarinadeInstruction(t))
+      ? mode.advanceTasks.filter((t) => isMarinadeInstruction(t) || looksLikeSauceOrDressing(t))
+      : marinadeTexts.length > 0
+        ? [...new Set(marinadeTexts)]
+        : [];
+
+  const hasMarinade = advanceSource.some((t) => isMarinadeInstruction(t));
+  const marinadeBlob = advanceSource.join(" ").toLowerCase();
+
+  const proteinIngredients = scaledIngredients.filter((i) => ingredientGroup(i) === "proteins");
+  const marinadeIngredients: TaskIngredientRequirement[] = [];
+  const cookIngredients: TaskIngredientRequirement[] = [];
+
   for (const ing of scaledIngredients) {
-    const cut = ing.cutForm ?? inferCutForm(ing.preparation);
-    const needsMise =
-      Boolean(ing.preparation) ||
-      cut !== "other" ||
-      misePhaseGroup(ing) === "proteins";
-    if (!needsMise) continue;
+    if (!hasMarinade) {
+      cookIngredients.push(ing);
+      continue;
+    }
+    const forMarinade =
+      ingredientGroup(ing) === "proteins" ||
+      ingredientMentionedInText(ing, marinadeBlob) ||
+      (ingredientGroup(ing) === "sauces_marinades" &&
+        /yogurt|lemon|lime|spice|garlic|ginger|oil|salt/.test(normalizeIngredientKey(ing.displayName)));
+    // Keep late garnishes / grains / cilantro-like herbs for cook unless named in marinade.
+    const lateGarnish =
+      /cilantro|parsley|herb|scallion|green onion|tortilla|rice|bread|slaw/.test(
+        normalizeIngredientKey(ing.displayName),
+      ) && !ingredientMentionedInText(ing, marinadeBlob);
+    if (forMarinade && !lateGarnish) {
+      marinadeIngredients.push(ing);
+    } else {
+      cookIngredients.push(ing);
+    }
+  }
 
-    const verb = cutFormVerb(cut === "other" ? "portioned" : cut);
-    const title =
-      cut === "other" || cut === "whole"
-        ? `Prep ${ing.displayName}`
-        : `${verb} ${ing.displayName}`;
+  // Ensure proteins always land on marinade when marinating.
+  if (hasMarinade) {
+    for (const p of proteinIngredients) {
+      if (!marinadeIngredients.some((i) => i.ingredientId === p.ingredientId)) {
+        marinadeIngredients.push(p);
+        const idx = cookIngredients.findIndex((i) => i.ingredientId === p.ingredientId);
+        if (idx >= 0) cookIngredients.splice(idx, 1);
+      }
+    }
+  }
 
+  let previousStepId: string | undefined;
+
+  if (hasMarinade && marinadeIngredients.length > 0) {
+    const passive =
+      advanceSource
+        .map((t) => extractPassiveMinutesFromText(t))
+        .find((m) => m != null) ?? 30;
+    const prepLines = marinadeIngredients.filter(needsPhysicalPrep).map(prepInstructionFor);
+    const doThis = [
+      ...prepLines,
+      ...advanceSource.map((t) => t.replace(/\.$/, "")),
+      `Cover and refrigerate. Let marinate for at least ${passive} minutes.`,
+    ];
+    const marinateId = `${prefix}_marinate`;
     tasks.push({
-      id: `${prefix}_mise_${ing.ingredientId}`,
-      type: "mise_en_place",
-      title: `${title} (${ing.displayQuantityLabel ?? `${ing.quantity} ${ing.unit}`})`,
-      durationMinutes: estimateMiseMinutes(ing),
+      id: marinateId,
+      type: "advance_prep",
+      title: summarizeMarinateTitle(requirement.name, proteinIngredients[0]?.displayName),
+      durationMinutes: Math.max(5, prepLines.length * 2 + 3),
+      passiveMinutes: passive,
       dependencies: [],
       recipeIds: [recipe.recipeId],
       coreMealIds: [requirement.coreMealId],
       mealInstanceIds: [...requirement.mealInstanceIds],
-      ingredients: [ing],
-      equipment: ["cutting_board"],
+      ingredients: marinadeIngredients,
+      equipment: uniqueEquipment(["cutting_board", "mixing_bowl"]),
       canRunInParallel: true,
       requiresAttention: false,
-      instructions: [
-        ing.preparation
-          ? `${verb} ${ing.displayQuantityLabel ?? `${ing.quantity} ${ing.unit}`} ${ing.displayName} (${ing.preparation}).`
-          : `${verb} ${ing.displayQuantityLabel ?? `${ing.quantity} ${ing.unit}`} ${ing.displayName}.`,
-      ],
-      allocations: [
-        {
-          coreMealId: requirement.coreMealId,
-          mealName: requirement.name,
-          quantityLabel: ing.displayQuantityLabel ?? `${ing.quantity} ${ing.unit}`,
-        },
-      ],
-      phaseGroup: misePhaseGroup(ing),
+      instructions: doThis.slice(0, 20),
+      phaseGroup: "sauces_marinades",
+      output: {
+        outputId: `${prefix}_marinated`,
+        label: `Marinated ${proteinIngredients[0]?.displayName ?? requirement.name}`,
+        recipeIds: [recipe.recipeId],
+        coreMealIds: [requirement.coreMealId],
+        quantityServings: requirement.plannedCookOutputServings,
+      },
     });
+    previousStepId = marinateId;
   }
 
-  // Advance prep from prep-mode advance tasks + marinade detection.
-  const advanceTexts = mode?.advanceTasks?.length
-    ? mode.advanceTasks
-    : recipe.instructions
-        .filter((s) => looksLikeMarinade(s.text) || looksLikeSauceOrDressing(s.text))
-        .map((s) => s.text);
-
-  let previousAdvanceId: string | undefined;
-  advanceTexts.forEach((text, idx) => {
-    const isMarinade = looksLikeMarinade(text);
-    const passive =
-      extractPassiveMinutesFromText(text) ??
-      (isMarinade ? 30 : undefined);
-    const id = `${prefix}_advance_${idx}`;
-    const deps: string[] = [];
-    // Marinades depend on protein mise when present.
-    const proteinMise = tasks.find(
-      (t) => t.type === "mise_en_place" && t.phaseGroup === "proteins",
-    );
-    if (proteinMise && isMarinade) deps.push(proteinMise.id);
-    if (previousAdvanceId) deps.push(previousAdvanceId);
-
-    tasks.push({
-      id,
-      type: "advance_prep",
-      title: summarizeAdvanceTitle(text, requirement.name),
-      durationMinutes: isMarinade ? 7 : 5,
-      passiveMinutes: passive,
-      dependencies: deps,
-      recipeIds: [recipe.recipeId],
-      coreMealIds: [requirement.coreMealId],
-      mealInstanceIds: [...requirement.mealInstanceIds],
-      ingredients: isMarinade
-        ? scaledIngredients.filter((i) => misePhaseGroup(i) === "proteins").slice(0, 2)
-        : [],
-      equipment: ["mixing_bowl"],
-      canRunInParallel: true,
-      requiresAttention: false,
-      instructions: [text],
-      phaseGroup: "sauces_marinades",
-    });
-    previousAdvanceId = id;
-  });
-
-  // Decide cook-now vs fresh-finish from prep intent + cooking style + mealPrepQuality.
   const deferCook = shouldDeferPrimaryCook({
     prepIntent: requirement.prepIntent ?? mode?.mode,
     cookingStyle: input.cookingStyle,
@@ -211,36 +252,55 @@ export function extractTasksForRequirement(input: {
     finishTimeMinutes: mode?.finishTimeMinutes,
   });
 
-  const cookDeps: string[] = [];
-  const lastAdvance = [...tasks].reverse().find((t) => t.type === "advance_prep");
-  if (lastAdvance) cookDeps.push(lastAdvance.id);
-  // Also depend on mise for this recipe.
-  for (const t of tasks) {
-    if (t.type === "mise_en_place") cookDeps.push(t.id);
-  }
+  const cookInstructionSource = instructionTexts.filter((t) => !isMarinadeInstruction(t));
+  const cookLines =
+    cookInstructionSource.length > 0
+      ? cookInstructionSource
+      : recipe.instructions.map((s) => s.text).filter((t) => !isMarinadeInstruction(t));
 
   if (!deferCook) {
+    const jitPrep = cookIngredients.filter(needsPhysicalPrep).map(prepInstructionFor);
+    const doThis = [
+      ...(jitPrep.length > 0 ? ["Prepare ingredients:", ...jitPrep] : []),
+      ...(previousStepId
+        ? [`Use the marinated ${proteinIngredients[0]?.displayName ?? "protein"} from the previous step.`]
+        : []),
+      ...cookLines,
+    ].slice(0, 20);
+
     const cookId = `${prefix}_cook`;
+    const cookDeps = previousStepId ? [previousStepId] : [];
+    const activeMinutes = Math.max(
+      8,
+      Math.round(recipe.cookTimeMinutes * Math.min(scale, 1.25) * 0.45) + jitPrep.length * 2,
+    );
+    const passiveMinutes =
+      recipe.cookTimeMinutes >= 15
+        ? Math.max(5, Math.round(recipe.cookTimeMinutes * 0.55))
+        : undefined;
+
     tasks.push({
       id: cookId,
       type: "cook",
-      title: `Cook ${requirement.name}`,
-      durationMinutes: Math.max(5, Math.round(recipe.cookTimeMinutes * Math.min(scale, 1.25))),
-      passiveMinutes: recipe.cookTimeMinutes >= 15 ? Math.round(recipe.cookTimeMinutes * 0.6) : undefined,
-      dependencies: unique(cookDeps),
+      title: cookStepTitle(requirement.name),
+      durationMinutes: activeMinutes,
+      passiveMinutes,
+      dependencies: cookDeps,
       recipeIds: [recipe.recipeId],
       coreMealIds: [requirement.coreMealId],
       mealInstanceIds: [...requirement.mealInstanceIds],
-      ingredients: scaledIngredients,
+      ingredients: cookIngredients,
       equipment,
       canRunInParallel: !equipment.includes("stovetop_burner") || equipment.includes("oven"),
       requiresAttention:
         equipment.includes("skillet") ||
         equipment.includes("stovetop_burner") ||
         equipment.includes("pot") ||
-        (!equipment.includes("oven") && !equipment.includes("air_fryer") && !equipment.includes("pressure_cooker")),
+        (!equipment.includes("oven") &&
+          !equipment.includes("air_fryer") &&
+          !equipment.includes("pressure_cooker")),
       ovenTemperatureF: ovenTemp,
-      instructions: recipe.instructions.map((s) => s.text).slice(0, 12),
+      instructions: doThis,
       output: {
         outputId: `${prefix}_output`,
         label: requirement.name,
@@ -249,9 +309,8 @@ export function extractTasksForRequirement(input: {
         quantityServings: requirement.plannedCookOutputServings,
       },
     });
+    previousStepId = cookId;
 
-    // Portion & store tasks are created later from storage assignments;
-    // add a per-meal store parent that depends on cook.
     tasks.push({
       id: `${prefix}_store`,
       type: "portion_and_store",
@@ -279,7 +338,61 @@ export function extractTasksForRequirement(input: {
       },
     });
   } else {
-    // Fresh finish: prep components now; cook/assemble later.
+    // Component / fresh finish: prep now (JIT inside component steps), cook later.
+    const componentIngredients = [...marinadeIngredients, ...cookIngredients];
+    const uniqueById = new Map(componentIngredients.map((i) => [i.ingredientId, i]));
+    const components = [...uniqueById.values()];
+    const jitPrep = components.filter(needsPhysicalPrep).map(prepInstructionFor);
+    const componentId = `${prefix}_prep_components`;
+    const componentDeps = previousStepId ? [previousStepId] : [];
+    tasks.push({
+      id: componentId,
+      type: "advance_prep",
+      title: `Prep components for ${requirement.name}`,
+      durationMinutes: Math.max(8, jitPrep.length * 3 + 4),
+      dependencies: componentDeps,
+      recipeIds: [recipe.recipeId],
+      coreMealIds: [requirement.coreMealId],
+      mealInstanceIds: [...requirement.mealInstanceIds],
+      ingredients: components,
+      equipment: uniqueEquipment(["cutting_board", "mixing_bowl", ...equipment.slice(0, 2)]),
+      canRunInParallel: true,
+      requiresAttention: false,
+      instructions: [
+        ...jitPrep,
+        ...(mode?.advanceTasks?.length
+          ? mode.advanceTasks
+          : ["Prep and store components for cooking on the eating day."]),
+        "Store components separately. Finish cooking on the eating day.",
+      ].slice(0, 20),
+      phaseGroup: "other",
+      output: {
+        outputId: `${prefix}_components`,
+        label: `${requirement.name} components`,
+        recipeIds: [recipe.recipeId],
+        coreMealIds: [requirement.coreMealId],
+        quantityServings: requirement.plannedCookOutputServings,
+      },
+    });
+
+    tasks.push({
+      id: `${prefix}_store_components`,
+      type: "portion_and_store",
+      title: `Store prepped components for ${requirement.name}`,
+      durationMinutes: 5,
+      dependencies: [componentId],
+      recipeIds: [recipe.recipeId],
+      coreMealIds: [requirement.coreMealId],
+      mealInstanceIds: [...requirement.mealInstanceIds],
+      ingredients: [],
+      equipment: [],
+      canRunInParallel: true,
+      requiresAttention: false,
+      instructions: [
+        "Label and refrigerate or freeze components per the storage plan. Finish cooking on the eating day.",
+      ],
+    });
+
     const finishTasks =
       mode?.finishTasks?.length ? mode.finishTasks : ["Cook and finish fresh", "Assemble and serve"];
     for (const inst of requirement.instanceServings) {
@@ -288,7 +401,7 @@ export function extractTasksForRequirement(input: {
         type: "fresh_finish",
         title: `Finish ${requirement.name} (${inst.day} ${inst.mealType})`,
         durationMinutes: mode?.finishTimeMinutes ?? 12,
-        dependencies: unique(cookDeps),
+        dependencies: [componentId],
         recipeIds: [recipe.recipeId],
         coreMealIds: [requirement.coreMealId],
         mealInstanceIds: [inst.mealInstanceId],
@@ -299,33 +412,17 @@ export function extractTasksForRequirement(input: {
         instructions: finishTasks,
       });
     }
-
-    // Still portion any advance-prepped components.
-    if (advanceTexts.length > 0 || tasks.some((t) => t.type === "mise_en_place")) {
-      const storeDeps = tasks
-        .filter((t) => t.type === "advance_prep" || t.type === "mise_en_place")
-        .map((t) => t.id);
-      tasks.push({
-        id: `${prefix}_store_components`,
-        type: "portion_and_store",
-        title: `Store prepped components for ${requirement.name}`,
-        durationMinutes: 5,
-        dependencies: unique(storeDeps),
-        recipeIds: [recipe.recipeId],
-        coreMealIds: [requirement.coreMealId],
-        mealInstanceIds: [...requirement.mealInstanceIds],
-        ingredients: [],
-        equipment: [],
-        canRunInParallel: true,
-        requiresAttention: false,
-        instructions: [
-          "Store prepped components separately. Finish cooking on the eating day.",
-        ],
-      });
-    }
   }
 
   return tasks;
+}
+
+function uniqueEquipment(items: PrepEquipment[]): PrepEquipment[] {
+  const out: PrepEquipment[] = [];
+  for (const item of items) {
+    if (!out.includes(item)) out.push(item);
+  }
+  return out.length > 0 ? out : ["other"];
 }
 
 function shouldDeferPrimaryCook(input: {
@@ -338,13 +435,10 @@ function shouldDeferPrimaryCook(input: {
   const finish = input.finishTimeMinutes ?? 15;
   const maxFinish = input.maxFinishMinutes;
 
-  // Component-prepped: always prep/store components now; finish on the eating day.
   if (input.prepIntent === "component_prepped") return true;
-
-  // Fresh / quick finish: defer when the finish fits the user's budget.
   if (input.prepIntent === "fresh") return true;
   if (input.prepIntent === "quick_fresh_finish") {
-    if (maxFinish === 0) return false; // mostly_ready — should not be in repertoire
+    if (maxFinish === 0) return false;
     const budget = maxFinish ?? 20;
     return finish <= budget;
   }
@@ -353,28 +447,18 @@ function shouldDeferPrimaryCook(input: {
   if (input.cookingStyle === "fresh_focused") {
     return input.mealPrepQuality === "poor";
   }
-  // ready_lunch_fresh_dinner / default for fully_prepped: cook ahead.
   if (input.mealPrepQuality === "poor") return true;
   return false;
 }
 
-function estimateMiseMinutes(ing: TaskIngredientRequirement): number {
-  const group = misePhaseGroup(ing);
-  if (group === "proteins") return 8;
-  if (group === "produce") return 5;
-  if (group === "sauces_marinades") return 3;
-  return 4;
+function summarizeMarinateTitle(mealName: string, proteinName?: string): string {
+  if (proteinName) return `Marinate the ${proteinName}`;
+  return `Marinate for ${mealName}`;
 }
 
-function summarizeAdvanceTitle(text: string, mealName: string): string {
-  if (looksLikeMarinade(text)) return `Marinate for ${mealName}`;
-  if (looksLikeSauceOrDressing(text)) {
-    const short = text.length > 60 ? `${text.slice(0, 57)}…` : text;
-    return short;
-  }
-  return text.length > 80 ? `${text.slice(0, 77)}…` : text;
+function cookStepTitle(mealName: string): string {
+  return `Cook ${mealName}`;
 }
 
-function unique(ids: string[]): string[] {
-  return [...new Set(ids)];
-}
+// Re-export helpers used by tests / consolidate
+export { needsPhysicalPrep, prepInstructionFor, ingredientGroup };

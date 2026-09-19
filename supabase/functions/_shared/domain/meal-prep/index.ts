@@ -5,6 +5,7 @@ export * from "./extract-tasks.ts";
 export * from "./consolidate-mise.ts";
 export * from "./storage.ts";
 export * from "./schedule.ts";
+export * from "./playbook.ts";
 export * from "./validate-graph.ts";
 export * from "./reconcile.ts";
 export * from "./build-meal-prep-plan.ts";

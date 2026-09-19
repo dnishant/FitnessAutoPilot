@@ -5,6 +5,7 @@ export * from "./extract-tasks";
 export * from "./consolidate-mise";
 export * from "./storage";
 export * from "./schedule";
+export * from "./playbook";
 export * from "./validate-graph";
 export * from "./reconcile";
 export * from "./build-meal-prep-plan";

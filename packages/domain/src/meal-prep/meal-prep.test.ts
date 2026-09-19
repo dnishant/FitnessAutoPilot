@@ -9,7 +9,7 @@ import { MealPrepPlanSchema } from "@fitness-autopilot/contracts";
 import {
   buildMealPrepPlan,
   choosePracticalCookOutput,
-  consolidateMiseEnPlace,
+  consolidateNearbyPrep,
   deriveWeeklyCookingRequirements,
   extractTasksForRequirement,
   inferCutForm,
@@ -295,142 +295,119 @@ describe("PLAN-013 weekly requirements", () => {
   });
 });
 
-describe("PLAN-013 mise consolidation", () => {
-  it("D: consolidates compatible minced garlic", () => {
-    const r1 = baseRecipe({
-      recipeId: "rr_a",
-      candidateId: "a",
-      name: "A",
+describe("PLAN-013 just-in-time prep", () => {
+  const req = (coreMealId: string, candidateId: string, recipeId: string) => ({
+    coreMealId,
+    candidateId,
+    recipeId,
+    name: coreMealId.toUpperCase(),
+    mealInstanceIds: [`m_${coreMealId}`],
+    weeklyInstanceCount: 1,
+    requiredOutputServings: 4,
+    referenceYieldServings: 4,
+    plannedCookOutputServings: 4,
+    expectedExcessServings: 0,
+    instanceServings: [
+      {
+        mealInstanceId: `m_${coreMealId}`,
+        day: "monday" as const,
+        mealType: "lunch" as const,
+        personalServings: 4,
+      },
+    ],
+  });
+
+  it("A: onion needed immediately is prepared inside the cook/marinate step", () => {
+    const tasks = extractTasksForRequirement({
+      requirement: req("a", "tikka-chicken", "rr_tikka"),
+      recipe: baseRecipe(),
+    });
+    expect(tasks.some((t) => t.type === "mise_en_place")).toBe(false);
+    const cookOrMarinate = tasks.filter((t) => t.type === "cook" || t.type === "advance_prep");
+    const onionPrep = cookOrMarinate.some((t) =>
+      t.instructions.some((line) => /onion/i.test(line) && /dice|diced/i.test(line)),
+    );
+    expect(onionPrep).toBe(true);
+  });
+
+  it("B: cilantro needed later is not chopped in the marinade step", () => {
+    const recipe = baseRecipe({
       ingredients: [
+        ...baseRecipe().ingredients,
         {
-          ingredientId: "garlic",
-          name: "garlic",
-          quantity: 4,
-          unit: "cloves",
-          preparation: "minced",
-          role: "aromatic",
+          ingredientId: "cilantro",
+          name: "cilantro",
+          quantity: 0.25,
+          unit: "cup",
+          preparation: "chopped",
+          role: "garnish",
           scalingBehavior: "secondary_scalable",
         },
       ],
     });
-    const r2 = baseRecipe({
-      recipeId: "rr_b",
-      candidateId: "b",
-      name: "B",
-      ingredients: [
-        {
-          ingredientId: "garlic",
-          name: "garlic",
-          quantity: 3,
-          unit: "cloves",
-          preparation: "minced",
-          role: "aromatic",
-          scalingBehavior: "secondary_scalable",
-        },
-      ],
+    const tasks = extractTasksForRequirement({
+      requirement: req("a", "tikka-chicken", "rr_tikka"),
+      recipe,
     });
-    const r3 = baseRecipe({
-      recipeId: "rr_c",
-      candidateId: "c",
-      name: "C",
-      ingredients: [
-        {
-          ingredientId: "garlic",
-          name: "garlic",
-          quantity: 3,
-          unit: "cloves",
-          preparation: "minced",
-          role: "aromatic",
-          scalingBehavior: "secondary_scalable",
-        },
-      ],
-    });
+    const marinate = tasks.find((t) => t.type === "advance_prep" && /marinate/i.test(t.title));
+    expect(marinate).toBeTruthy();
+    expect(marinate!.ingredients.some((i) => /cilantro/i.test(i.displayName))).toBe(false);
+    const cook = tasks.find((t) => t.type === "cook");
+    expect(cook?.ingredients.some((i) => /cilantro/i.test(i.displayName))).toBe(true);
+  });
+
+  it("C: identical minced garlic in nearby steps may consolidate with set-aside note", () => {
+    const makeGarlicRecipe = (id: string, qty: number) =>
+      baseRecipe({
+        recipeId: `rr_${id}`,
+        candidateId: id,
+        name: id,
+        ingredients: [
+          {
+            ingredientId: "garlic",
+            name: "garlic",
+            quantity: qty,
+            unit: "cloves",
+            preparation: "minced",
+            role: "aromatic",
+            scalingBehavior: "secondary_scalable",
+          },
+        ],
+        instructions: [{ stepNumber: 1, text: "Cook aromatics then simmer 10 min." }],
+        supportedPrepModes: [
+          {
+            mode: "fully_prepped",
+            advanceTasks: [],
+            finishTasks: ["Reheat"],
+            finishTimeMinutes: 5,
+          },
+        ],
+      });
 
     const tasks = [
       ...extractTasksForRequirement({
-        requirement: {
-          coreMealId: "a",
-          candidateId: "a",
-          recipeId: "rr_a",
-          name: "A",
-          mealInstanceIds: ["m1"],
-          weeklyInstanceCount: 1,
-          requiredOutputServings: 1,
-          referenceYieldServings: 4,
-          plannedCookOutputServings: 1,
-          expectedExcessServings: 0,
-          instanceServings: [
-            { mealInstanceId: "m1", day: "monday", mealType: "lunch", personalServings: 1 },
-          ],
-        },
-        recipe: r1,
+        requirement: req("a", "a", "rr_a"),
+        recipe: makeGarlicRecipe("a", 4),
       }),
       ...extractTasksForRequirement({
-        requirement: {
-          coreMealId: "b",
-          candidateId: "b",
-          recipeId: "rr_b",
-          name: "B",
-          mealInstanceIds: ["m2"],
-          weeklyInstanceCount: 1,
-          requiredOutputServings: 1,
-          referenceYieldServings: 4,
-          plannedCookOutputServings: 1,
-          expectedExcessServings: 0,
-          instanceServings: [
-            { mealInstanceId: "m2", day: "tuesday", mealType: "lunch", personalServings: 1 },
-          ],
-        },
-        recipe: r2,
-      }),
-      ...extractTasksForRequirement({
-        requirement: {
-          coreMealId: "c",
-          candidateId: "c",
-          recipeId: "rr_c",
-          name: "C",
-          mealInstanceIds: ["m3"],
-          weeklyInstanceCount: 1,
-          requiredOutputServings: 1,
-          referenceYieldServings: 4,
-          plannedCookOutputServings: 1,
-          expectedExcessServings: 0,
-          instanceServings: [
-            { mealInstanceId: "m3", day: "wednesday", mealType: "lunch", personalServings: 1 },
-          ],
-        },
-        recipe: r3,
+        requirement: req("b", "b", "rr_b"),
+        recipe: makeGarlicRecipe("b", 3),
       }),
     ];
-
-    const consolidated = consolidateMiseEnPlace(tasks);
-    const garlicMise = consolidated.filter(
-      (t) => t.type === "mise_en_place" && /garlic/i.test(t.title) && /mince/i.test(t.title),
+    const scheduled = schedulePrepTasks(tasks);
+    const consolidated = consolidateNearbyPrep(scheduled.tasks);
+    const withAside = consolidated.filter((t) =>
+      t.instructions.some((l) => /set aside/i.test(l)),
     );
-    expect(garlicMise.length).toBe(1);
-    expect(garlicMise[0]!.coreMealIds.sort()).toEqual(["a", "b", "c"]);
-    expect(garlicMise[0]!.ingredients[0]!.quantity).toBeCloseTo(10 / 4, 5);
+    expect(withAside.length).toBeGreaterThanOrEqual(1);
+    expect(consolidated.some((t) => t.type === "mise_en_place")).toBe(false);
   });
 
-  it("E: does not collapse minced vs sliced garlic", () => {
+  it("D: does not consolidate minced vs sliced garlic", () => {
     expect(inferCutForm("minced")).toBe("minced");
     expect(inferCutForm("thinly sliced")).toBe("sliced");
     const minced = extractTasksForRequirement({
-      requirement: {
-        coreMealId: "a",
-        candidateId: "a",
-        recipeId: "rr_a",
-        name: "A",
-        mealInstanceIds: ["m1"],
-        weeklyInstanceCount: 1,
-        requiredOutputServings: 4,
-        referenceYieldServings: 4,
-        plannedCookOutputServings: 4,
-        expectedExcessServings: 0,
-        instanceServings: [
-          { mealInstanceId: "m1", day: "monday", mealType: "lunch", personalServings: 4 },
-        ],
-      },
+      requirement: req("a", "a", "rr_a"),
       recipe: baseRecipe({
         recipeId: "rr_a",
         candidateId: "a",
@@ -445,24 +422,14 @@ describe("PLAN-013 mise consolidation", () => {
             scalingBehavior: "fixed",
           },
         ],
+        instructions: [{ stepNumber: 1, text: "Cook." }],
+        supportedPrepModes: [
+          { mode: "fully_prepped", advanceTasks: [], finishTasks: [], finishTimeMinutes: 5 },
+        ],
       }),
     });
     const sliced = extractTasksForRequirement({
-      requirement: {
-        coreMealId: "b",
-        candidateId: "b",
-        recipeId: "rr_b",
-        name: "B",
-        mealInstanceIds: ["m2"],
-        weeklyInstanceCount: 1,
-        requiredOutputServings: 4,
-        referenceYieldServings: 4,
-        plannedCookOutputServings: 4,
-        expectedExcessServings: 0,
-        instanceServings: [
-          { mealInstanceId: "m2", day: "tuesday", mealType: "lunch", personalServings: 4 },
-        ],
-      },
+      requirement: req("b", "b", "rr_b"),
       recipe: baseRecipe({
         recipeId: "rr_b",
         candidateId: "b",
@@ -477,13 +444,79 @@ describe("PLAN-013 mise consolidation", () => {
             scalingBehavior: "fixed",
           },
         ],
+        instructions: [{ stepNumber: 1, text: "Cook." }],
+        supportedPrepModes: [
+          { mode: "fully_prepped", advanceTasks: [], finishTasks: [], finishTimeMinutes: 5 },
+        ],
       }),
     });
-    const consolidated = consolidateMiseEnPlace([...minced, ...sliced]);
-    const garlic = consolidated.filter(
-      (t) => t.type === "mise_en_place" && /garlic/i.test(t.title),
+    const scheduled = schedulePrepTasks([...minced, ...sliced]);
+    const consolidated = consolidateNearbyPrep(scheduled.tasks);
+    const asideNotes = consolidated.filter((t) =>
+      t.instructions.some((l) => /set aside/i.test(l) && /garlic/i.test(l)),
     );
-    expect(garlic.length).toBeGreaterThanOrEqual(2);
+    expect(asideNotes.length).toBe(0);
+  });
+
+  it("E/F: marinade is a full step with quantities; other work uses the passive window", () => {
+    const tasks = extractTasksForRequirement({
+      requirement: req("a", "tikka-chicken", "rr_tikka"),
+      recipe: baseRecipe(),
+    });
+    const marinate = tasks.find((t) => /marinate/i.test(t.title));
+    expect(marinate).toBeTruthy();
+    expect(marinate!.ingredients.length).toBeGreaterThan(0);
+    expect(marinate!.ingredients.some((i) => /chicken/i.test(i.displayName))).toBe(true);
+    expect(marinate!.passiveMinutes).toBeGreaterThanOrEqual(30);
+    expect(marinate!.instructions.length).toBeGreaterThan(2);
+
+    const rice: PrepTask = {
+      id: "cook_rice",
+      type: "cook",
+      title: "Cook rice",
+      durationMinutes: 5,
+      passiveMinutes: 15,
+      dependencies: [],
+      recipeIds: ["rr_rice"],
+      coreMealIds: ["rice"],
+      mealInstanceIds: [],
+      ingredients: [],
+      equipment: ["pot"],
+      canRunInParallel: true,
+      requiresAttention: false,
+      instructions: ["Rinse and simmer rice"],
+    };
+    const scheduled = schedulePrepTasks([...tasks, rice]);
+    const mar = scheduled.tasks.find((t) => t.id === marinate!.id)!;
+    const riceScheduled = scheduled.tasks.find((t) => t.id === "cook_rice")!;
+    // Independent work should start before the marinade passive window ends.
+    expect(riceScheduled.timing!.startOffsetMinutes).toBeLessThan(
+      (mar.timing!.startOffsetMinutes ?? 0) +
+        mar.durationMinutes +
+        (mar.passiveMinutes ?? 0),
+    );
+    expect(scheduled.schedule.elapsedMinutes).toBeLessThanOrEqual(
+      scheduled.schedule.naiveSummedMinutes,
+    );
+  });
+
+  it("G: cook depends on marinade readiness", () => {
+    const tasks = extractTasksForRequirement({
+      requirement: req("a", "tikka-chicken", "rr_tikka"),
+      recipe: baseRecipe(),
+    });
+    const marinate = tasks.find((t) => /marinate/i.test(t.title))!;
+    const cook = tasks.find((t) => t.type === "cook")!;
+    expect(cook.dependencies).toContain(marinate.id);
+    const graph = validateTaskGraph(tasks);
+    expect(graph.ok).toBe(true);
+  });
+});
+
+describe("PLAN-013 legacy cut-form helpers", () => {
+  it("infers minced vs sliced", () => {
+    expect(inferCutForm("minced")).toBe("minced");
+    expect(inferCutForm("thinly sliced")).toBe("sliced");
   });
 });
 
@@ -759,7 +792,7 @@ describe("PLAN-013 storage + end-to-end build", () => {
     expect(result.mealPrepPlan.reconciliation.dependencyCycles).toBe(0);
     expect(result.mealPrepPlan.reconciliation.missingDependencies).toBe(0);
     expect(result.mealPrepPlan.reconciliation.orphanPrepTasks).toBe(0);
-    expect(result.mealPrepPlan.tasks.some((t) => t.type === "mise_en_place")).toBe(true);
+    expect(result.mealPrepPlan.tasks.some((t) => t.type === "mise_en_place")).toBe(false);
     expect(result.mealPrepPlan.schedule.elapsedMinutes).toBeLessThanOrEqual(
       result.mealPrepPlan.schedule.naiveSummedMinutes,
     );

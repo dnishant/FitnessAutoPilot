@@ -7,18 +7,25 @@ Finalized Weekly Plan (PLAN-011)
         ↓
 Weekly Cooking Requirements
         ↓
-Prep Task Extraction (culinary-prep-interpretation-v1)
-        ↓
-Mise-en-Place Consolidation
+Just-in-Time Step Extraction
         ↓
 Dependency Graph Validation
         ↓
 Schedule (passive overlap, equipment, attention)
         ↓
+Nearby Shared-Prep Lookahead
+        ↓
 Storage Plan + Future Actions
         ↓
-Consumer Meal Prep UI
+Linear Guided Steps → Consumer UI
 ```
+
+## Consumer model
+
+One sequence: **Start → Step 1…N → Portion/Store steps → Done**.
+
+No required Mise en Place phase. Each step shows contextual ingredients, equipment,
+and instructions for that moment only.
 
 ## Ownership
 
@@ -29,14 +36,15 @@ It does **not** own meal discovery, nutrition, portion optimization, or grocery 
 ## Policy versions
 
 - `meal-prep-policy-v1`
-- `culinary-prep-interpretation-v1`
+- `culinary-prep-interpretation-v1` (just-in-time extraction)
 
 ## Persistence
 
 `ConsumerWeeklyPlan.mealPrepPlan` inside `consumer_weekly_plans.plan_json`,
 version-linked by `generatedPlanId`.
 
-Checklist progress: client AsyncStorage key `fa.consumer.mealPrepProgress.{generatedPlanId}`.
+Checklist / current-step progress: client AsyncStorage key
+`fa.consumer.mealPrepProgress.{generatedPlanId}`.
 
 ## See also
 

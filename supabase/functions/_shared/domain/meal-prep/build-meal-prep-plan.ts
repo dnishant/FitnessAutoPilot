@@ -8,7 +8,7 @@ import {
   CULINARY_PREP_INTERPRETATION_VERSION,
   MEAL_PREP_POLICY_VERSION,
 } from "../../contracts/index.ts";
-import { consolidateMiseEnPlace } from "./consolidate-mise.ts";
+import { consolidateNearbyPrep } from "./consolidate-mise.ts";
 import { extractTasksForRequirement } from "./extract-tasks.ts";
 import type { BuildMealPrepPlanInput, BuildMealPrepPlanResult } from "./policy.ts";
 import { reconcilePrepQuantities } from "./reconcile.ts";
@@ -100,7 +100,8 @@ export function buildMealPrepPlan(input: BuildMealPrepPlanInput): BuildMealPrepP
     );
   }
 
-  tasks = consolidateMiseEnPlace(tasks);
+  // Drop any legacy mise tasks; nearby consolidation runs after schedule (has timing).
+  tasks = tasks.filter((t) => t.type !== "mise_en_place");
 
   const graph = validateTaskGraph(tasks);
   issues.push(...graph.issues);
@@ -117,7 +118,7 @@ export function buildMealPrepPlan(input: BuildMealPrepPlanInput): BuildMealPrepP
 
   const scheduled = schedulePrepTasks(tasks);
   issues.push(...scheduled.issues);
-  tasks = scheduled.tasks;
+  tasks = consolidateNearbyPrep(scheduled.tasks);
 
   const prepSessionDay = input.prepSessionDay ?? input.coreRepertoire?.flexibleDay ?? "sunday";
 

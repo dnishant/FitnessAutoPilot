@@ -8,11 +8,14 @@ import { MEAL_PREP_POLICY } from "./policy";
 import { normalizeIngredientKey } from "./preparation-identity";
 import { scaleFactorForRequirement } from "./weekly-requirements";
 import type { ResolvedRecipe } from "@fitness-autopilot/contracts";
-import { toCompatibleBasis, unitFamily } from "../grocery/units";
+import { unitFamily } from "../grocery/units";
 
 /**
  * Reconcile prep-task ingredient demand with weekly recipe requirements.
- * Detect duplicates / missing demand within tolerance.
+ *
+ * Just-in-time model: each scaled recipe ingredient should appear on exactly one
+ * execution step (advance_prep or cook) for its core meal — not silently lost
+ * and not double-consumed.
  */
 export function reconcilePrepQuantities(input: {
   requirements: WeeklyCookingRequirement[];
@@ -29,7 +32,6 @@ export function reconcilePrepQuantities(input: {
   let missingIngredientDemand = 0;
   let weeklyRecipeDemandMismatches = 0;
 
-  // Expected demand from weekly cook scale (mise ingredients should cover prep-able ones).
   const expected = new Map<string, { quantity: number; unit: string }>();
   for (const req of input.requirements) {
     const recipe = input.recipesByCandidateId[req.candidateId];
@@ -39,13 +41,11 @@ export function reconcilePrepQuantities(input: {
     }
     const scale = scaleFactorForRequirement(req);
     for (const ing of recipe.ingredients) {
-      // Only ingredients that appear in mise/cook tasks are expected in prep demand.
       const key = `${req.coreMealId}::${normalizeIngredientKey(ing.name)}::${ing.ingredientId}`;
       expected.set(key, { quantity: ing.quantity * scale, unit: ing.unit });
     }
   }
 
-  // Actual demand from mise + cook tasks (avoid double-counting store).
   const actual = new Map<string, { quantity: number; unit: string; count: number }>();
   for (const task of input.tasks) {
     if (task.type !== "mise_en_place" && task.type !== "cook" && task.type !== "advance_prep") {
@@ -56,34 +56,18 @@ export function reconcilePrepQuantities(input: {
       const key = `${core}::${normalizeIngredientKey(ing.displayName)}::${ing.ingredientId}`;
       const prev = actual.get(key);
       if (prev) {
-        // Same ingredient appearing in both mise and cook is expected once each role —
-        // count duplicate only when same task type double-lists.
         prev.count += 1;
-        if (task.type === "mise_en_place" && prev.count > 1) {
-          duplicatedIngredientDemand += 1;
-        }
+        prev.quantity += ing.quantity;
+        duplicatedIngredientDemand += 1;
       } else {
         actual.set(key, { quantity: ing.quantity, unit: ing.unit, count: 1 });
       }
     }
   }
 
-  // Compare mise totals to expected for ingredients that have mise tasks.
-  const miseKeys = new Set(
-    input.tasks
-      .filter((t) => t.type === "mise_en_place")
-      .flatMap((t) =>
-        t.ingredients.map((ing) => {
-          const core = ing.coreMealId ?? t.coreMealIds[0] ?? "unknown";
-          return `${core}::${normalizeIngredientKey(ing.displayName)}::${ing.ingredientId}`;
-        }),
-      ),
-  );
-
-  for (const key of miseKeys) {
-    const exp = expected.get(key);
+  for (const [key, exp] of expected) {
     const act = actual.get(key);
-    if (!exp || !act) {
+    if (!act) {
       missingIngredientDemand += 1;
       continue;
     }
@@ -101,17 +85,8 @@ export function reconcilePrepQuantities(input: {
     0,
   );
 
-  // Grocery ↔ prep: soft check that grocery source recipe ids cover prep recipe ids.
-  if (input.groceryList?.available) {
-    const groceryRecipes = new Set(
-      input.groceryList.sections.flatMap((s) => s.items.flatMap((i) => i.sourceRecipeIds ?? [])),
-    );
-    for (const req of input.requirements) {
-      if (groceryRecipes.size > 0 && !groceryRecipes.has(req.recipeId)) {
-        // Not a hard failure — component recipes may use synthetic ids.
-      }
-    }
-  }
+  void input.groceryList;
+  void MEAL_PREP_POLICY;
 
   return {
     weeklyRecipeDemandMismatches,
@@ -133,28 +108,12 @@ function quantitiesClose(
   bQty: number,
   bUnit: string,
 ): boolean {
+  if (unitFamily(aUnit) !== unitFamily(bUnit)) return false;
+  if (aUnit !== bUnit) {
+    // Cross-unit conversion is intentionally conservative in V1.
+    return false;
+  }
   const tol = MEAL_PREP_POLICY.ingredientReconciliationTolerance;
-  if (aUnit === bUnit) {
-    const denom = Math.max(aQty, bQty, 1e-9);
-    return Math.abs(aQty - bQty) / denom <= tol;
-  }
-  const a = toCompatibleBasis(aQty, aUnit);
-  const b = toCompatibleBasis(bQty, bUnit);
-  if (!a.ok || !b.ok || a.family !== b.family) {
-    // Different unit families — skip hard mismatch if families unknown.
-    return unitFamily(aUnit) === "unknown" || unitFamily(bUnit) === "unknown";
-  }
-  if (a.family === "mass" && b.family === "mass") {
-    const denom = Math.max(a.grams, b.grams, 1e-9);
-    return Math.abs(a.grams - b.grams) / denom <= tol;
-  }
-  if (a.family === "volume" && b.family === "volume") {
-    const denom = Math.max(a.teaspoons, b.teaspoons, 1e-9);
-    return Math.abs(a.teaspoons - b.teaspoons) / denom <= tol;
-  }
-  if (a.family === "count" && b.family === "count") {
-    const denom = Math.max(a.count, b.count, 1e-9);
-    return Math.abs(a.count - b.count) / denom <= tol;
-  }
-  return false;
+  const denom = Math.max(Math.abs(aQty), Math.abs(bQty), 1e-9);
+  return Math.abs(aQty - bQty) / denom <= tol;
 }

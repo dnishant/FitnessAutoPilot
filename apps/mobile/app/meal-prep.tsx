@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { MealPrepPlan, PrepTask, PrepTaskType } from "@fitness-autopilot/contracts";
+import type { MealPrepPlan } from "@fitness-autopilot/contracts";
+import {
+  buildSessionPlaybook,
+  formatDurationLabel,
+  type SessionPlaybook,
+  type SessionPlaybookStep,
+} from "@fitness-autopilot/domain";
 import {
   EmptyState,
   ErrorState,
@@ -14,53 +20,58 @@ import { useSession } from "../src/state/session";
 import { colors, radii, spacing, typography } from "../src/theme/tokens";
 
 type ProgressMap = Record<string, { completed: boolean; completedAt?: string }>;
+type ScreenMode = "overview" | "play" | "complete" | "later";
 
-type PhaseKey = "overview" | PrepTaskType | "focus";
+type ProgressState = {
+  progress: ProgressMap;
+  currentStepId?: string;
+};
 
-const PHASE_META: Array<{
-  key: PrepTaskType;
-  label: string;
-  sessionOnly?: boolean;
-}> = [
-  { key: "mise_en_place", label: "Mise en Place", sessionOnly: true },
-  { key: "advance_prep", label: "Advance Prep", sessionOnly: true },
-  { key: "cook", label: "Cook", sessionOnly: true },
-  { key: "portion_and_store", label: "Portion & Store", sessionOnly: true },
-  { key: "fresh_finish", label: "Finish Later" },
-];
-
-function formatMinutes(total: number): string {
-  if (total < 60) return `~${total} min`;
-  const h = Math.floor(total / 60);
-  const m = total % 60;
-  return m === 0 ? `~${h} hr` : `~${h} hr ${m} min`;
-}
+type BackgroundItem = { id: string; label: string; remainingLabel?: string };
 
 export default function MealPrepScreen() {
   const { weeklyPlan, generateMealPrepPlan } = useSession();
   const plan = weeklyPlan?.mealPrepPlan;
   const planId = weeklyPlan?.generatedPlanId ?? plan?.generatedPlanId;
-  const [phase, setPhase] = useState<PhaseKey>("overview");
+  const [mode, setMode] = useState<ScreenMode>("overview");
   const [progress, setProgress] = useState<ProgressMap>({});
-  const [focusIndex, setFocusIndex] = useState(0);
-  const [started, setStarted] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+
+  const playbook = useMemo(() => (plan?.available ? buildSessionPlaybook(plan) : null), [plan]);
 
   useEffect(() => {
     const key = mealPrepProgressStorageKey(planId);
     AsyncStorage.getItem(key)
       .then((raw) => {
         if (!raw) return;
-        const parsed = JSON.parse(raw) as ProgressMap;
-        setProgress(parsed);
-        const anyDone = Object.values(parsed).some((p) => p.completed);
-        if (anyDone) setStarted(true);
+        const parsed = JSON.parse(raw) as ProgressState | ProgressMap;
+        const map =
+          parsed && typeof parsed === "object" && "progress" in parsed
+            ? (parsed as ProgressState).progress
+            : (parsed as ProgressMap);
+        setProgress(map ?? {});
+        const done = Object.values(map ?? {}).filter((p) => p.completed).length;
+        if (playbook && done >= playbook.steps.length && playbook.steps.length > 0) {
+          setMode("complete");
+        } else if (done > 0) {
+          setMode("play");
+        }
       })
       .catch(() => {
         /* ignore */
       });
-  }, [planId]);
+  }, [planId, playbook]);
+
+  const persist = useCallback(
+    async (next: ProgressMap, currentStepId?: string) => {
+      setProgress(next);
+      if (!planId) return;
+      const payload: ProgressState = { progress: next, currentStepId };
+      await AsyncStorage.setItem(mealPrepProgressStorageKey(planId), JSON.stringify(payload));
+    },
+    [planId],
+  );
 
   const onGenerate = useCallback(async () => {
     setGenerating(true);
@@ -71,53 +82,24 @@ export default function MealPrepScreen() {
         setGenerateError(result.error);
         return;
       }
-      setPhase("overview");
-      setStarted(false);
+      setMode("overview");
       setProgress({});
     } finally {
       setGenerating(false);
     }
   }, [generateMealPrepPlan]);
 
-  const persist = useCallback(
-    async (next: ProgressMap) => {
-      setProgress(next);
-      if (!planId) return;
-      await AsyncStorage.setItem(mealPrepProgressStorageKey(planId), JSON.stringify(next));
-    },
-    [planId],
-  );
+  const remainingSteps = useMemo(() => {
+    if (!playbook) return [];
+    return playbook.steps.filter((s) => !progress[s.task.id]?.completed);
+  }, [playbook, progress]);
 
-  const toggleTask = useCallback(
-    (taskId: string) => {
-      const current = progress[taskId];
-      const completed = !(current?.completed === true);
-      void persist({
-        ...progress,
-        [taskId]: {
-          completed,
-          completedAt: completed ? new Date().toISOString() : undefined,
-        },
-      });
-    },
-    [persist, progress],
-  );
+  const currentStep = remainingSteps[0] ?? null;
 
-  const sessionOrder = useMemo(() => {
-    if (!plan) return [];
-    const byId = new Map(plan.tasks.map((t) => [t.id, t]));
-    return plan.sessionTaskOrder
-      .map((id) => byId.get(id))
-      .filter((t): t is PrepTask => Boolean(t));
-  }, [plan]);
-
-  const nextFocusTask = useMemo(() => {
-    if (!started || sessionOrder.length === 0) return null;
-    const remaining = sessionOrder.filter((t) => !progress[t.id]?.completed);
-    if (remaining.length === 0) return null;
-    const idx = Math.min(focusIndex, remaining.length - 1);
-    return remaining[idx] ?? remaining[0] ?? null;
-  }, [focusIndex, progress, sessionOrder, started]);
+  const background = useMemo(() => {
+    if (!playbook || !currentStep) return [];
+    return findBackgroundActivity(playbook, currentStep, progress);
+  }, [playbook, currentStep, progress]);
 
   if (!weeklyPlan || weeklyPlan.status !== "ready") {
     return (
@@ -125,7 +107,7 @@ export default function MealPrepScreen() {
         <ScreenHeader eyebrow="MEAL PREP" title="Meal Prep" />
         <EmptyState
           title="No week planned yet"
-          body="Generate your week first, then come back for a coordinated prep session."
+          body="Generate your week first, then come back for a guided prep session."
           actionLabel="Build My Plan"
           onAction={() => router.push("/generate")}
         />
@@ -139,16 +121,13 @@ export default function MealPrepScreen() {
         <ScreenHeader
           eyebrow="MEAL PREP"
           title="Meal Prep"
-          subtitle="Build a coordinated kitchen session for this week's meals."
+          subtitle="One guided sequence for this week’s cooking."
         />
         <View style={styles.stack}>
-          <View style={styles.hero}>
-            <Text style={styles.heroTime}>Ready when you are</Text>
-            <Text style={styles.heroBody}>
-              We’ll turn this week’s four meals into mise en place, cooking order, storage, and
-              finish-later steps — without changing your nutrition plan.
-            </Text>
-          </View>
+          <Text style={styles.lead}>
+            We’ll turn your four meals into ordered steps — exactly what to do next, with the
+            ingredients and instructions for that step only.
+          </Text>
           {generateError ? <Text style={styles.errorText}>{generateError}</Text> : null}
           <PrimaryButton
             label="Generate Meal Prep"
@@ -165,7 +144,7 @@ export default function MealPrepScreen() {
     );
   }
 
-  if (!plan.available || plan.lifecycle === "failed") {
+  if (!plan.available || plan.lifecycle === "failed" || !playbook) {
     const detail =
       plan.issues.find((i) => !i.preservable)?.message ??
       plan.issues[0]?.message ??
@@ -189,12 +168,6 @@ export default function MealPrepScreen() {
     );
   }
 
-  const phaseCounts = PHASE_META.map((p) => {
-    const tasks = plan.tasks.filter((t) => t.type === p.key);
-    const done = tasks.filter((t) => progress[t.id]?.completed).length;
-    return { ...p, total: tasks.length, done };
-  });
-
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <ScreenHeader
@@ -203,311 +176,289 @@ export default function MealPrepScreen() {
         subtitle={`${plan.coreMealCount} meals · ${plan.portionCount} portions · ${plan.coveredDayCount} days`}
       />
 
-      {phase === "overview" && !started ? (
-        <View style={styles.stack}>
-          <View style={styles.hero}>
-            <Text style={styles.heroTime}>{formatMinutes(plan.schedule.elapsedMinutes)} elapsed</Text>
-            <Text style={styles.heroHands}>
-              {formatMinutes(plan.schedule.handsOnMinutes)} hands-on
-            </Text>
-            <Text style={styles.heroBody}>
-              One coordinated kitchen session for this week&apos;s four meals — not four separate
-              recipes.
-            </Text>
-          </View>
-
-          <View style={styles.phaseList}>
-            {phaseCounts.map((p) => (
-              <Pressable
-                key={p.key}
-                style={styles.phaseRow}
-                onPress={() => {
-                  setStarted(true);
-                  setPhase(p.key);
-                }}
-              >
-                <Text style={styles.phaseLabel}>{p.label}</Text>
-                <Text style={styles.phaseCount}>
-                  {p.done}/{p.total}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-
-          {plan.futureActions.length > 0 ? (
-            <Text style={styles.futureHint}>
-              {plan.futureActions.length} later-week action
-              {plan.futureActions.length === 1 ? "" : "s"} scheduled (thaw / finish / reheat).
-            </Text>
-          ) : null}
-
-          {generateError ? <Text style={styles.errorText}>{generateError}</Text> : null}
-
-          <PrimaryButton
-            label="Start Prep"
-            onPress={() => {
-              setStarted(true);
-              setPhase("focus");
-              setFocusIndex(0);
-            }}
-          />
-          <PrimaryButton
-            label="Browse phases"
-            variant="secondary"
-            onPress={() => {
-              setStarted(true);
-              setPhase("mise_en_place");
-            }}
-          />
-          <PrimaryButton
-            label="Regenerate Meal Prep"
-            variant="ghost"
-            loading={generating}
-            onPress={() => void onGenerate()}
-          />
-        </View>
+      {mode === "overview" ? (
+        <Overview
+          plan={plan}
+          playbook={playbook}
+          generateError={generateError}
+          generating={generating}
+          hasProgress={remainingSteps.length < playbook.steps.length}
+          onStart={() => setMode(remainingSteps.length === 0 ? "complete" : "play")}
+          onLater={() => setMode("later")}
+          onRegenerate={() => void onGenerate()}
+        />
       ) : null}
 
-      {started && phase === "focus" && nextFocusTask ? (
-        <FocusCard
-          task={nextFocusTask}
-          plan={plan}
+      {mode === "play" && currentStep ? (
+        <CurrentStepView
+          step={currentStep}
+          totalSteps={playbook.steps.length}
+          background={background}
           onDone={() => {
-            toggleTask(nextFocusTask.id);
-            setFocusIndex(0);
+            const nextProgress = {
+              ...progress,
+              [currentStep.task.id]: {
+                completed: true,
+                completedAt: new Date().toISOString(),
+              },
+            };
+            const stillLeft = playbook.steps.filter((s) => !nextProgress[s.task.id]?.completed);
+            void persist(nextProgress, stillLeft[0]?.task.id);
+            if (stillLeft.length === 0) setMode("complete");
           }}
-          onBrowse={() => setPhase(nextFocusTask.type)}
+          onOverview={() => setMode("overview")}
+          onRecipeEscape={() => router.push("/(tabs)/plan")}
         />
       ) : null}
 
-      {started && phase === "focus" && !nextFocusTask ? (
-        <View style={styles.stack}>
-          <Text style={styles.doneTitle}>Prep session complete</Text>
-          <Text style={styles.heroBody}>
-            Remaining work is on Finish Later days. Open that phase when you need it.
-          </Text>
-          <PrimaryButton label="Finish Later" onPress={() => setPhase("fresh_finish")} />
-          <PrimaryButton
-            label="Back to overview"
-            variant="secondary"
-            onPress={() => setPhase("overview")}
-          />
-        </View>
-      ) : null}
-
-      {started && phase !== "focus" && phase !== "overview" ? (
-        <PhaseView
+      {mode === "play" && !currentStep ? (
+        <CompletionView
           plan={plan}
-          phase={phase}
-          progress={progress}
-          onToggle={toggleTask}
-          phaseCounts={phaseCounts}
-          onSelectPhase={setPhase}
-          onFocus={() => setPhase("focus")}
+          onLater={() => setMode("later")}
+          onOverview={() => setMode("overview")}
         />
       ) : null}
 
-      {started && phase === "overview" ? (
-        <View style={styles.stack}>
-          <View style={styles.hero}>
-            <Text style={styles.heroTime}>{formatMinutes(plan.schedule.elapsedMinutes)} elapsed</Text>
-            <Text style={styles.heroHands}>
-              {formatMinutes(plan.schedule.handsOnMinutes)} hands-on
-            </Text>
-          </View>
-          <View style={styles.phaseList}>
-            {phaseCounts.map((p) => (
-              <Pressable key={p.key} style={styles.phaseRow} onPress={() => setPhase(p.key)}>
-                <Text style={styles.phaseLabel}>{p.label}</Text>
-                <Text style={styles.phaseCount}>
-                  {p.done}/{p.total}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <PrimaryButton label="Continue next task" onPress={() => setPhase("focus")} />
-        </View>
+      {mode === "complete" ? (
+        <CompletionView
+          plan={plan}
+          onLater={() => setMode("later")}
+          onOverview={() => setMode("overview")}
+        />
+      ) : null}
+
+      {mode === "later" ? (
+        <LaterView
+          plan={plan}
+          progress={progress}
+          onToggle={(id) => {
+            const completed = !(progress[id]?.completed === true);
+            void persist({
+              ...progress,
+              [id]: {
+                completed,
+                completedAt: completed ? new Date().toISOString() : undefined,
+              },
+            });
+          }}
+          onBack={() => setMode(remainingSteps.length === 0 ? "complete" : "play")}
+        />
       ) : null}
     </ScrollView>
   );
 }
 
-function FocusCard(props: {
-  task: PrepTask;
+function Overview(props: {
   plan: MealPrepPlan;
-  onDone: () => void;
-  onBrowse: () => void;
+  playbook: SessionPlaybook;
+  generateError: string | null;
+  generating: boolean;
+  hasProgress: boolean;
+  onStart: () => void;
+  onLater: () => void;
+  onRegenerate: () => void;
 }) {
-  const { task, plan } = props;
-  const parallel = (task.timing?.parallelTaskIds ?? [])
-    .map((id) => plan.tasks.find((t) => t.id === id))
-    .filter((t): t is PrepTask => Boolean(t))
-    .slice(0, 3);
+  const { plan, playbook } = props;
 
   return (
     <View style={styles.stack}>
-      <Text style={styles.focusEyebrow}>NEXT</Text>
-      <Text style={styles.focusTitle}>{task.title}</Text>
-      <Text style={styles.focusMeta}>
-        {task.durationMinutes} min active
-        {task.passiveMinutes ? ` · ${task.passiveMinutes} min passive` : ""}
-      </Text>
-      {task.instructions.slice(0, 3).map((line) => (
-        <Text key={line} style={styles.instruction}>
-          {line}
+      <View style={styles.hero}>
+        <Text style={styles.heroTime}>{formatDurationLabel(playbook.elapsedMinutes)}</Text>
+        <Text style={styles.heroHands}>
+          ~{formatDurationLabel(playbook.handsOnMinutes)} hands-on
+          {playbook.allottedMinutes != null
+            ? playbook.overAllottedMinutes > 0
+              ? ` · ${formatDurationLabel(playbook.overAllottedMinutes)} over your ${formatDurationLabel(playbook.allottedMinutes)} window`
+              : ` · fits your ${formatDurationLabel(playbook.allottedMinutes)} window`
+            : ""}
         </Text>
-      ))}
-      {parallel.length > 0 ? (
-        <View style={styles.whileBox}>
-          <Text style={styles.whileLabel}>You can work on</Text>
-          {parallel.map((p) => (
-            <Text key={p.id} style={styles.whileItem}>
-              · {p.title}
-            </Text>
-          ))}
-        </View>
-      ) : null}
-      <PrimaryButton label="Done" onPress={props.onDone} />
-      <PrimaryButton label="See phase list" variant="ghost" onPress={props.onBrowse} />
-    </View>
-  );
-}
-
-function PhaseView(props: {
-  plan: MealPrepPlan;
-  phase: PrepTaskType;
-  progress: ProgressMap;
-  onToggle: (id: string) => void;
-  phaseCounts: Array<{ key: PrepTaskType; label: string; total: number; done: number }>;
-  onSelectPhase: (p: PhaseKey) => void;
-  onFocus: () => void;
-}) {
-  const tasks =
-    props.phase === "mise_en_place" ||
-    props.phase === "advance_prep" ||
-    props.phase === "cook" ||
-    props.phase === "portion_and_store"
-      ? props.plan.sessionTaskOrder
-          .map((id) => props.plan.tasks.find((t) => t.id === id))
-          .filter((t): t is PrepTask => Boolean(t) && t!.type === props.phase)
-      : props.plan.tasks.filter((t) => t.type === props.phase);
-
-  const label = PHASE_META.find((p) => p.key === props.phase)?.label ?? props.phase;
-  const count = props.phaseCounts.find((p) => p.key === props.phase);
-
-  // Group mise by phaseGroup
-  const grouped =
-    props.phase === "mise_en_place"
-      ? groupMise(tasks)
-      : [{ group: null as string | null, tasks }];
-
-  return (
-    <View style={styles.stack}>
-      <View style={styles.phaseHeader}>
-        <Text style={styles.phaseTitle}>{label}</Text>
-        <Text style={styles.phaseCount}>
-          {count?.done ?? 0}/{count?.total ?? tasks.length}
+        <Text style={styles.heroBody}>
+          Follow one ordered sequence. Each step tells you what to get out and exactly what to do —
+          no separate mise en place phase.
         </Text>
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
-        {props.phaseCounts.map((p) => (
-          <Pressable
-            key={p.key}
-            style={[styles.tab, p.key === props.phase && styles.tabActive]}
-            onPress={() => props.onSelectPhase(p.key)}
-          >
-            <Text style={[styles.tabText, p.key === props.phase && styles.tabTextActive]}>
-              {p.label}
-            </Text>
-          </Pressable>
-        ))}
-      </ScrollView>
+      <Text style={styles.sectionLabel}>YOU&apos;LL MAKE</Text>
+      {plan.weeklyRequirements.map((m) => (
+        <Text key={m.coreMealId} style={styles.mealLine}>
+          · {m.name} ×{m.weeklyInstanceCount}
+        </Text>
+      ))}
 
-      {props.phase === "portion_and_store" ? (
-        <StorageList plan={props.plan} progress={props.progress} onToggle={props.onToggle} />
-      ) : null}
+      <Text style={styles.progressLine}>
+        {playbook.steps.length} guided steps
+        {plan.futureActions.length > 0
+          ? ` · ${plan.futureActions.length} finish-later action${plan.futureActions.length === 1 ? "" : "s"}`
+          : ""}
+      </Text>
 
-      {props.phase === "fresh_finish" ? (
-        <FutureList plan={props.plan} progress={props.progress} onToggle={props.onToggle} />
-      ) : null}
+      {props.generateError ? <Text style={styles.errorText}>{props.generateError}</Text> : null}
 
-      {props.phase !== "portion_and_store" && props.phase !== "fresh_finish"
-        ? grouped.map((g) => (
-            <View key={g.group ?? "all"} style={styles.group}>
-              {g.group ? <Text style={styles.groupLabel}>{g.group}</Text> : null}
-              {g.tasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  done={props.progress[task.id]?.completed === true}
-                  onToggle={() => props.onToggle(task.id)}
-                />
-              ))}
-            </View>
-          ))
-        : null}
-
-      <PrimaryButton label="Focus mode" variant="secondary" onPress={props.onFocus} />
       <PrimaryButton
-        label="Overview"
+        label={props.hasProgress ? "Resume Meal Prep" : "Start Meal Prep"}
+        onPress={props.onStart}
+      />
+      {plan.futureActions.length > 0 ? (
+        <PrimaryButton label="Upcoming deferred work" variant="secondary" onPress={props.onLater} />
+      ) : null}
+      <PrimaryButton
+        label="Regenerate Meal Prep"
         variant="ghost"
-        onPress={() => props.onSelectPhase("overview")}
+        loading={props.generating}
+        onPress={props.onRegenerate}
       />
     </View>
   );
 }
 
-function StorageList(props: {
-  plan: MealPrepPlan;
-  progress: ProgressMap;
-  onToggle: (id: string) => void;
+function CurrentStepView(props: {
+  step: SessionPlaybookStep;
+  totalSteps: number;
+  background: BackgroundItem[];
+  onDone: () => void;
+  onOverview: () => void;
+  onRecipeEscape: () => void;
 }) {
-  const byMeal = new Map<string, typeof props.plan.storageAssignments>();
-  for (const a of props.plan.storageAssignments) {
-    const list = byMeal.get(a.coreMealId) ?? [];
-    list.push(a);
-    byMeal.set(a.coreMealId, list);
-  }
+  const { step } = props;
+  const { task } = step;
+
   return (
-    <View style={styles.group}>
-      {[...byMeal.entries()].map(([coreMealId, items]) => (
-        <View key={coreMealId} style={styles.storeBlock}>
-          <Text style={styles.groupLabel}>{items[0]?.mealName ?? coreMealId}</Text>
-          {items.map((a) => {
-            const done = props.progress[a.id]?.completed === true;
-            return (
-              <Pressable key={a.id} style={styles.taskRow} onPress={() => props.onToggle(a.id)}>
-                <Text style={styles.check}>{done ? "☑" : "☐"}</Text>
-                <View style={styles.taskBody}>
-                  <Text style={[styles.taskTitle, done && styles.taskDone]}>
-                    {capitalize(a.day)} {a.mealType}
-                  </Text>
-                  <Text style={styles.taskMeta}>{a.disposition.replace(/_/g, " ")}</Text>
-                </View>
-              </Pressable>
-            );
-          })}
+    <View style={styles.stack}>
+      <Text style={styles.stepCounter}>
+        STEP {step.stepNumber} OF {props.totalSteps}
+      </Text>
+      <Text style={styles.focusTitle}>{task.title}</Text>
+      <Text style={styles.focusMeta}>
+        ~{task.durationMinutes} min active
+        {task.passiveMinutes ? ` · ${task.passiveMinutes} min in background after` : ""}
+      </Text>
+
+      {props.background.length > 0 ? (
+        <View style={styles.backgroundBox}>
+          <Text style={styles.sectionLabel}>IN PROGRESS</Text>
+          {props.background.map((b) => (
+            <Text key={b.id} style={styles.backgroundLine}>
+              · {b.label}
+              {b.remainingLabel ? ` — ${b.remainingLabel}` : ""}
+            </Text>
+          ))}
         </View>
-      ))}
+      ) : null}
+
+      {task.ingredients.length > 0 ? (
+        <View style={styles.block}>
+          <Text style={styles.sectionLabel}>GET OUT</Text>
+          {task.ingredients.map((ing) => (
+            <Text key={`${ing.ingredientId}-${ing.displayQuantityLabel}`} style={styles.bullet}>
+              · {ing.displayQuantityLabel} {ing.displayName}
+              {ing.preparation ? ` (${ing.preparation})` : ""}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
+      {(task.equipment?.length ?? 0) > 0 ? (
+        <View style={styles.block}>
+          <Text style={styles.sectionLabel}>YOU&apos;LL ALSO NEED</Text>
+          {task.equipment!.map((eq) => (
+            <Text key={eq} style={styles.bullet}>
+              · {eq.replace(/_/g, " ")}
+            </Text>
+          ))}
+        </View>
+      ) : null}
+
+      {task.instructions.length > 0 ? (
+        <View style={styles.block}>
+          <Text style={styles.sectionLabel}>DO THIS</Text>
+          {task.instructions.map((line, i) => (
+            <View key={`${i}-${line.slice(0, 20)}`} style={styles.instructionRow}>
+              <Text style={styles.instructionNum}>{i + 1}.</Text>
+              <Text style={styles.instruction}>{line}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {task.passiveMinutes && task.passiveMinutes > 0 ? (
+        <Text style={styles.passiveHint}>
+          Then it continues on its own for ~{task.passiveMinutes} min
+          {step.whileThisRuns[0]
+            ? ` — next up while you wait: ${step.whileThisRuns[0].title}`
+            : ". We'll move you to the next productive step."}
+        </Text>
+      ) : null}
+
+      {task.allocations && task.allocations.length > 1 ? (
+        <Text style={styles.taskMeta}>
+          Shared prep:{" "}
+          {task.allocations
+            .map((a) => `${a.quantityLabel} → ${a.mealName ?? a.coreMealId}`)
+            .join(" · ")}
+        </Text>
+      ) : null}
+
+      <PrimaryButton label="Done — Next" onPress={props.onDone} />
+      <PrimaryButton label="View plan / recipes" variant="ghost" onPress={props.onRecipeEscape} />
+      <PrimaryButton label="Overview" variant="ghost" onPress={props.onOverview} />
     </View>
   );
 }
 
-function FutureList(props: {
+function CompletionView(props: {
+  plan: MealPrepPlan;
+  onLater: () => void;
+  onOverview: () => void;
+}) {
+  const fridge = props.plan.storageAssignments.filter((a) => a.disposition === "refrigerate").length;
+  const frozen = props.plan.storageAssignments.filter((a) => a.disposition === "freeze").length;
+  const fresh = props.plan.storageAssignments.filter(
+    (a) => a.disposition === "fresh_finish_later",
+  ).length;
+
+  return (
+    <View style={styles.stack}>
+      <Text style={styles.doneTitle}>Meal prep complete</Text>
+      <Text style={styles.lead}>
+        {props.plan.portionCount} lunches & dinners · {props.plan.coreMealCount} core meals ·{" "}
+        {props.plan.coveredDayCount} days covered
+      </Text>
+      <View style={styles.block}>
+        <Text style={styles.bullet}>· Ready in the fridge: {fridge}</Text>
+        <Text style={styles.bullet}>· Frozen for later: {frozen}</Text>
+        <Text style={styles.bullet}>· Finish fresh later: {fresh}</Text>
+      </View>
+      {props.plan.futureActions.length > 0 ? (
+        <>
+          <Text style={styles.sectionLabel}>UPCOMING</Text>
+          {props.plan.futureActions.slice(0, 6).map((a) => (
+            <Text key={a.id} style={styles.bullet}>
+              · {capitalize(a.scheduledDay)} — {a.mealName ?? a.type.replace(/_/g, " ")}
+              {a.durationMinutes != null ? ` (~${a.durationMinutes} min)` : ""}
+            </Text>
+          ))}
+          <PrimaryButton label="See all deferred work" variant="secondary" onPress={props.onLater} />
+        </>
+      ) : null}
+      <PrimaryButton label="Back to overview" variant="ghost" onPress={props.onOverview} />
+    </View>
+  );
+}
+
+function LaterView(props: {
   plan: MealPrepPlan;
   progress: ProgressMap;
   onToggle: (id: string) => void;
+  onBack: () => void;
 }) {
-  const finishTasks = props.plan.tasks.filter((t) => t.type === "fresh_finish");
-  const actions = props.plan.futureActions;
-
   return (
-    <View style={styles.group}>
-      {actions.map((a) => {
+    <View style={styles.stack}>
+      <Text style={styles.doneTitle}>Upcoming</Text>
+      <Text style={styles.lead}>Thaw, finish, and reheat on the days you eat — not during prep.</Text>
+      {props.plan.futureActions.map((a) => {
         const done = props.progress[a.id]?.completed === true;
         return (
-          <Pressable key={a.id} style={styles.taskRow} onPress={() => props.onToggle(a.id)}>
+          <Pressable key={a.id} style={styles.laterRow} onPress={() => props.onToggle(a.id)}>
             <Text style={styles.check}>{done ? "☑" : "☐"}</Text>
             <View style={styles.taskBody}>
               <Text style={[styles.taskTitle, done && styles.taskDone]}>
@@ -517,7 +468,7 @@ function FutureList(props: {
                 {a.type.replace(/_/g, " ")}
                 {a.durationMinutes != null ? ` · ~${a.durationMinutes} min` : ""}
               </Text>
-              {a.instructions.slice(0, 2).map((line) => (
+              {a.instructions.slice(0, 3).map((line) => (
                 <Text key={line} style={styles.taskMeta}>
                   {line}
                 </Text>
@@ -526,67 +477,33 @@ function FutureList(props: {
           </Pressable>
         );
       })}
-      {finishTasks.length > 0 ? (
-        <>
-          <Text style={styles.groupLabel}>Fresh finish steps</Text>
-          {finishTasks.map((task) => (
-            <TaskRow
-              key={task.id}
-              task={task}
-              done={props.progress[task.id]?.completed === true}
-              onToggle={() => props.onToggle(task.id)}
-            />
-          ))}
-        </>
-      ) : null}
+      <PrimaryButton label="Back" variant="ghost" onPress={props.onBack} />
     </View>
   );
 }
 
-function TaskRow(props: { task: PrepTask; done: boolean; onToggle: () => void }) {
-  return (
-    <Pressable style={styles.taskRow} onPress={props.onToggle}>
-      <Text style={styles.check}>{props.done ? "☑" : "☐"}</Text>
-      <View style={styles.taskBody}>
-        <Text style={[styles.taskTitle, props.done && styles.taskDone]}>{props.task.title}</Text>
-        <Text style={styles.taskMeta}>
-          {props.task.durationMinutes} min
-          {props.task.passiveMinutes ? ` · ${props.task.passiveMinutes} min passive` : ""}
-          {props.task.coreMealIds.length > 1
-            ? ` · ${props.task.coreMealIds.length} meals`
-            : ""}
-        </Text>
-        {props.task.allocations && props.task.allocations.length > 1 ? (
-          <Text style={styles.taskMeta}>
-            {props.task.allocations
-              .map((a) => `${a.mealName ?? a.coreMealId}`)
-              .join(" · ")}
-          </Text>
-        ) : null}
-      </View>
-    </Pressable>
-  );
-}
-
-function groupMise(tasks: PrepTask[]): Array<{ group: string | null; tasks: PrepTask[] }> {
-  const order = ["produce", "proteins", "sauces_marinades", "grains", "other"] as const;
-  const labels: Record<string, string> = {
-    produce: "Produce",
-    proteins: "Proteins",
-    sauces_marinades: "Sauces & Marinades",
-    grains: "Grains",
-    other: "Other",
-  };
-  const map = new Map<string, PrepTask[]>();
-  for (const t of tasks) {
-    const g = t.phaseGroup ?? "other";
-    const list = map.get(g) ?? [];
-    list.push(t);
-    map.set(g, list);
+function findBackgroundActivity(
+  playbook: SessionPlaybook,
+  current: SessionPlaybookStep,
+  progress: ProgressMap,
+): BackgroundItem[] {
+  const now = current.startOffsetMinutes;
+  const items: BackgroundItem[] = [];
+  for (const step of playbook.steps) {
+    if (step.task.id === current.task.id) continue;
+    if (!progress[step.task.id]?.completed) continue;
+    const passive = step.task.passiveMinutes ?? 0;
+    if (passive <= 0) continue;
+    const passiveEnd = step.activeEndMinutes + passive;
+    if (now < step.activeEndMinutes || now >= passiveEnd) continue;
+    const remaining = Math.max(0, Math.ceil(passiveEnd - now));
+    items.push({
+      id: step.task.id,
+      label: step.task.output?.label ?? step.task.title,
+      remainingLabel: `${remaining} min remaining`,
+    });
   }
-  return order
-    .filter((g) => (map.get(g)?.length ?? 0) > 0)
-    .map((g) => ({ group: labels[g] ?? g, tasks: map.get(g)! }));
+  return items.slice(0, 4);
 }
 
 function capitalize(s: string): string {
@@ -601,128 +518,48 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     flexGrow: 1,
   },
-  stack: {
-    gap: spacing.lg,
-  },
+  stack: { gap: spacing.lg },
+  lead: { ...typography.body, color: colors.textSecondary },
   hero: {
     backgroundColor: colors.surfaceDark,
     borderRadius: radii.lg,
     padding: spacing.xl,
     gap: spacing.sm,
   },
-  heroTime: {
-    ...typography.heading,
-    color: colors.textOnDark,
-  },
-  heroHands: {
-    ...typography.subheading,
-    color: colors.textOnDarkMuted,
-  },
-  heroBody: {
-    ...typography.body,
-    color: colors.textOnDarkMuted,
-  },
-  phaseList: {
-    gap: spacing.sm,
-  },
-  phaseRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    backgroundColor: colors.surface,
-    borderRadius: radii.md,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.lg,
-    paddingVertical: spacing.md,
-  },
-  phaseLabel: {
-    ...typography.bodyStrong,
-    color: colors.text,
-  },
-  phaseCount: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  phaseHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "baseline",
-  },
-  phaseTitle: {
-    ...typography.heading,
-    color: colors.text,
-  },
-  futureHint: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  errorText: {
-    ...typography.body,
-    color: colors.error,
-  },
-  focusEyebrow: {
+  heroTime: { ...typography.heading, color: colors.textOnDark },
+  heroHands: { ...typography.caption, color: colors.textOnDarkMuted },
+  heroBody: { ...typography.body, color: colors.textOnDarkMuted },
+  sectionLabel: {
     ...typography.caption,
     color: colors.textMuted,
+    letterSpacing: 1,
+  },
+  mealLine: { ...typography.body, color: colors.text },
+  progressLine: { ...typography.body, color: colors.textSecondary },
+  errorText: { ...typography.body, color: colors.error },
+  stepCounter: {
+    ...typography.caption,
+    color: colors.accent,
     letterSpacing: 1.2,
   },
-  focusTitle: {
-    ...typography.title,
-    color: colors.text,
-  },
-  focusMeta: {
-    ...typography.body,
-    color: colors.textSecondary,
-  },
-  instruction: {
-    ...typography.body,
-    color: colors.text,
-  },
-  whileBox: {
-    backgroundColor: colors.primarySoft,
+  focusTitle: { ...typography.title, color: colors.text },
+  focusMeta: { ...typography.body, color: colors.textSecondary },
+  backgroundBox: {
+    backgroundColor: colors.accentSoft,
     borderRadius: radii.md,
     padding: spacing.lg,
     gap: spacing.xs,
   },
-  whileLabel: {
-    ...typography.bodyStrong,
-    color: colors.primary,
-  },
-  whileItem: {
-    ...typography.body,
-    color: colors.text,
-  },
-  tabs: {
-    gap: spacing.sm,
-    paddingVertical: spacing.xs,
-  },
-  tab: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radii.pill,
-    backgroundColor: colors.surfaceMuted,
-  },
-  tabActive: {
-    backgroundColor: colors.primarySoft,
-  },
-  tabText: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  tabTextActive: {
-    color: colors.primary,
-    fontWeight: "600",
-  },
-  group: {
-    gap: spacing.sm,
-  },
-  groupLabel: {
-    ...typography.caption,
-    color: colors.textMuted,
-    letterSpacing: 0.8,
-    marginTop: spacing.sm,
-  },
-  taskRow: {
+  backgroundLine: { ...typography.body, color: colors.text },
+  block: { gap: spacing.xs },
+  bullet: { ...typography.body, color: colors.text },
+  instructionRow: { flexDirection: "row", gap: spacing.sm, alignItems: "flex-start" },
+  instructionNum: { ...typography.bodyStrong, color: colors.primary, minWidth: 22 },
+  instruction: { ...typography.body, color: colors.text, flex: 1 },
+  passiveHint: { ...typography.body, color: colors.textSecondary },
+  taskMeta: { ...typography.caption, color: colors.textSecondary },
+  doneTitle: { ...typography.heading, color: colors.text },
+  laterRow: {
     flexDirection: "row",
     gap: spacing.md,
     backgroundColor: colors.surface,
@@ -731,33 +568,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: spacing.lg,
   },
-  check: {
-    fontSize: 20,
-    color: colors.primary,
-    lineHeight: 24,
-  },
-  taskBody: {
-    flex: 1,
-    gap: 2,
-  },
-  taskTitle: {
-    ...typography.bodyStrong,
-    color: colors.text,
-  },
-  taskDone: {
-    textDecorationLine: "line-through",
-    color: colors.textMuted,
-  },
-  taskMeta: {
-    ...typography.caption,
-    color: colors.textSecondary,
-  },
-  storeBlock: {
-    gap: spacing.sm,
-    marginBottom: spacing.md,
-  },
-  doneTitle: {
-    ...typography.heading,
-    color: colors.text,
-  },
+  check: { fontSize: 20, color: colors.primary, lineHeight: 24 },
+  taskBody: { flex: 1, gap: 2 },
+  taskTitle: { ...typography.bodyStrong, color: colors.text },
+  taskDone: { textDecorationLine: "line-through", color: colors.textMuted },
 });

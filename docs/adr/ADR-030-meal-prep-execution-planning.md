@@ -1,46 +1,40 @@
-# ADR-030: Deterministic meal-prep execution planning (PLAN-013)
+# ADR-030: Guided meal-prep execution (PLAN-013)
 
 ## Status
 
-Accepted — 2026-09-19
+Accepted — 2026-09-19 (revised for just-in-time guided steps)
 
 ## Context
 
 After PLAN-011 finalizes a personalized weekly nutrition plan and PLAN-012 derives
-grocery demand, consumers still lack a coordinated kitchen session. Concatenating
-four recipe instruction lists does not answer “what do I prep now?”
+grocery demand, consumers need an executable kitchen session. Concatenating four
+recipe lists — or forcing a global Mise en Place phase — fails the product promise:
+“what should I do next?”
 
 ## Decision
 
-1. **Derivation timing:** Run PLAN-013 immediately after successful PLAN-012 inside
-   `personalizeAndFinalizeGeneratedPlan`, and persist `MealPrepPlan` on
-   `ConsumerWeeklyPlan.mealPrepPlan`.
-2. **Source of truth:** Finalized personal servings, resolved recipes, core repertoire,
-   cooking preferences, and grocery list (for soft reconciliation). Never reconstruct
-   meals from display names.
-3. **Quantities:** Derive `requiredOutputServings` by summing personalized main-recipe
-   servings per `coreMealId`. Keep `plannedCookOutputServings` and
-   `expectedExcessServings` explicit. Do not silently invent large leftovers.
-4. **Tasks:** Structured types — `mise_en_place`, `advance_prep`, `cook`,
-   `portion_and_store`, `fresh_finish` — with dependencies, active/passive minutes,
-   equipment, and provenance IDs.
-5. **Culinary interpretation:** Versioned deterministic policy
-   `culinary-prep-interpretation-v1` extracts tasks from recipe prep modes,
-   ingredient preparations, and instructions. LLM may later enrich semantics but
-   must never invent quantities.
-6. **Scheduling:** Deterministic DAG schedule with passive-time overlap, oven
-   temperature compatibility, and attention limits (max one attention-heavy active
-   task).
-7. **Storage:** Every portion gets a disposition using CoreMeal / recipe meal-prep
-   metadata. Missing multi-day storage metadata yields typed issues — never invented
-   fridge-life numbers. Freezer portions emit future thaw actions for PLAN-014.
-8. **Lifecycle:** Prep plan is version-linked via `generatedPlanId`. Checklist
-   progress is client AsyncStorage scoped to that id and does not mutate the plan.
-9. **Policy version:** `meal-prep-policy-v1`.
+1. **Consumer UX:** One ordered guided sequence (Step 1 → N → Done). No consumer-facing
+   Mise en Place / Marinades / Cook tabs as required workflow.
+2. **Just-in-time prep:** Ingredient preparation lives inside the step that uses it
+   (or an immediately preceding marinate/cook step). Distant garnish prep is not
+   front-loaded.
+3. **Nearby consolidation only:** Identical prep (same food + cut) across nearby steps
+   may share a “prep once / set aside” note. Different cuts are never merged. Global
+   session-wide mise consolidation is removed.
+4. **Source of truth:** Finalized personal servings, resolved recipes, core repertoire,
+   cooking preferences, grocery list (soft reconciliation). Quantities always scale
+   from recipe ingredients — never LLM invention.
+5. **Tasks (domain):** `advance_prep` (incl. marinades), `cook`, `portion_and_store`,
+   `fresh_finish`. Legacy `mise_en_place` is not emitted.
+6. **Scheduling:** Deterministic DAG with passive-time overlap, oven compatibility,
+   max one attention-heavy active task. Prefer clarity over minimum elapsed time.
+7. **Storage + future actions:** Portion dispositions + thaw/finish/reheat for PLAN-014.
+8. **Progress:** Client AsyncStorage keyed by `generatedPlanId` (current step + completed).
+9. **Policy versions:** `meal-prep-policy-v1`, `culinary-prep-interpretation-v1` (JIT
+   semantics within the same culinary interpretation stamp).
 
 ## Consequences
 
-- Plan tab exposes a production Meal Prep experience.
+- Meal Prep overview → Start → current step (Get out / Do this / background) → complete.
 - Regenerating a week creates a new prep plan; stale progress keys do not attach.
-- PLAN-014 can consume `futureActions` without owning prep generation.
-- No dedicated meal-prep table in MVP — plan lives in `consumer_weekly_plans.plan_json`.
+- PLAN-014 consumes `futureActions` without owning prep generation.
