@@ -39,17 +39,18 @@ export const VARIETY_OPTIONS = [
   {
     value: "simple",
     label: "Keep it simple",
-    detail: "Some repeats and less complexity.",
+    detail: "More shared ingredients and familiar flavor families across your four meals.",
   },
   {
     value: "balanced",
     label: "Balanced",
-    detail: "Good variety without excessive prep.",
+    detail: "A default mix of culinary diversity and grocery efficiency across four meals.",
   },
   {
     value: "high",
     label: "Lots of variety",
-    detail: "More different meals throughout the week.",
+    detail:
+      "More distinct cuisines and flavors among your four meals, accepting a bit more grocery complexity.",
   },
 ] as const;
 

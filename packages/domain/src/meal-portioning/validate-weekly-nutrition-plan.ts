@@ -12,7 +12,7 @@ import type {
   ValidationRuleResult,
   WeeklyPlanValidationReport,
 } from "@fitness-autopilot/contracts";
-import { WEEK_DAYS } from "@fitness-autopilot/contracts";
+import { V1_COVERED_DAYS } from "@fitness-autopilot/contracts";
 import { isUnresolvedPlaceholderName } from "../meal-composition/placeholders";
 import { isEdibleFoodIdentity } from "../meal-composition/edible-identity";
 import { isStructuralPortionBlockReason } from "./executability";
@@ -795,7 +795,7 @@ export function validateWeeklyNutritionPlan(input: {
   const ctx = input.generationContext ?? { generatedPlanId: plan.generatedPlanId };
   const validatedAt = ctx.validatedAt ?? new Date().toISOString();
   const repairAttempts = ctx.repairAttempts ?? 0;
-  const expectedDays = ctx.expectedDays ?? WEEK_DAYS;
+  const expectedDays = ctx.expectedDays ?? V1_COVERED_DAYS;
   const completeMeals = ctx.completeMealsByCandidateId ?? {};
 
   const structuralRules: ValidationRuleResult[] = [];

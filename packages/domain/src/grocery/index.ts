@@ -1,5 +1,6 @@
 export * from "./policy";
 export * from "./types";
+export * from "./canonicalize";
 export * from "./identity";
 export * from "./units";
 export * from "./expand";

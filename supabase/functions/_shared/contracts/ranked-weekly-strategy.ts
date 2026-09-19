@@ -15,23 +15,30 @@ import {
   WeeklyStrategyFoodPreferencesSchema,
   WeeklyStrategyNutritionSchema,
 } from "./weekly-strategy.ts";
+import {
+  CoreMealRepertoireSchema,
+  V1_CORE_MEAL_COUNT,
+  V1_COVERED_DAY_COUNT,
+  V1_FLEXIBLE_DAY_DEFAULT,
+  V1_PLANNED_LUNCH_DINNER_SLOTS,
+  V1_VARIETY_DIVERSITY_POLICY,
+} from "./v1-meal-prep.ts";
 
 /**
- * PLAN-007 / PLAN-007.1: Ranked-candidate weekly meal strategy contracts.
- * Selects and schedules lunch/dinner candidate IDs. No recipe resolution
- * or authoritative per-meal nutrition.
- *
- * PLAN-007.1 adds weekly practicality / complexity guardrails so variety
- * prevents boredom without maximizing independent prep workflows.
+ * PLAN-007 / PLAN-007.1 / V1 meal-prep: Ranked-candidate weekly strategy.
+ * Selects a coordinated 4-meal repertoire and schedules 12 lunch/dinner
+ * instances across 6 covered days. Day 7 is intentionally flexible.
+ * No recipe resolution or authoritative per-meal nutrition here.
  */
 
-export const RANKED_WEEKLY_STRATEGY_PROMPT_VERSION = "weekly-strategy-ranked-v1.3.0" as const;
+export const RANKED_WEEKLY_STRATEGY_PROMPT_VERSION = "weekly-strategy-ranked-v1.5.0" as const;
 
 export const MIN_RANKED_CANDIDATES_PER_MEAL_TYPE = 1;
 
 /**
- * Soft preferred unique-candidate bands + hard caps by variety level.
- * These are planner policy targets for 14 lunch+dinner slots (v1).
+ * V1: unique core meals are fixed at 4 for every variety level.
+ * Variety only changes diversity/overlap pressure between those four
+ * (see V1_VARIETY_DIVERSITY_POLICY) — never the repertoire size.
  */
 export type VarietyComplexityPolicy = {
   minPreferredUniqueCandidates: number;
@@ -47,34 +54,41 @@ export type VarietyComplexityPolicy = {
 
 export const WEEKLY_VARIETY_COMPLEXITY_POLICY = {
   simple: {
-    minPreferredUniqueCandidates: 5,
-    maxPreferredUniqueCandidates: 7,
-    maxHardUniqueCandidates: 8,
+    minPreferredUniqueCandidates: V1_CORE_MEAL_COUNT,
+    maxPreferredUniqueCandidates: V1_CORE_MEAL_COUNT,
+    maxHardUniqueCandidates: V1_CORE_MEAL_COUNT,
     minPreferredUniqueLunchCandidates: 2,
-    maxPreferredUniqueLunchCandidates: 3,
-    minPreferredUniqueDinnerCandidates: 3,
-    maxPreferredUniqueDinnerCandidates: 4,
+    maxPreferredUniqueLunchCandidates: V1_CORE_MEAL_COUNT,
+    minPreferredUniqueDinnerCandidates: 2,
+    maxPreferredUniqueDinnerCandidates: V1_CORE_MEAL_COUNT,
   },
   balanced: {
-    minPreferredUniqueCandidates: 7,
-    maxPreferredUniqueCandidates: 9,
-    maxHardUniqueCandidates: 10,
-    minPreferredUniqueLunchCandidates: 3,
-    maxPreferredUniqueLunchCandidates: 4,
-    minPreferredUniqueDinnerCandidates: 4,
-    maxPreferredUniqueDinnerCandidates: 5,
+    minPreferredUniqueCandidates: V1_CORE_MEAL_COUNT,
+    maxPreferredUniqueCandidates: V1_CORE_MEAL_COUNT,
+    maxHardUniqueCandidates: V1_CORE_MEAL_COUNT,
+    minPreferredUniqueLunchCandidates: 2,
+    maxPreferredUniqueLunchCandidates: V1_CORE_MEAL_COUNT,
+    minPreferredUniqueDinnerCandidates: 2,
+    maxPreferredUniqueDinnerCandidates: V1_CORE_MEAL_COUNT,
   },
   high: {
-    minPreferredUniqueCandidates: 9,
-    maxPreferredUniqueCandidates: 12,
-    maxHardUniqueCandidates: 13,
-    minPreferredUniqueLunchCandidates: 4,
-    maxPreferredUniqueLunchCandidates: 5,
-    minPreferredUniqueDinnerCandidates: 5,
-    maxPreferredUniqueDinnerCandidates: 6,
+    minPreferredUniqueCandidates: V1_CORE_MEAL_COUNT,
+    maxPreferredUniqueCandidates: V1_CORE_MEAL_COUNT,
+    maxHardUniqueCandidates: V1_CORE_MEAL_COUNT,
+    minPreferredUniqueLunchCandidates: 3,
+    maxPreferredUniqueLunchCandidates: V1_CORE_MEAL_COUNT,
+    minPreferredUniqueDinnerCandidates: 3,
+    maxPreferredUniqueDinnerCandidates: V1_CORE_MEAL_COUNT,
   },
 } as const satisfies Record<VarietyLevel, VarietyComplexityPolicy>;
 
+export {
+  V1_CORE_MEAL_COUNT,
+  V1_COVERED_DAY_COUNT,
+  V1_FLEXIBLE_DAY_DEFAULT,
+  V1_PLANNED_LUNCH_DINNER_SLOTS,
+  V1_VARIETY_DIVERSITY_POLICY,
+};
 export type WeeklyComplexityStatus =
   | "within_preferred_range"
   | "above_preferred_range"
@@ -125,8 +139,16 @@ export const RankedWeeklyStrategyMetadataSchema = z.object({
 });
 
 export const RankedWeeklyStrategySchema = z.object({
-  days: z.array(RankedWeeklyDaySchema).length(7),
-  uniqueCandidateIds: z.array(z.string().trim().min(1).max(80)).max(14),
+  /** Six covered days with lunch + dinner (12 slots). */
+  days: z.array(RankedWeeklyDaySchema).length(V1_COVERED_DAY_COUNT),
+  /** Exactly four distinct core meals for the standard V1 plan. */
+  uniqueCandidateIds: z
+    .array(z.string().trim().min(1).max(80))
+    .length(V1_CORE_MEAL_COUNT),
+  /** Intentional unplanned day (no prescribed lunch/dinner meal-prep). */
+  flexibleDay: DayOfWeekSchema.default(V1_FLEXIBLE_DAY_DEFAULT),
+  /** First-class repertoire graph: CoreMealId → meal instance slots. */
+  coreRepertoire: CoreMealRepertoireSchema.optional(),
   strategySummary: RankedWeeklyStrategySummarySchema,
   metadata: RankedWeeklyStrategyMetadataSchema,
 });
@@ -141,7 +163,7 @@ export const RankedWeeklyCandidateUsageSchema = z.object({
   name: z.string().trim().min(1).max(160),
   count: z.number().int().positive(),
   mealTypes: z.array(RankedWeeklyMealTypeSchema).min(1).max(2),
-  slots: z.array(RankedWeeklyCandidateUsageSlotSchema).min(1).max(14),
+  slots: z.array(RankedWeeklyCandidateUsageSlotSchema).min(1).max(V1_PLANNED_LUNCH_DINNER_SLOTS),
 });
 
 export const RankedWeeklyAdjacentPairSchema = z.object({
@@ -180,7 +202,7 @@ export const RankedWeeklyStrategyQualityStatsSchema = z.object({
   adjacentHighSimilarityCount: z.number().int().nonnegative(),
   maxAdjacentSimilarity: z.number().min(0).max(1),
   averageCandidateRank: z.number().nonnegative().optional(),
-  candidateUsage: z.array(RankedWeeklyCandidateUsageSchema).max(28),
+  candidateUsage: z.array(RankedWeeklyCandidateUsageSchema).max(V1_PLANNED_LUNCH_DINNER_SLOTS),
   worstAdjacentPair: RankedWeeklyAdjacentPairSchema.optional(),
   uniqueComponentCount: z.number().int().nonnegative().optional(),
   reusedComponentCount: z.number().int().nonnegative().optional(),

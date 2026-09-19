@@ -559,10 +559,9 @@ describe("lightweight meal-composition-v2", () => {
     const recipeCalls: string[] = [];
     const resolved = await resolveSelectedPipelineMeals({
       strategy: {
-        days: sampleRankedWeeklyStrategyRequest().lunchCandidates.slice(0, 7).map((_, i) => {
-          const day = (
-            ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] as const
-          )[i]!;
+        days: (
+          ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const
+        ).map((day, i) => {
           const id = selected[i % selected.length]!;
           const name = all.find((item) => item.candidate.candidateId === id)!.candidate.name;
           return {
@@ -586,12 +585,13 @@ describe("lightweight meal-composition-v2", () => {
           };
         }),
         uniqueCandidateIds: selected,
+        flexibleDay: "sunday" as const,
         strategySummary: {
           varietyApproach: "test",
           prepApproach: "test",
           ingredientReuseApproach: "test",
         },
-        metadata: { provider: "test", model: "test", promptVersion: "weekly-strategy-ranked-v1.3.0" },
+        metadata: { provider: "test", model: "test", promptVersion: "weekly-strategy-ranked-v1.5.0" },
       },
       concepts: composed.result,
       candidatesById: new Map(all.map((item) => [item.candidate.candidateId, item.candidate])),

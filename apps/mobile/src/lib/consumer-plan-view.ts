@@ -33,35 +33,35 @@ export const GENERATION_STAGE_COPY: Record<
   { label: string; doneLabel: string }
 > = {
   understanding_preferences: {
-    label: "Understanding your preferences",
-    doneLabel: "Understanding your preferences",
+    label: "Understanding your preferences…",
+    doneLabel: "Understanding your preferences…",
   },
   finding_meals: {
-    label: "Finding meals you'll actually enjoy",
-    doneLabel: "Finding meals you'll actually enjoy",
+    label: "Finding meals you'll actually want to eat…",
+    doneLabel: "Finding meals you'll actually want to eat…",
   },
   building_complete_meals: {
-    label: "Building complete meals",
-    doneLabel: "Building complete meals",
+    label: "Making your week work together…",
+    doneLabel: "Making your week work together…",
   },
   creating_week: {
-    label: "Creating a practical week",
-    doneLabel: "Creating a practical week",
+    label: "Building your four-meal week…",
+    doneLabel: "Building your four-meal week…",
   },
   finalizing_recipes: {
-    label: "Finalizing recipes",
-    doneLabel: "Finalizing recipes",
+    label: "Finalizing your recipes…",
+    doneLabel: "Finalizing your recipes…",
   },
   personalizing_portions: {
-    label: "Personalizing your portions",
-    doneLabel: "Personalizing your portions",
+    label: "Personalizing your portions…",
+    doneLabel: "Personalizing your portions…",
   },
   finalizing_plan: {
-    label: "Finalizing your plan…",
-    doneLabel: "Finalizing your plan…",
+    label: "Building your grocery list…",
+    doneLabel: "Building your grocery list…",
   },
   complete: {
-    label: "Your week is ready",
+    label: "Finalizing your plan…",
     doneLabel: "Your week is ready",
   },
 };
@@ -302,15 +302,28 @@ export function buildConsumerMealsFromStrategy(input: {
   conceptsByCandidateId?: Record<string, MealConcept>;
   recipesByCandidateId?: Record<string, ResolvedRecipe>;
 }): ConsumerMealSlot[] {
+  const weeklyCounts = new Map<string, number>();
+  for (const day of input.strategy.days) {
+    for (const slot of [day.lunch, day.dinner]) {
+      weeklyCounts.set(slot.candidateId, (weeklyCounts.get(slot.candidateId) ?? 0) + 1);
+    }
+  }
+  const coreByCandidate = new Map(
+    (input.strategy.coreRepertoire?.coreMeals ?? []).map((m) => [m.candidateId, m]),
+  );
+
   const meals: ConsumerMealSlot[] = [];
   for (const day of input.strategy.days) {
     for (const slot of [day.lunch, day.dinner]) {
       const concept = input.conceptsByCandidateId?.[slot.candidateId];
       const recipe = input.recipesByCandidateId?.[slot.candidateId];
+      const core = coreByCandidate.get(slot.candidateId);
       meals.push({
         day: slot.day,
         mealType: slot.mealType,
         candidateId: slot.candidateId,
+        coreMealId: core?.coreMealId ?? slot.candidateId,
+        weeklyInstanceCount: core?.weeklyInstanceCount ?? weeklyCounts.get(slot.candidateId),
         name: slot.name,
         prepIntent: slot.prepIntent,
         finishTimeMinutes: finishMinutesFromRecipe(recipe, slot.prepIntent),
@@ -329,6 +342,56 @@ export function buildConsumerMealsFromStrategy(input: {
     }
   }
   return meals;
+}
+
+/** Summary of the four core meals for Plan overview UI. */
+export function coreMealsSummary(
+  plan: ConsumerWeeklyPlan | null | undefined,
+): Array<{ coreMealId: string; name: string; weeklyInstanceCount: number }> {
+  if (plan?.coreRepertoire?.coreMeals?.length) {
+    return plan.coreRepertoire.coreMeals.map((m) => ({
+      coreMealId: m.coreMealId,
+      name: m.name,
+      weeklyInstanceCount: m.weeklyInstanceCount,
+    }));
+  }
+  if (plan?.strategy?.coreRepertoire?.coreMeals?.length) {
+    return plan.strategy.coreRepertoire.coreMeals.map((m) => ({
+      coreMealId: m.coreMealId,
+      name: m.name,
+      weeklyInstanceCount: m.weeklyInstanceCount,
+    }));
+  }
+  const counts = new Map<string, { name: string; count: number }>();
+  for (const meal of plan?.meals ?? []) {
+    const key = meal.coreMealId ?? meal.candidateId;
+    const existing = counts.get(key);
+    if (existing) existing.count += 1;
+    else counts.set(key, { name: meal.name, count: 1 });
+  }
+  return [...counts.entries()].map(([coreMealId, v]) => ({
+    coreMealId,
+    name: v.name,
+    weeklyInstanceCount: v.count,
+  }));
+}
+
+export function isFlexibleDay(
+  plan: ConsumerWeeklyPlan | null | undefined,
+  day: DayOfWeek,
+): boolean {
+  const flexible = plan?.flexibleDay ?? plan?.strategy?.flexibleDay ?? "sunday";
+  return day === flexible;
+}
+
+export function planWeekSummaryLine(
+  plan: ConsumerWeeklyPlan | null | undefined,
+): string {
+  const cores = coreMealsSummary(plan);
+  const coreCount = cores.length || 4;
+  const portions = plan?.meals?.length ?? (plan?.strategy?.days.length ?? 6) * 2;
+  const coveredDays = plan?.strategy?.days.length ?? 6;
+  return `${coreCount} meals · ${portions} portions · ${coveredDays} days covered`;
 }
 
 export function createEmptyConsumerPlan(weekStart = startOfWeekMonday()): ConsumerWeeklyPlan {

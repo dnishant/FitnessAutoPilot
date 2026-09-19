@@ -21,23 +21,28 @@ import {
   MockComponentRecipeProvider,
   MockMealCompositionProvider,
   MAX_EXECUTABLE_REPLACEMENT_ROUNDS,
+  MAX_GROCERY_COMPLEXITY_REPAIR_ROUNDS,
   assessWeeklyPlanExecutability,
   assertWeeklyConsumerPlanIntegrity,
   attachPersonalizedWeeklyPlan,
   buildComponentNutritionByKeyFromCompleteMeals,
   buildLocalDemoNutritionMaps,
   buildNutritionMapsFromGeneratedRecipes,
+  buildV1WeeklyStrategy,
   composeMealConcepts,
   deriveGroceryList,
   finalizeWeeklyNutritionPlan,
   formatValidationReportForDiagnostics,
+  isPathologicalGroceryComplexity,
   isStructuralPortionBlockReason,
+  metricsFromResolvedRecipes,
   plan008SimpleCandidateLookup,
   plan008SimpleRankedPools,
   plan008SimpleWeeklyStrategy,
   makeResolvedRecipeFixture,
   plan009SimpleResolvedRecipes,
   recordExecutabilityFailures,
+  repairStrategyForGroceryComplexity,
   replaceFailedCandidatesInStrategy,
   resolveSelectedCompleteMeals,
   type PersonalizeWeeklyNutritionPlanInput,
@@ -50,6 +55,12 @@ import {
   humanizePlanGenerationError,
   startOfWeekMonday,
 } from "./consumer-plan-view";
+import {
+  checkpointResumeProgressStage,
+  isCheckpointUsable,
+  type PlanGenerationCheckpointStore,
+  type PlanGenerationCheckpointV1,
+} from "./plan-generation-checkpoint";
 import { buildRankedWeeklyStrategyRequestFromPreview } from "./ranked-weekly-strategy-preview";
 
 export type PlanGenerationApis = {
@@ -118,6 +129,10 @@ export type PlanGenerationApis = {
         result?: { recipesByCandidateId: Record<string, RecipeNutritionResult> };
       }
   >;
+  /** Optional durable resume store — skips completed LLM stages on retry. */
+  checkpointStore?: PlanGenerationCheckpointStore;
+  /** Fingerprint of prefs that invalidate a stored checkpoint when changed. */
+  preferenceFingerprint?: string;
 };
 
 export type GenerationProgressCallback = (stage: ConsumerPlanGenerationStage) => void;
@@ -252,6 +267,8 @@ async function personalizeAndFinalizeGeneratedPlan(input: {
     strategy: input.strategy,
     conceptsByCandidateId: input.conceptsByCandidateId,
     recipesByCandidateId: input.recipesByCandidateId,
+    coreRepertoire: input.strategy.coreRepertoire,
+    flexibleDay: input.strategy.flexibleDay ?? "sunday",
     meals: buildConsumerMealsFromStrategy({
       strategy: input.strategy,
       conceptsByCandidateId: input.conceptsByCandidateId,
@@ -406,6 +423,50 @@ function buildDiscoveryRequest(
   };
 }
 
+async function saveGenerationCheckpoint(
+  apis: PlanGenerationApis,
+  checkpoint: PlanGenerationCheckpointV1,
+): Promise<void> {
+  if (!apis.checkpointStore || !apis.preferenceFingerprint) return;
+  try {
+    await apis.checkpointStore.save({
+      ...checkpoint,
+      preferenceFingerprint: apis.preferenceFingerprint,
+      savedAt: new Date().toISOString(),
+    });
+  } catch {
+    // best-effort — generation still proceeds without durable resume
+  }
+}
+
+async function clearGenerationCheckpoint(apis: PlanGenerationApis): Promise<void> {
+  if (!apis.checkpointStore) return;
+  try {
+    await apis.checkpointStore.clear();
+  } catch {
+    // best-effort
+  }
+}
+
+function logGroceryComplexitySoftAccept(
+  reason: string,
+  metrics: ReturnType<typeof metricsFromResolvedRecipes>,
+): void {
+  if (typeof console === "undefined") return;
+  console.warn(
+    `[grocery-complexity] soft-accept (${reason})`,
+    JSON.stringify({
+      band: metrics.band,
+      weighted: metrics.weightedComplexity,
+      unique: metrics.uniqueCanonicalIngredients,
+      fresh: metrics.uniqueFreshPerishables,
+      specialty: metrics.uniqueSpecialtyIngredients,
+      oneOffFresh: metrics.oneOffFreshPerishables,
+      oneOffSpecialty: metrics.oneOffSpecialtyIngredients,
+    }),
+  );
+}
+
 async function buildRemotePlan(
   apis: PlanGenerationApis,
   onProgress?: GenerationProgressCallback,
@@ -414,21 +475,6 @@ async function buildRemotePlan(
   const weekEnd = addDaysIso(weekStart, 6);
   const generatedPlanId = newGeneratedPlanId();
   const generatedAt = new Date().toISOString();
-
-  onProgress?.("understanding_preferences");
-  await delay(200);
-
-  onProgress?.("finding_meals");
-  const [lunchDiscover, dinnerDiscover] = await Promise.all([
-    apis.discoverCulinaryCandidates(buildDiscoveryRequest("lunch", apis)),
-    apis.discoverCulinaryCandidates(buildDiscoveryRequest("dinner", apis)),
-  ]);
-  if (!lunchDiscover.ok) {
-    throw Object.assign(new Error(lunchDiscover.error), { code: lunchDiscover.code });
-  }
-  if (!dinnerDiscover.ok) {
-    throw Object.assign(new Error(dinnerDiscover.error), { code: dinnerDiscover.code });
-  }
 
   const meal = apis.mealPreferences;
   const cooking = apis.cookingPreferences;
@@ -446,64 +492,197 @@ async function buildRemotePlan(
       }
     : undefined;
 
-  const [lunchRanked, dinnerRanked] = await Promise.all([
-    apis.rankCulinaryCandidates({
-      mealType: "lunch",
-      candidates: lunchDiscover.result.candidates,
-      userPreferences,
-      cookingPreferences: cookingPrefs,
-      targetPoolSize: 10,
-    }),
-    apis.rankCulinaryCandidates({
-      mealType: "dinner",
-      candidates: dinnerDiscover.result.candidates,
-      userPreferences,
-      cookingPreferences: cookingPrefs,
-      targetPoolSize: 10,
-    }),
-  ]);
-  if (!lunchRanked.ok) {
-    throw Object.assign(new Error(lunchRanked.error), { code: lunchRanked.code });
-  }
-  if (!dinnerRanked.ok) {
-    throw Object.assign(new Error(dinnerRanked.error), { code: dinnerRanked.code });
+  let resume: PlanGenerationCheckpointV1 | null = null;
+  if (apis.checkpointStore && apis.preferenceFingerprint) {
+    try {
+      const loaded = await apis.checkpointStore.load();
+      resume = isCheckpointUsable({
+        checkpoint: loaded,
+        preferenceFingerprint: apis.preferenceFingerprint,
+        weekStart,
+      });
+    } catch {
+      resume = null;
+    }
   }
 
-  onProgress?.("building_complete_meals");
+  onProgress?.("understanding_preferences");
+  if (!resume) await delay(200);
+
+  let lunchCandidates: CulinaryDiscoveryCandidate[] = [];
+  let dinnerCandidates: CulinaryDiscoveryCandidate[] = [];
+  let lunchRankedSelected: RankedCulinaryCandidate[] = [];
+  let dinnerRankedSelected: RankedCulinaryCandidate[] = [];
+  let conceptsByCandidateId: Record<string, MealConcept> = {};
+  let strategy: RankedWeeklyStrategy | null = null;
+  let recipesByCandidateId: Record<string, ResolvedRecipe> = {};
+  const failedCandidateIds = new Set<string>(resume?.failedCandidateIds ?? []);
+
+  if (resume) {
+    const resumeOk =
+      resume.lunchRanked.length > 0 &&
+      resume.dinnerRanked.length > 0 &&
+      (resume.completedStage === "ranked" ||
+        (resume.conceptsByCandidateId != null &&
+          Object.keys(resume.conceptsByCandidateId).length > 0)) &&
+      (resume.completedStage === "ranked" ||
+        resume.completedStage === "composed" ||
+        resume.strategy != null);
+    if (!resumeOk) {
+      await clearGenerationCheckpoint(apis);
+      resume = null;
+    }
+  }
+
+  if (resume) {
+    onProgress?.(checkpointResumeProgressStage(resume.completedStage));
+    lunchCandidates = resume.lunchCandidates;
+    dinnerCandidates = resume.dinnerCandidates;
+    lunchRankedSelected = resume.lunchRanked;
+    dinnerRankedSelected = resume.dinnerRanked;
+    conceptsByCandidateId = resume.conceptsByCandidateId ?? {};
+    strategy = resume.strategy ?? null;
+    recipesByCandidateId = resume.recipesByCandidateId ?? {};
+    if (typeof console !== "undefined") {
+      console.info(
+        `[consumer-plan-generate] resuming from checkpoint stage=${resume.completedStage}`,
+      );
+    }
+  } else {
+    onProgress?.("finding_meals");
+    const [lunchDiscover, dinnerDiscover] = await Promise.all([
+      apis.discoverCulinaryCandidates(buildDiscoveryRequest("lunch", apis)),
+      apis.discoverCulinaryCandidates(buildDiscoveryRequest("dinner", apis)),
+    ]);
+    if (!lunchDiscover.ok) {
+      throw Object.assign(new Error(lunchDiscover.error), { code: lunchDiscover.code });
+    }
+    if (!dinnerDiscover.ok) {
+      throw Object.assign(new Error(dinnerDiscover.error), { code: dinnerDiscover.code });
+    }
+    lunchCandidates = lunchDiscover.result.candidates;
+    dinnerCandidates = dinnerDiscover.result.candidates;
+
+    const [lunchRanked, dinnerRanked] = await Promise.all([
+      apis.rankCulinaryCandidates({
+        mealType: "lunch",
+        candidates: lunchCandidates,
+        userPreferences,
+        cookingPreferences: cookingPrefs,
+        targetPoolSize: 10,
+      }),
+      apis.rankCulinaryCandidates({
+        mealType: "dinner",
+        candidates: dinnerCandidates,
+        userPreferences,
+        cookingPreferences: cookingPrefs,
+        targetPoolSize: 10,
+      }),
+    ]);
+    if (!lunchRanked.ok) {
+      throw Object.assign(new Error(lunchRanked.error), { code: lunchRanked.code });
+    }
+    if (!dinnerRanked.ok) {
+      throw Object.assign(new Error(dinnerRanked.error), { code: dinnerRanked.code });
+    }
+    lunchRankedSelected = lunchRanked.result.selected;
+    dinnerRankedSelected = dinnerRanked.result.selected;
+
+    await saveGenerationCheckpoint(apis, {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      weekStart,
+      preferenceFingerprint: apis.preferenceFingerprint ?? "",
+      completedStage: "ranked",
+      lunchCandidates,
+      dinnerCandidates,
+      lunchRanked: lunchRankedSelected,
+      dinnerRanked: dinnerRankedSelected,
+    });
+  }
+
   const uniqueRanked = uniqueByCandidateId([
-    ...lunchRanked.result.selected,
-    ...dinnerRanked.result.selected,
+    ...lunchRankedSelected,
+    ...dinnerRankedSelected,
   ]);
-  const composed = await apis.composeMealConcepts({
-    rankedCandidates: uniqueRanked,
-    targetCalories: apis.nutritionTarget?.targetCalories,
-    allergies: meal?.allergies ?? [],
-    dietaryRestrictions: meal?.dietaryRestrictions ?? [],
-    dislikes: meal?.dislikes ?? [],
-  });
-  if (!composed.ok) {
-    throw Object.assign(new Error(composed.error), { code: composed.code });
+
+  const stageOrder: PlanGenerationCheckpointV1["completedStage"][] = [
+    "ranked",
+    "composed",
+    "strategy",
+    "recipes_resolved",
+  ];
+  const resumeIdx = resume ? stageOrder.indexOf(resume.completedStage) : -1;
+
+  if (resumeIdx < stageOrder.indexOf("composed")) {
+    onProgress?.("building_complete_meals");
+    const composed = await apis.composeMealConcepts({
+      rankedCandidates: uniqueRanked,
+      targetCalories: apis.nutritionTarget?.targetCalories,
+      allergies: meal?.allergies ?? [],
+      dietaryRestrictions: meal?.dietaryRestrictions ?? [],
+      dislikes: meal?.dislikes ?? [],
+    });
+    if (!composed.ok) {
+      throw Object.assign(new Error(composed.error), { code: composed.code });
+    }
+    conceptsByCandidateId = composed.concepts.conceptsByCandidateId;
+    await saveGenerationCheckpoint(apis, {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      weekStart,
+      preferenceFingerprint: apis.preferenceFingerprint ?? "",
+      completedStage: "composed",
+      lunchCandidates,
+      dinnerCandidates,
+      lunchRanked: lunchRankedSelected,
+      dinnerRanked: dinnerRankedSelected,
+      conceptsByCandidateId,
+    });
   }
 
-  onProgress?.("creating_week");
-  const rankedRequest = buildRankedWeeklyStrategyRequestFromPreview(
-    {
-      nutritionTarget: apis.nutritionTarget,
-      mealPreferences: apis.mealPreferences,
-      cookingPreferences: apis.cookingPreferences,
-    },
-    lunchRanked.result.selected,
-    dinnerRanked.result.selected,
-    varietyLevel,
-    composed.concepts.conceptsByCandidateId,
-  );
-  if (!rankedRequest) {
-    throw new Error("Could not build weekly planning request.");
+  if (resumeIdx < stageOrder.indexOf("strategy")) {
+    onProgress?.("creating_week");
+    // V1: deterministic four-meal repertoire + 12-slot assignment (not LLM top-N scheduling).
+    const v1Strategy = buildV1WeeklyStrategy({
+      lunchPool: lunchRankedSelected,
+      dinnerPool: dinnerRankedSelected,
+      conceptsByCandidateId,
+      varietyLevel,
+      cookingStyle: cooking?.cookingStyle,
+    });
+    if (!v1Strategy.ok) {
+      throw Object.assign(new Error(v1Strategy.error.message), {
+        code: v1Strategy.error.code,
+      });
+    }
+    // Keep ranked request builder available for diagnostics / fallback tooling.
+    void buildRankedWeeklyStrategyRequestFromPreview;
+    void apis.generateRankedWeeklyStrategy;
+    strategy = v1Strategy.value.strategy;
+    await saveGenerationCheckpoint(apis, {
+      version: 1,
+      savedAt: new Date().toISOString(),
+      weekStart,
+      preferenceFingerprint: apis.preferenceFingerprint ?? "",
+      completedStage: "strategy",
+      lunchCandidates,
+      dinnerCandidates,
+      lunchRanked: lunchRankedSelected,
+      dinnerRanked: dinnerRankedSelected,
+      conceptsByCandidateId,
+      strategy,
+    });
   }
-  const strategyResult = await apis.generateRankedWeeklyStrategy(rankedRequest);
-  if (!strategyResult.ok) {
-    throw Object.assign(new Error(strategyResult.error), { code: strategyResult.code });
+
+  if (!strategy) {
+    throw Object.assign(new Error("Weekly strategy missing after checkpoint resume."), {
+      code: "PLAN_GENERATION_CHECKPOINT_INVALID",
+    });
   }
+
+  // Narrow once so later repair / replacement loops keep a definite strategy.
+  let activeStrategy: RankedWeeklyStrategy = strategy;
 
   onProgress?.("finalizing_recipes");
   const candidateLookup = new Map<string, CulinaryDiscoveryCandidate>();
@@ -511,8 +690,6 @@ async function buildRemotePlan(
     candidateLookup.set(ranked.candidate.candidateId, ranked.candidate);
   }
 
-  let strategy = strategyResult.strategy;
-  let recipesByCandidateId: Record<string, ResolvedRecipe> = {};
   let completeMeals: Record<string, CompleteMeal> = {};
   let nutritionByCandidateId: Record<
     string,
@@ -527,11 +704,10 @@ async function buildRemotePlan(
     }
   > = {};
 
-  const failedCandidateIds = new Set<string>();
   let lastFailures: ReturnType<typeof assessWeeklyPlanExecutability>["failures"] = [];
 
   for (let round = 0; round <= MAX_EXECUTABLE_REPLACEMENT_ROUNDS; round += 1) {
-    const missingIds = strategy.uniqueCandidateIds.filter((id) => !recipesByCandidateId[id]);
+    const missingIds = activeStrategy.uniqueCandidateIds.filter((id) => !recipesByCandidateId[id]);
     if (missingIds.length > 0) {
       const toResolve = missingIds
         .map((id) => candidateLookup.get(id))
@@ -548,11 +724,11 @@ async function buildRemotePlan(
 
     if (
       Object.keys(recipesByCandidateId).length > 0 &&
-      !recipesHaveGeneratedNutrition(recipesByCandidateId, strategy.uniqueCandidateIds)
+      !recipesHaveGeneratedNutrition(recipesByCandidateId, activeStrategy.uniqueCandidateIds)
     ) {
       // Mark selected IDs without llm_estimate as failed for replacement rather than
       // publishing a ready plan with unknown nutrition.
-      for (const id of strategy.uniqueCandidateIds) {
+      for (const id of activeStrategy.uniqueCandidateIds) {
         const nutrition = recipesByCandidateId[id]?.nutrition;
         if (!(nutrition?.source === "llm_estimate" && nutrition.perServing != null)) {
           failedCandidateIds.add(id);
@@ -562,8 +738,8 @@ async function buildRemotePlan(
 
     completeMeals = await resolveCompleteMealsForStrategy({
       apis,
-      conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
-      selectedCandidateIds: strategy.uniqueCandidateIds,
+      conceptsByCandidateId,
+      selectedCandidateIds: activeStrategy.uniqueCandidateIds,
       recipesByCandidateId,
       targetCalories: apis.nutritionTarget?.targetCalories,
     });
@@ -573,7 +749,7 @@ async function buildRemotePlan(
       try {
         const nutrition = await apis.resolveRecipeNutrition({
           recipes: Object.values(recipesByCandidateId),
-          uniqueCandidateIds: strategy.uniqueCandidateIds,
+          uniqueCandidateIds: activeStrategy.uniqueCandidateIds,
         });
         const usdaMap =
           nutrition.ok || nutrition.result?.recipesByCandidateId
@@ -603,7 +779,7 @@ async function buildRemotePlan(
     }
 
     const assessment = assessWeeklyPlanExecutability({
-      uniqueCandidateIds: strategy.uniqueCandidateIds,
+      uniqueCandidateIds: activeStrategy.uniqueCandidateIds,
       completeMealsByCandidateId: completeMeals,
       recipesByCandidateId,
       nutritionByCandidateId,
@@ -629,12 +805,12 @@ async function buildRemotePlan(
     }
 
     const replacement = replaceFailedCandidatesInStrategy({
-      strategy,
+      strategy: activeStrategy,
       failures: assessment.failures,
-      lunchPool: lunchRanked.result.selected,
-      dinnerPool: dinnerRanked.result.selected,
+      lunchPool: lunchRankedSelected,
+      dinnerPool: dinnerRankedSelected,
       failedCandidateIds,
-      conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+      conceptsByCandidateId,
     });
 
     if (!replacement.ok || replacement.replacements.length === 0) {
@@ -648,7 +824,7 @@ async function buildRemotePlan(
       );
     }
 
-    strategy = replacement.strategy;
+    activeStrategy = replacement.strategy;
     for (const id of replacement.failedCandidateIds) failedCandidateIds.add(id);
     onProgress?.("finalizing_recipes");
   }
@@ -662,6 +838,110 @@ async function buildRemotePlan(
     );
   }
 
+  await saveGenerationCheckpoint(apis, {
+    version: 1,
+    savedAt: new Date().toISOString(),
+    weekStart,
+    preferenceFingerprint: apis.preferenceFingerprint ?? "",
+    completedStage: "recipes_resolved",
+    lunchCandidates,
+    dinnerCandidates,
+    lunchRanked: lunchRankedSelected,
+    dinnerRanked: dinnerRankedSelected,
+    conceptsByCandidateId,
+    strategy: activeStrategy,
+    recipesByCandidateId,
+    failedCandidateIds: [...failedCandidateIds],
+  });
+
+  // Stage B: exact grocery complexity gate + bounded repertoire repair.
+  // Soft-accept non-pathological weeks after repair exhausts (V1 product gate).
+  for (let groceryRound = 0; groceryRound <= MAX_GROCERY_COMPLEXITY_REPAIR_ROUNDS; groceryRound += 1) {
+    const groceryMetrics = metricsFromResolvedRecipes({
+      strategy: activeStrategy,
+      recipesByCandidateId,
+      varietyLevel,
+    });
+    if (groceryMetrics.band !== "excessive") break;
+
+    if (groceryRound === MAX_GROCERY_COMPLEXITY_REPAIR_ROUNDS) {
+      if (isPathologicalGroceryComplexity(groceryMetrics)) {
+        throw Object.assign(
+          new Error(
+            `Weekly grocery complexity remains pathological after ${MAX_GROCERY_COMPLEXITY_REPAIR_ROUNDS} repair rounds ` +
+              `(weighted=${groceryMetrics.weightedComplexity}, unique=${groceryMetrics.uniqueCanonicalIngredients}).`,
+          ),
+          { code: "GROCERY_COMPLEXITY_REPAIR_EXHAUSTED", metrics: groceryMetrics },
+        );
+      }
+      logGroceryComplexitySoftAccept("max_repair_rounds", groceryMetrics);
+      break;
+    }
+
+    const repaired = repairStrategyForGroceryComplexity({
+      strategy: activeStrategy,
+      metrics: groceryMetrics,
+      lunchPool: lunchRankedSelected,
+      dinnerPool: dinnerRankedSelected,
+      conceptsByCandidateId,
+      excludedCandidateIds: failedCandidateIds,
+    });
+    if (!repaired.ok || !repaired.repaired) {
+      if (isPathologicalGroceryComplexity(groceryMetrics)) {
+        if (typeof console !== "undefined") {
+          console.warn(
+            "[grocery-complexity] repair exhausted (pathological)",
+            JSON.stringify({
+              band: groceryMetrics.band,
+              weighted: groceryMetrics.weightedComplexity,
+              unique: groceryMetrics.uniqueCanonicalIngredients,
+            }),
+          );
+        }
+        throw Object.assign(
+          new Error(
+            repaired.ok
+              ? `Grocery complexity is pathological (weighted=${groceryMetrics.weightedComplexity}, unique=${groceryMetrics.uniqueCanonicalIngredients}) and no lower-burden replacements were available.`
+              : repaired.message,
+          ),
+          { code: "GROCERY_COMPLEXITY_REPAIR_EXHAUSTED", metrics: groceryMetrics },
+        );
+      }
+      logGroceryComplexitySoftAccept("no_replacements", groceryMetrics);
+      break;
+    }
+
+    activeStrategy = repaired.strategy;
+    for (const rep of repaired.replacements) {
+      failedCandidateIds.add(rep.failedCandidateId);
+    }
+
+    // Resolve any newly introduced core meals before the next complexity check.
+    const missingIds = activeStrategy.uniqueCandidateIds.filter((id) => !recipesByCandidateId[id]);
+    if (missingIds.length > 0) {
+      const toResolve = missingIds
+        .map((id) => candidateLookup.get(id))
+        .filter((c): c is CulinaryDiscoveryCandidate => c != null);
+      const resolved = await apis.resolveWeeklyRecipes({
+        candidates: toResolve,
+        uniqueCandidateIds: missingIds,
+      });
+      const partial = resolved.ok
+        ? resolved.result.recipesByCandidateId
+        : (resolved.result?.recipesByCandidateId ?? {});
+      recipesByCandidateId = { ...recipesByCandidateId, ...partial };
+      completeMeals = await resolveCompleteMealsForStrategy({
+        apis,
+        conceptsByCandidateId,
+        selectedCandidateIds: activeStrategy.uniqueCandidateIds,
+        recipesByCandidateId,
+        targetCalories: apis.nutritionTarget?.targetCalories,
+      });
+      nutritionByCandidateId = buildNutritionMapsFromGeneratedRecipes(recipesByCandidateId);
+    }
+    onProgress?.("creating_week");
+  }
+
   if (Object.keys(nutritionByCandidateId).length === 0) {
     console.warn(
       "[consumer-plan-generate] No recipe.nutrition (llm_estimate) on resolved recipes; " +
@@ -673,8 +953,8 @@ async function buildRemotePlan(
     generatedPlanId,
     weekStart,
     weekEnd,
-    strategy,
-    conceptsByCandidateId: composed.concepts.conceptsByCandidateId,
+    strategy: activeStrategy,
+    conceptsByCandidateId,
     recipesByCandidateId,
     completeMeals,
     nutritionByCandidateId,
@@ -690,7 +970,7 @@ async function buildRemotePlan(
   const structuralBlocked = personalizedInstances.filter(
     (m) => m.status === "blocked" && isStructuralPortionBlockReason(m.blockReason),
   );
-  const missingRecipes = strategy.uniqueCandidateIds.filter((id) => !recipesByCandidateId[id]);
+  const missingRecipes = activeStrategy.uniqueCandidateIds.filter((id) => !recipesByCandidateId[id]);
 
   if (structuralBlocked.length > 0 || missingRecipes.length > 0) {
     throw Object.assign(
@@ -711,6 +991,8 @@ async function buildRemotePlan(
       { code: "PLAN_VALIDATION_FAILED" },
     );
   }
+
+  await clearGenerationCheckpoint(apis);
 
   return assertReadyPlanIntegrity(plan);
 }

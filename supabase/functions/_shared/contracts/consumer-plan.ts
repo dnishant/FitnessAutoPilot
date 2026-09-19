@@ -50,6 +50,8 @@ export const ConsumerMealComponentSchema = z.object({
 export const ConsumerMealSlotSchema = z.object({
   /** Stable instance id for this generated plan slot (day + mealType). */
   mealInstanceId: z.string().trim().min(1).max(120).optional(),
+  /** Stable core-meal identity — shared across repeated instances of the same meal. */
+  coreMealId: z.string().trim().min(1).max(80).optional(),
   day: DayOfWeekSchema,
   mealType: z.enum(["lunch", "dinner"]),
   candidateId: z.string().trim().min(1).max(80),
@@ -82,6 +84,8 @@ export const ConsumerMealSlotSchema = z.object({
     .optional(),
   /** Developer-facing failure detail when status is blocked. */
   personalizationMessage: z.string().trim().min(1).max(600).optional(),
+  /** How many times this core meal appears in the week (planning context). */
+  weeklyInstanceCount: z.number().int().positive().max(12).optional(),
 });
 
 export const ConsumerWeeklyPlanStatusSchema = z.enum([
@@ -114,7 +118,19 @@ export const ConsumerWeeklyPlanSchema = z.object({
   strategy: RankedWeeklyStrategySchema.optional(),
   conceptsByCandidateId: z.record(z.string(), MealConceptSchema).optional(),
   recipesByCandidateId: z.record(z.string(), ResolvedRecipeSchema).optional(),
-  meals: z.array(ConsumerMealSlotSchema).max(14).optional(),
+  meals: z.array(ConsumerMealSlotSchema).max(12).optional(),
+  /**
+   * First-class V1 core repertoire (4 meals → instance slots).
+   * Prefer this over inferring repeats from matching meal names.
+   */
+  coreRepertoire: z
+    .custom<import("./v1-meal-prep.ts").CoreMealRepertoire>()
+    .optional(),
+  /**
+   * Intentional flexible day with no prescribed lunch/dinner meal-prep.
+   * Defaults to sunday for standard V1 weeks.
+   */
+  flexibleDay: DayOfWeekSchema.optional(),
   /**
    * Authoritative PLAN-010 weekly nutrition prescription.
    * Validated at the domain boundary via PersonalizedWeeklyNutritionPlanSchema.

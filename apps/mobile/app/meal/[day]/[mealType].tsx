@@ -80,6 +80,7 @@ export default function MealDetailScreen() {
   const nutrition = meal.personalizedNutrition;
   const blocked = meal.personalizationStatus === "blocked";
   const hasPortions = meal.components.some((c) => c.amount != null && c.unit);
+  const weeklyCount = meal.weeklyInstanceCount;
   const recipesById = weeklyPlan?.recipesByCandidateId ?? {};
   const recipeLinks: Array<{ candidateId: string; name: string }> = [];
   if (recipesById[meal.candidateId]) {
@@ -117,6 +118,12 @@ export default function MealDetailScreen() {
         title={meal.name}
         subtitle={prep || undefined}
       />
+
+      {weeklyCount != null && weeklyCount > 0 ? (
+        <Text style={styles.weeklyContext}>
+          In your plan: {weeklyCount} time{weeklyCount === 1 ? "" : "s"} this week
+        </Text>
+      ) : null}
 
       {meal.cuisineFamily || meal.flavorTags?.length || meal.experienceTags?.length ? (
         <Text style={styles.meta}>
@@ -294,6 +301,16 @@ const styles = StyleSheet.create({
     ...typography.body,
     color: colors.textSecondary,
     marginTop: -spacing.md,
+  },
+  weeklyContext: {
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginTop: -spacing.sm,
+  },
+  planContext: {
+    ...typography.bodyStrong,
+    color: colors.text,
+    marginTop: -spacing.sm,
   },
   portionSummary: {
     ...typography.bodyStrong,
