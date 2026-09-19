@@ -92,7 +92,12 @@ describe("PLAN-010/011 consumer generation orchestration", () => {
     expect(result.plan.mealPrepPlan?.generatedPlanId).toBe(result.plan.generatedPlanId);
     expect(result.plan.mealPrepPlan?.policyVersion).toBe("meal-prep-policy-v1");
     expect(result.plan.mealPrepPlan?.available).toBe(true);
-    expect(result.plan.mealPrepPlan?.tasks.some((t) => t.type === "mise_en_place")).toBe(true);
+    expect(result.plan.mealPrepPlan?.tasks.some((t) => t.type === "mise_en_place")).toBe(false);
+    expect(
+      result.plan.mealPrepPlan?.tasks.some(
+        (t) => t.type === "advance_prep" || t.type === "cook",
+      ),
+    ).toBe(true);
     expect(result.plan.mealPrepPlan?.reconciliation.dependencyCycles).toBe(0);
     expect(result.plan.mealPrepPlan?.reconciliation.missingDependencies).toBe(0);
   });

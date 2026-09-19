@@ -104,7 +104,8 @@ describe("PLAN-011/012/013 fresh local acceptance", () => {
     expect(prep!.available).toBe(true);
     expect(prep!.policyVersion).toBe("meal-prep-policy-v1");
     expect(prep!.weeklyRequirements.length).toBe(4);
-    expect(prep!.tasks.some((t) => t.type === "mise_en_place")).toBe(true);
+    expect(prep!.tasks.some((t) => t.type === "mise_en_place")).toBe(false);
+    expect(prep!.tasks.some((t) => t.type === "advance_prep" || t.type === "cook")).toBe(true);
     expect(prep!.storageAssignments.length).toBe(12);
     expect(prep!.reconciliation.dependencyCycles).toBe(0);
     expect(prep!.reconciliation.missingDependencies).toBe(0);
@@ -170,9 +171,13 @@ describe("PLAN-011/012/013 fresh local acceptance", () => {
         ),
       );
     }
-    console.log("\n--- Mise en place ---");
-    for (const t of prep!.tasks.filter((x) => x.type === "mise_en_place")) {
-      console.log(`• ${t.title} [${t.coreMealIds.join(", ")}]`);
+    console.log("\n--- Guided steps (no mise phase) ---");
+    for (const id of prep!.sessionTaskOrder) {
+      const t = prep!.tasks.find((x) => x.id === id);
+      if (!t) continue;
+      console.log(
+        `• [${t.type}] ${t.title} active=${t.durationMinutes}m passive=${t.passiveMinutes ?? 0}m ingredients=${t.ingredients.length}`,
+      );
     }
     console.log("\n--- Advance prep ---");
     for (const t of prep!.tasks.filter((x) => x.type === "advance_prep")) {
