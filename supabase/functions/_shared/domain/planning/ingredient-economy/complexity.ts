@@ -300,6 +300,35 @@ export function collectExactIngredientUses(
   return [...map.values()];
 }
 
+/**
+ * Absolute hard ceiling after bounded repair. Soft-band limits still classify
+ * weeks as elevated/excessive for diagnostics and repair targeting, but Generate
+ * My Plan only hard-fails when a week remains truly pathological (legacy ~80–100
+ * unique / specialty-heavy baskets). Normal 4-meal resolved weeks proceed.
+ */
+export const GROCERY_COMPLEXITY_HARD_CEILING = {
+  maxUniqueCanonicalIngredients: 90,
+  maxWeightedComplexity: 100,
+  maxUniqueSpecialtyIngredients: 16,
+} as const;
+
+export function isPathologicalGroceryComplexity(
+  metrics: Pick<
+    GroceryComplexityMetrics,
+    | "uniqueCanonicalIngredients"
+    | "weightedComplexity"
+    | "uniqueSpecialtyIngredients"
+  >,
+): boolean {
+  return (
+    metrics.uniqueCanonicalIngredients >
+      GROCERY_COMPLEXITY_HARD_CEILING.maxUniqueCanonicalIngredients ||
+    metrics.weightedComplexity > GROCERY_COMPLEXITY_HARD_CEILING.maxWeightedComplexity ||
+    metrics.uniqueSpecialtyIngredients >
+      GROCERY_COMPLEXITY_HARD_CEILING.maxUniqueSpecialtyIngredients
+  );
+}
+
 function clamp01(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.min(1, Math.max(0, value));

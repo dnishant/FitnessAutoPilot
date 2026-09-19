@@ -31,6 +31,9 @@ planner cannot know exact grocery demand during initial strategy selection.
     the **hard unique-meal count is fixed at 4** (V1 meal-prep). Efficiency must not
     collapse the week below four distinct core meals; variety no longer expands the
     repertoire size — it only changes diversity/overlap pressure between those four.
+   - Stage B soft-band (`excessive`) triggers bounded repair. After repair exhausts,
+     generation **soft-accepts** non-pathological weeks (diagnostics retained) and
+     hard-fails only above an absolute ceiling (~90 unique / specialty-heavy baskets).
 
 3. **PLAN-012 stays accountant-only**
    - Improves semantic canonicalization, categories, display ceilings, and unit/identity

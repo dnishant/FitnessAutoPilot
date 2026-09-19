@@ -4,6 +4,7 @@ import {
   collectExactIngredientUses,
   evaluateExactGroceryComplexity,
   flattenFootprintConcepts,
+  isPathologicalGroceryComplexity,
   scoreCandidateIngredientEconomy,
   toIngredientConcept,
 } from "./index";
@@ -249,6 +250,21 @@ describe("ingredient economy — Stage B exact complexity", () => {
     });
     expect(metrics.uniqueCanonicalIngredients).toBeLessThanOrEqual(58);
     expect(metrics.band).not.toBe("excessive");
+  });
+
+  it("treats only extreme baskets as pathological (hard-fail ceiling)", () => {
+    const normalExcessive = {
+      uniqueCanonicalIngredients: 70,
+      weightedComplexity: 65,
+      uniqueSpecialtyIngredients: 9,
+    };
+    const pathological = {
+      uniqueCanonicalIngredients: 95,
+      weightedComplexity: 110,
+      uniqueSpecialtyIngredients: 18,
+    };
+    expect(isPathologicalGroceryComplexity(normalExcessive)).toBe(false);
+    expect(isPathologicalGroceryComplexity(pathological)).toBe(true);
   });
 });
 
