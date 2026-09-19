@@ -316,6 +316,7 @@ describe("PLAN-011 structural validation", () => {
           reason: "flavor contrast",
           quantityMode: "solver_determined" as const,
           definitionKind: "atomic_food" as const,
+          normalizedComponentKey: "garnish:adds brightness and crunch",
         },
       ],
     };
