@@ -158,6 +158,19 @@ export function consumerPrepLabel(
 
 export function humanizePlanGenerationError(message: string, code?: string): string {
   const lower = message.toLowerCase();
+
+  // Typed generation failures first — never reclassify by substring of a prior humanized message.
+  if (
+    code === "EXECUTABLE_REPLACEMENT_EXHAUSTED" ||
+    code === "PLAN_NOT_EXECUTABLE" ||
+    code === "CANONICAL_MEAL_INTEGRITY_FAILED" ||
+    code === "PLAN_VALIDATION_FAILED" ||
+    lower.includes("plan-011") ||
+    lower.includes("not executable") ||
+    lower.includes("canonical meal integrity")
+  ) {
+    return "We couldn't finish a reliable plan this time. Please try generating again.";
+  }
   if (
     code === "LLM_CONFIGURATION_ERROR" ||
     lower.includes("gemini") ||
@@ -171,19 +184,13 @@ export function humanizePlanGenerationError(message: string, code?: string): str
   if (lower.includes("network") || lower.includes("failed to send")) {
     return "We couldn't reach the planning service. Check your connection and try again.";
   }
-  if (lower.includes("preference") || lower.includes("allergy")) {
-    return "Something in your preferences blocked planning. Review food preferences, then try again.";
-  }
+  // Only real preference/allergy constraint failures — not "Your preferences are saved".
   if (
-    code === "EXECUTABLE_REPLACEMENT_EXHAUSTED" ||
-    code === "PLAN_NOT_EXECUTABLE" ||
-    code === "CANONICAL_MEAL_INTEGRITY_FAILED" ||
-    code === "PLAN_VALIDATION_FAILED" ||
-    lower.includes("not executable") ||
-    lower.includes("canonical meal integrity") ||
-    lower.includes("plan-011")
+    lower.includes("hard preference constraint") ||
+    lower.includes("allergy constraint") ||
+    lower.includes("allerg") && lower.includes("blocked")
   ) {
-    return "We couldn't finish a reliable plan this time. Please try generating again.";
+    return "Something in your preferences blocked planning. Review food preferences, then try again.";
   }
   return "We couldn't finish your meal plan. Your preferences are saved. Try generating it again.";
 }

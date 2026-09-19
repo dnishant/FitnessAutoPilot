@@ -11,7 +11,6 @@ import {
   GENERATION_STAGE_COPY,
   GENERATION_STAGE_ORDER,
   generateReadySummary,
-  humanizePlanGenerationError,
 } from "../src/lib/consumer-plan-view";
 import { useSession } from "../src/state/session";
 import { colors, radii, spacing, typography } from "../src/theme/tokens";
@@ -54,7 +53,8 @@ export default function GenerateScreen() {
 
     if (!result.ok) {
       setLocalStage(null);
-      setError(humanizePlanGenerationError(result.error));
+      // result.error is already consumer-safe from generateConsumerWeeklyPlan.
+      setError(result.error);
       return;
     }
 
