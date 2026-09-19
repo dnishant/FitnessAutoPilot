@@ -129,7 +129,12 @@ export default function PlanTabScreen() {
               variant="secondary"
               onPress={() => router.push("/meal-prep")}
             />
-          ) : null}
+          ) : (
+            <PrimaryButton
+              label="Generate Meal Prep"
+              onPress={() => router.push("/meal-prep")}
+            />
+          )}
 
           <ScrollView
             horizontal

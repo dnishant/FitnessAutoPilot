@@ -37,13 +37,15 @@ function formatMinutes(total: number): string {
 }
 
 export default function MealPrepScreen() {
-  const { weeklyPlan } = useSession();
+  const { weeklyPlan, generateMealPrepPlan } = useSession();
   const plan = weeklyPlan?.mealPrepPlan;
   const planId = weeklyPlan?.generatedPlanId ?? plan?.generatedPlanId;
   const [phase, setPhase] = useState<PhaseKey>("overview");
   const [progress, setProgress] = useState<ProgressMap>({});
   const [focusIndex, setFocusIndex] = useState(0);
   const [started, setStarted] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
 
   useEffect(() => {
     const key = mealPrepProgressStorageKey(planId);
@@ -59,6 +61,23 @@ export default function MealPrepScreen() {
         /* ignore */
       });
   }, [planId]);
+
+  const onGenerate = useCallback(async () => {
+    setGenerating(true);
+    setGenerateError(null);
+    try {
+      const result = await generateMealPrepPlan();
+      if (!result.ok) {
+        setGenerateError(result.error);
+        return;
+      }
+      setPhase("overview");
+      setStarted(false);
+      setProgress({});
+    } finally {
+      setGenerating(false);
+    }
+  }, [generateMealPrepPlan]);
 
   const persist = useCallback(
     async (next: ProgressMap) => {
@@ -117,13 +136,31 @@ export default function MealPrepScreen() {
   if (!plan) {
     return (
       <ScrollView contentContainerStyle={styles.container}>
-        <ScreenHeader eyebrow="MEAL PREP" title="Meal Prep" />
-        <ErrorState
-          title="Meal prep not available"
-          body="This plan was generated before meal prep planning. Regenerate your week to get a prep session."
-          actionLabel="Regenerate week"
-          onAction={() => router.push("/generate")}
+        <ScreenHeader
+          eyebrow="MEAL PREP"
+          title="Meal Prep"
+          subtitle="Build a coordinated kitchen session for this week's meals."
         />
+        <View style={styles.stack}>
+          <View style={styles.hero}>
+            <Text style={styles.heroTime}>Ready when you are</Text>
+            <Text style={styles.heroBody}>
+              We’ll turn this week’s four meals into mise en place, cooking order, storage, and
+              finish-later steps — without changing your nutrition plan.
+            </Text>
+          </View>
+          {generateError ? <Text style={styles.errorText}>{generateError}</Text> : null}
+          <PrimaryButton
+            label="Generate Meal Prep"
+            loading={generating}
+            onPress={() => void onGenerate()}
+          />
+          <PrimaryButton
+            label="Back to Plan"
+            variant="ghost"
+            onPress={() => router.push("/(tabs)/plan")}
+          />
+        </View>
       </ScrollView>
     );
   }
@@ -132,6 +169,7 @@ export default function MealPrepScreen() {
     const detail =
       plan.issues.find((i) => !i.preservable)?.message ??
       plan.issues[0]?.message ??
+      generateError ??
       "We couldn't build a safe prep plan from the available recipe storage metadata.";
     return (
       <ScrollView contentContainerStyle={styles.container}>
@@ -139,8 +177,13 @@ export default function MealPrepScreen() {
         <ErrorState
           title="Meal prep needs attention"
           body={detail}
-          actionLabel="Back to Plan"
-          onAction={() => router.push("/(tabs)/plan")}
+          actionLabel={generating ? "Generating…" : "Try again"}
+          onAction={() => void onGenerate()}
+        />
+        <PrimaryButton
+          label="Back to Plan"
+          variant="ghost"
+          onPress={() => router.push("/(tabs)/plan")}
         />
       </ScrollView>
     );
@@ -198,6 +241,8 @@ export default function MealPrepScreen() {
             </Text>
           ) : null}
 
+          {generateError ? <Text style={styles.errorText}>{generateError}</Text> : null}
+
           <PrimaryButton
             label="Start Prep"
             onPress={() => {
@@ -213,6 +258,12 @@ export default function MealPrepScreen() {
               setStarted(true);
               setPhase("mise_en_place");
             }}
+          />
+          <PrimaryButton
+            label="Regenerate Meal Prep"
+            variant="ghost"
+            loading={generating}
+            onPress={() => void onGenerate()}
           />
         </View>
       ) : null}
@@ -605,6 +656,10 @@ const styles = StyleSheet.create({
   futureHint: {
     ...typography.body,
     color: colors.textSecondary,
+  },
+  errorText: {
+    ...typography.body,
+    color: colors.error,
   },
   focusEyebrow: {
     ...typography.caption,

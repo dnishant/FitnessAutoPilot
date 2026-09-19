@@ -60,6 +60,7 @@ import {
   createEmptyConsumerPlan,
 } from "../lib/consumer-plan-view";
 import { generateConsumerWeeklyPlan } from "../lib/consumer-plan-generate";
+import { generateMealPrepForWeeklyPlan } from "../lib/generate-meal-prep";
 import {
   PLAN_GENERATION_CHECKPOINT_KEY,
   buildPreferenceFingerprint,
@@ -146,6 +147,14 @@ type SessionValue = {
         detail?: string;
         plan: ConsumerWeeklyPlan;
       }
+  >;
+  /**
+   * Build / rebuild PLAN-013 meal prep for the current ready weekly plan.
+   * Does not regenerate meals, portions, or groceries.
+   */
+  generateMealPrepPlan: () => Promise<
+    | { ok: true; plan: ConsumerWeeklyPlan }
+    | { ok: false; error: string; code?: string; plan?: ConsumerWeeklyPlan }
   >;
   clearWeeklyPlan: () => Promise<void>;
   adjustDiscreteMealComponent: (input: {
@@ -695,7 +704,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<SessionValue>(() => {
-    const api: Omit<SessionValue, "generateWeeklyPlan"> = {
+    const api: Omit<SessionValue, "generateWeeklyPlan" | "generateMealPrepPlan"> = {
       loading,
       useLocalMode: useLocalPlanner,
       user,
@@ -1595,6 +1604,50 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     return {
       ...api,
+      async generateMealPrepPlan() {
+        const plan = weeklyPlan;
+        if (!plan || plan.status !== "ready") {
+          return {
+            ok: false as const,
+            error: "Generate your week before building a meal prep plan.",
+            code: "MISSING_WEEKLY_PLAN",
+          };
+        }
+        const result = generateMealPrepForWeeklyPlan({
+          weeklyPlan: plan,
+          cookingPreferences,
+          generatedAt: new Date().toISOString(),
+        });
+
+        if (!result.ok) {
+          if (result.mealPrepPlan) {
+            const failedAttached: ConsumerWeeklyPlan = {
+              ...plan,
+              mealPrepPlan: result.mealPrepPlan,
+            };
+            await persistWeeklyPlan(failedAttached);
+            return {
+              ok: false as const,
+              error: result.message,
+              code: result.code,
+              plan: failedAttached,
+            };
+          }
+          return {
+            ok: false as const,
+            error: result.message,
+            code: result.code,
+            plan,
+          };
+        }
+
+        const ready: ConsumerWeeklyPlan = {
+          ...plan,
+          mealPrepPlan: result.mealPrepPlan,
+        };
+        await persistWeeklyPlan(ready);
+        return { ok: true as const, plan: ready };
+      },
       async generateWeeklyPlan() {
         const previousReadyPlan =
           weeklyPlan?.status === "ready" ? weeklyPlan : null;
