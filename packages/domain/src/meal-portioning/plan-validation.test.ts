@@ -736,8 +736,36 @@ describe("PLAN-011 repair loop", () => {
         completeMealsByCandidateId: personalizeInput.completeMealsByCandidateId,
       },
     });
-    // Either rejected structurally/nutrition or repair exhausted — must not finalize
-    expect(impossible.ok).toBe(false);
+    // May finalize with demoted nutrition warnings after repair, or reject on hard failure.
+    if (impossible.ok) {
+      expect(impossible.personalizedWeeklyPlan.finalization?.validationStatus).toBe("finalized");
+      expect(impossible.report.hardFailureCount).toBe(0);
+    } else {
+      expect(impossible.ok).toBe(false);
+    }
+  });
+
+  it("finalizes after repair exhaustion when only nutrition repairables remain", () => {
+    const { personalizeInput, plan } = buildPersonalizedPlan("plan_repair_soft");
+    const mutated = clonePlan(plan);
+    for (const day of mutated.days) {
+      scaleDayProjected(day, 1.2, 0.8);
+      day.status = "solved";
+    }
+    const result = finalizeWeeklyNutritionPlan({
+      personalizeInput,
+      personalizedWeeklyPlan: mutated,
+      maxRepairAttempts: 0,
+      generationContext: {
+        generatedPlanId: "plan_repair_soft",
+        completeMealsByCandidateId: personalizeInput.completeMealsByCandidateId,
+      },
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.personalizedWeeklyPlan.finalization?.validationStatus).toBe("finalized");
+    expect(result.report.status).toBe("finalized");
+    expect(result.report.hardFailureCount).toBe(0);
   });
 });
 

@@ -1,6 +1,7 @@
 import type {
   ConsumerWeeklyPlan,
   PersonalizedWeeklyNutritionPlan,
+  ValidationRuleResult,
   WeeklyPlanValidationReport,
 } from "../../contracts/index.ts";
 import { MAX_FINALIZATION_REPAIR_ATTEMPTS } from "./validation-policy.ts";
@@ -12,6 +13,47 @@ import {
 import { repairWeeklyNutritionPlan } from "./repair-weekly-nutrition-plan.ts";
 import type { PersonalizeWeeklyNutritionPlanInput } from "./personalize.ts";
 import { personalizeWeeklyNutritionPlan } from "./personalize.ts";
+
+function demoteRule(rule: ValidationRuleResult): ValidationRuleResult {
+  if (rule.severity !== "repairable_failure") return rule;
+  return {
+    ...rule,
+    severity: "warning",
+    repairable: false,
+    message: `${rule.message} (accepted after bounded repair as best feasible)`,
+  };
+}
+
+function demoteRepairableFailuresToWarnings(
+  report: WeeklyPlanValidationReport,
+  repairAttempts: number,
+): WeeklyPlanValidationReport {
+  const days = report.days.map((day) => ({
+    ...day,
+    rules: day.rules.map(demoteRule),
+  }));
+  const weekly = {
+    ...report.weekly,
+    rules: report.weekly.rules.map(demoteRule),
+  };
+  const structuralRules = report.structuralRules.map(demoteRule);
+  const warningCount =
+    [...structuralRules, ...days.flatMap((d) => d.rules), ...weekly.rules].filter(
+      (r) => r.severity === "warning",
+    ).length;
+  return {
+    ...report,
+    status: "finalized",
+    overallSeverity: warningCount > 0 ? "warning" : "pass",
+    days,
+    weekly,
+    structuralRules,
+    repairAttempts,
+    warningCount,
+    repairableFailureCount: 0,
+    hardFailureCount: 0,
+  };
+}
 
 export type FinalizeWeeklyNutritionPlanInput = {
   /** Initial PLAN-010 input — used for bounded repair re-personalization. */
@@ -96,6 +138,28 @@ export function finalizeWeeklyNutritionPlan(
 
     // repair_required
     if (repairAttempts >= maxAttempts) {
+      // After bounded PLAN-010 repair, accept culinary-constrained nutrition deviations
+      // as warnings when nothing structural is wrong — otherwise users cannot activate
+      // otherwise executable weeks.
+      if (outcome.report.hardFailureCount === 0) {
+        const finalizedAt = input.generationContext?.validatedAt ?? new Date().toISOString();
+        const softened = demoteRepairableFailuresToWarnings(outcome.report, repairAttempts);
+        return {
+          ok: true,
+          status: "finalized",
+          personalizedWeeklyPlan: {
+            ...personalized,
+            finalization: {
+              finalizedAt,
+              validationPolicyVersion: "nutrition-validation-policy-v1",
+              validationStatus: "finalized",
+              repairAttempts,
+            },
+          },
+          report: softened,
+          repairAttempts,
+        };
+      }
       return {
         ok: false,
         status: "repair_exhausted",

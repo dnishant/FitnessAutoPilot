@@ -200,9 +200,11 @@ export function formatPlanGenerationFailureDetail(input: {
   code?: string;
   message?: string;
   validationReport?: {
+    status?: string;
     hardFailureCount?: number;
     repairableFailureCount?: number;
     warningCount?: number;
+    repairAttempts?: number;
     structuralRules?: Array<{ ruleId: string; severity: string }>;
     days?: Array<{ rules: Array<{ ruleId: string; severity: string }> }>;
     weekly?: { rules?: Array<{ ruleId: string; severity: string }> };
@@ -211,20 +213,35 @@ export function formatPlanGenerationFailureDetail(input: {
   const parts: string[] = [];
   if (input.code) parts.push(input.code);
   const report = input.validationReport;
-  if (report) {
-    const hardIds = [
-      ...(report.structuralRules ?? []),
-      ...(report.days ?? []).flatMap((d) => d.rules),
-      ...(report.weekly?.rules ?? []),
-    ]
-      .filter((r) => r.severity === "hard_failure")
-      .map((r) => r.ruleId);
-    const unique = [...new Set(hardIds)].slice(0, 6);
-    if (unique.length > 0) parts.push(unique.join(", "));
-  } else if (input.message) {
-    const match = input.message.match(/PLAN-011 validation \([^)]+\):\s*(.+)$/i);
-    if (match?.[1]) parts.push(match[1].slice(0, 180));
+  if (report?.status) parts.push(report.status);
+  if (report?.repairAttempts != null && report.repairAttempts > 0) {
+    parts.push(`repairs=${report.repairAttempts}`);
   }
+
+  const allRules = [
+    ...(report?.structuralRules ?? []),
+    ...(report?.days ?? []).flatMap((d) => d.rules),
+    ...(report?.weekly?.rules ?? []),
+  ];
+  const hardIds = [
+    ...new Set(allRules.filter((r) => r.severity === "hard_failure").map((r) => r.ruleId)),
+  ].slice(0, 6);
+  const repairIds = [
+    ...new Set(
+      allRules.filter((r) => r.severity === "repairable_failure").map((r) => r.ruleId),
+    ),
+  ].slice(0, 6);
+  if (hardIds.length > 0) parts.push(hardIds.join(", "));
+  else if (repairIds.length > 0) parts.push(repairIds.join(", "));
+
+  if (hardIds.length === 0 && repairIds.length === 0 && input.message) {
+    const match = input.message.match(/PLAN-011 validation \(([^)]+)\):\s*(.+)$/i);
+    if (match) {
+      parts.push(match[1]);
+      if (match[2]?.trim()) parts.push(match[2].trim().slice(0, 180));
+    }
+  }
+
   return parts.length > 0 ? parts.join(" · ") : null;
 }
 
