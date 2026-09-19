@@ -60,6 +60,10 @@ export const GENERATION_STAGE_COPY: Record<
     label: "Building your grocery list…",
     doneLabel: "Building your grocery list…",
   },
+  building_meal_prep: {
+    label: "Building your meal prep plan…",
+    doneLabel: "Building your meal prep plan…",
+  },
   complete: {
     label: "Finalizing your plan…",
     doneLabel: "Your week is ready",
@@ -74,9 +78,17 @@ export const GENERATION_STAGE_ORDER: ConsumerPlanGenerationStage[] = [
   "finalizing_recipes",
   "personalizing_portions",
   "finalizing_plan",
+  "building_meal_prep",
   "complete",
 ];
 
+/** Checklist progress for meal-prep tasks — plan-scoped, never mutates the prep plan. */
+export function mealPrepProgressStorageKey(generatedPlanId?: string | null): string {
+  if (generatedPlanId && generatedPlanId.trim()) {
+    return `fa.consumer.mealPrepProgress.${generatedPlanId.trim()}`;
+  }
+  return "fa.consumer.mealPrepProgress";
+}
 export function startOfWeekMonday(date = new Date()): string {
   const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const day = d.getUTCDay();

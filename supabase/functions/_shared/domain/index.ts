@@ -23,6 +23,7 @@ export * from "./food-resolution/index.ts";
 export * from "./meal-composition/index.ts";
 export * from "./meal-portioning/index.ts";
 export * from "./grocery/index.ts";
+export * from "./meal-prep/index.ts";
 export * from "./planning/portioning.ts";
 export * from "./planning/planner.ts";
 export * from "./planning/weekly-strategy.ts";

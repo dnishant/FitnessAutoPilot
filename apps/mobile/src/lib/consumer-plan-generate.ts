@@ -33,6 +33,8 @@ import {
   deriveGroceryList,
   finalizeWeeklyNutritionPlan,
   formatValidationReportForDiagnostics,
+  buildMealPrepPlan,
+  formatMealPrepDiagnostics,
   isPathologicalGroceryComplexity,
   isStructuralPortionBlockReason,
   metricsFromResolvedRecipes,
@@ -192,6 +194,7 @@ async function personalizeAndFinalizeGeneratedPlan(input: {
     typeof buildLocalDemoNutritionMaps
   >["componentNutritionByKey"];
   nutritionTarget: NutritionTarget | null;
+  cookingPreferences?: CookingPreferences | null;
   generatedAt: string;
   onProgress?: GenerationProgressCallback;
 }): Promise<ConsumerWeeklyPlan> {
@@ -257,6 +260,27 @@ async function personalizeAndFinalizeGeneratedPlan(input: {
     );
   }
 
+  input.onProgress?.("building_meal_prep");
+
+  const mealPrepResult = buildMealPrepPlan({
+    personalizedWeeklyPlan: finalized.personalizedWeeklyPlan,
+    recipesByCandidateId: input.recipesByCandidateId,
+    completeMealsByCandidateId: input.completeMeals,
+    coreRepertoire: input.strategy.coreRepertoire,
+    groceryList: groceryResult.ok ? groceryResult.groceryList : undefined,
+    cookingPreferences: input.cookingPreferences,
+    prepSessionDay: input.strategy.flexibleDay ?? "sunday",
+    generatedAt: input.generatedAt,
+  });
+
+  if (!mealPrepResult.ok && typeof console !== "undefined") {
+    console.warn(
+      `[PLAN-013] meal prep failed (${mealPrepResult.code}): ${mealPrepResult.message}`,
+    );
+  } else if (mealPrepResult.ok && typeof console !== "undefined") {
+    console.info(formatMealPrepDiagnostics(mealPrepResult.mealPrepPlan));
+  }
+
   const base: ConsumerWeeklyPlan = {
     generatedPlanId: input.generatedPlanId,
     weekStart: input.weekStart,
@@ -276,6 +300,10 @@ async function personalizeAndFinalizeGeneratedPlan(input: {
     }),
     validationReport: finalized.report,
     groceryList: groceryResult.ok ? groceryResult.groceryList : undefined,
+    mealPrepPlan:
+      mealPrepResult.ok
+        ? mealPrepResult.mealPrepPlan
+        : mealPrepResult.mealPrepPlan,
   };
 
   return attachPersonalizedWeeklyPlan(
@@ -389,6 +417,7 @@ async function buildLocalDemoPlan(
       nutritionByCandidateId,
       componentNutritionByKey: demoNutrition.componentNutritionByKey,
       nutritionTarget: apis.nutritionTarget,
+      cookingPreferences: apis.cookingPreferences,
       generatedAt,
       onProgress,
     }),
@@ -960,6 +989,7 @@ async function buildRemotePlan(
     nutritionByCandidateId,
     componentNutritionByKey,
     nutritionTarget: apis.nutritionTarget,
+    cookingPreferences: apis.cookingPreferences,
     generatedAt,
     onProgress,
   });

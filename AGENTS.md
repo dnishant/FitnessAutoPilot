@@ -14,11 +14,11 @@ Do not turn the product into a generic fitness metrics dashboard.
 
 ## Current scope
 
-Foundation + meal-planning vertical slices through weekly strategy concepts:
+Foundation + meal-planning vertical slices through weekly meal-prep execution:
 
-profile → goal → wearable TDEE → deterministic RMR → pace → starting calorie target → food/cooking preferences → single-recipe generation → weekly meal strategy (concepts) → Today screen.
+profile → goal → wearable TDEE → deterministic RMR → pace → starting calorie target → food/cooking preferences → culinary discovery → four-meal weekly strategy → recipe resolution → personalized portions (PLAN-010) → finalization (PLAN-011) → groceries (PLAN-012) → meal-prep execution plan (PLAN-013) → Today / Plan / Grocery screens.
 
-Do **not** build: detailed weekly recipe resolution, groceries, meal-prep optimization timelines, workouts, wearable APIs, Action Engine, notifications, weekly review, recovery adaptation, analytics dashboards, or polished weekly-plan UI (PLAN-004.5).
+Do **not** build: pantry inventory, store integrations, Action Engine / PLAN-014 “what should I do now?”, notifications, weekly review, recovery adaptation, analytics dashboards, workouts, or wearable APIs.
 
 ## Architecture
 

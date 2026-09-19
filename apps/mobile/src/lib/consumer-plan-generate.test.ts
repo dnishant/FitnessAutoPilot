@@ -84,6 +84,17 @@ describe("PLAN-010/011 consumer generation orchestration", () => {
     const groceryItems = result.plan.groceryList!.sections.flatMap((s) => s.items);
     expect(groceryItems.length).toBeGreaterThan(0);
     expect(result.plan.groceryList?.diagnostics?.droppedRequirementCount).toBe(0);
+
+    // PLAN-013: meal prep derived from finalized plan + recipes.
+    expect(stages).toContain("building_meal_prep");
+    expect(GENERATION_STAGE_ORDER).toContain("building_meal_prep");
+    expect(result.plan.mealPrepPlan).toBeTruthy();
+    expect(result.plan.mealPrepPlan?.generatedPlanId).toBe(result.plan.generatedPlanId);
+    expect(result.plan.mealPrepPlan?.policyVersion).toBe("meal-prep-policy-v1");
+    expect(result.plan.mealPrepPlan?.available).toBe(true);
+    expect(result.plan.mealPrepPlan?.tasks.some((t) => t.type === "mise_en_place")).toBe(true);
+    expect(result.plan.mealPrepPlan?.reconciliation.dependencyCycles).toBe(0);
+    expect(result.plan.mealPrepPlan?.reconciliation.missingDependencies).toBe(0);
   });
 
   it("does not leak Plan A instance ids into a second generation", async () => {

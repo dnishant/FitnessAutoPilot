@@ -20,6 +20,7 @@ export * from "./candidate-ranking";
 export * from "./ranked-weekly-strategy";
 export * from "./plan";
 export * from "./grocery";
+export * from "./meal-prep-plan";
 export * from "./consumer-plan";
 export * from "./ingredient-economy";
 export * from "./v1-meal-prep";
