@@ -268,26 +268,19 @@ function validateCanonicalMealStructure(
 
   const owners = completeMeal.components.filter((c) => {
     if ((c.nutritionOwnership ?? "independent") === "parent_owned") return false;
-    if (isUnresolvedPlaceholderName(c.name)) {
+    if (isUnresolvedPlaceholderName(c.name) || !isEdibleFoodIdentity(c.name)) {
+      // Align with PLAN-010 coefficients: recommended prose/needs may be omitted.
+      // Required / intrinsic / main non-edibles are hard structural corruption.
+      if (c.relationship === "recommended") {
+        return false;
+      }
       rules.push(
         ruleResult({
           ruleId: "STRUCTURE_CULINARY_NEED_AS_FOOD",
           severity: "hard_failure",
-          message: `Unresolved culinary need "${c.name}" reached personalized meal.`,
-          repairable: false,
-          day,
-          mealInstanceId,
-          componentId: c.componentId,
-        }),
-      );
-      return false;
-    }
-    if (!isEdibleFoodIdentity(c.name)) {
-      rules.push(
-        ruleResult({
-          ruleId: "STRUCTURE_CULINARY_NEED_AS_FOOD",
-          severity: "hard_failure",
-          message: `Non-edible / culinary-need identity "${c.name}" owns nutrition on personalized meal.`,
+          message: isUnresolvedPlaceholderName(c.name)
+            ? `Unresolved culinary need "${c.name}" reached personalized meal.`
+            : `Non-edible / culinary-need identity "${c.name}" owns nutrition on personalized meal.`,
           repairable: false,
           day,
           mealInstanceId,
@@ -318,13 +311,14 @@ function validateCanonicalMealStructure(
     }
     seenOwners.add(owner.componentId);
 
-    if (
-      (owner.relationship === "required_companion" ||
-        owner.relationship === "intrinsic" ||
-        owner.relationship === "recommended" ||
-        owner.role === "main") &&
-      !portionIds.has(owner.componentId)
-    ) {
+    // Recommended companions may be omitted by PLAN-010 when unquantifiable.
+    // Only required plate foods must appear as personalized nutritional owners.
+    const mustHavePortion =
+      owner.role === "main" ||
+      owner.relationship === "intrinsic" ||
+      owner.relationship === "required_companion" ||
+      owner.relationship == null;
+    if (mustHavePortion && !portionIds.has(owner.componentId)) {
       rules.push(
         ruleResult({
           ruleId: "STRUCTURE_COMPONENT_OWNER_MISSING",
@@ -457,10 +451,15 @@ function validateMealProvenanceAndArithmetic(
     stored.caloriesKcal * policy.arithmetic.macroEnergyRelativeTolerance,
   );
   if (Math.abs(derived - stored.caloriesKcal) > energyTol) {
+    // Food DB / LLM coefficient conventions often disagree with strict 4-4-9.
+    // Treat as hard only when disagreement is extreme; otherwise warn.
+    const severe =
+      Math.abs(derived - stored.caloriesKcal) >
+      Math.max(energyTol * 2, stored.caloriesKcal * 0.4);
     rules.push(
       ruleResult({
         ruleId: "NUTRITION_MACRO_ENERGY_MISMATCH",
-        severity: "hard_failure",
+        severity: severe ? "hard_failure" : "warning",
         message: `Macro-derived energy disagrees with labeled calories for ${mealInstanceId}.`,
         repairable: false,
         day,
@@ -1081,12 +1080,13 @@ export function validateWeeklyNutritionPlan(input: {
     weeklyTargetProtein > 0 &&
     weeklyRecomputed.proteinGrams / weeklyTargetProtein < policy.protein.hardMinimumFraction
   ) {
+    const allDaysBestFeasible = plan.days.every((d) => d.status === "best_feasible");
     weeklyRules.push(
       ruleResult({
         ruleId: "TARGET_WEEKLY_PROTEIN_LOW",
-        severity: "repairable_failure",
+        severity: allDaysBestFeasible ? "warning" : "repairable_failure",
         message: `Weekly protein is below hard minimum fraction of target.`,
-        repairable: true,
+        repairable: !allDaysBestFeasible,
         observed: weeklyRecomputed.proteinGrams,
         expected: weeklyTargetProtein,
       }),

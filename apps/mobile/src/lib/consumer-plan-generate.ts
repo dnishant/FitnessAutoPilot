@@ -760,6 +760,17 @@ export async function generateConsumerWeeklyPlan(
       error && typeof error === "object" && "code" in error
         ? String((error as { code?: string }).code)
         : undefined;
+    const validationReport =
+      error && typeof error === "object" && "validationReport" in error
+        ? (error as { validationReport?: import("@fitness-autopilot/contracts").WeeklyPlanValidationReport })
+            .validationReport
+        : undefined;
+    if (validationReport && typeof console !== "undefined") {
+      console.warn(
+        "[PLAN-011] generation aborted:\n" +
+          formatValidationReportForDiagnostics(validationReport),
+      );
+    }
     return {
       ok: false,
       error: humanizePlanGenerationError(message, code),
@@ -769,6 +780,7 @@ export async function generateConsumerWeeklyPlan(
         status: "failed",
         errorMessage: humanizePlanGenerationError(message, code),
         generationStage: undefined,
+        validationReport,
       },
     };
   }

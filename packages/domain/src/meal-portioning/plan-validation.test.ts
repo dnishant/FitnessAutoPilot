@@ -301,6 +301,38 @@ describe("PLAN-011 structural validation", () => {
     );
   });
 
+  it("does not hard-fail recommended culinary-need labels omitted by PLAN-010", () => {
+    const { plan, meal, personalizeInput } = buildPersonalizedPlan("plan_rec_need");
+    const withNeed = {
+      ...meal,
+      components: [
+        ...meal.components,
+        {
+          componentId: "need-freshness",
+          role: "garnish" as const,
+          name: "Adds brightness and crunch",
+          relationship: "recommended" as const,
+          source: "composition_engine" as const,
+          reason: "flavor contrast",
+          quantityMode: "solver_determined" as const,
+          definitionKind: "atomic_food" as const,
+        },
+      ],
+    };
+    const result = validateWeeklyNutritionPlan({
+      personalizedWeeklyPlan: plan,
+      generationContext: {
+        generatedPlanId: "plan_rec_need",
+        completeMealsByCandidateId: { [meal.candidateId]: withNeed },
+      },
+    });
+    expect(result.status).toBe("finalized");
+    expect(
+      result.report.structuralRules.some((r) => r.ruleId === "STRUCTURE_CULINARY_NEED_AS_FOOD"),
+    ).toBe(false);
+    void personalizeInput;
+  });
+
   it("hard-fails LLM source as authoritative personalized nutrition", () => {
     const { plan } = buildPersonalizedPlan("plan_llm");
     const mutated = clonePlan(plan);
