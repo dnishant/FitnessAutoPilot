@@ -202,12 +202,55 @@ describe("recipe and grocery contracts for UI", () => {
       weekStart: "2026-09-21",
       weekEnd: "2026-09-27",
       available: true,
+      aggregationPolicyVersion: "grocery-aggregation-policy-v1",
       sections: [
         {
           category: "produce",
           items: [
-            { id: "cucumbers", displayName: "Cucumbers", quantity: 5, checked: false },
-            { id: "tomatoes", displayName: "Tomatoes", quantity: 6, checked: true },
+            {
+              id: "cucumbers",
+              displayName: "Cucumbers",
+              category: "produce",
+              quantities: [
+                {
+                  requiredQuantity: 5,
+                  unit: "piece",
+                  displayQuantity: 5,
+                  displayUnit: "piece",
+                  displayLabel: "5 piece",
+                },
+              ],
+              quantity: 5,
+              unit: "piece",
+              checked: false,
+              status: "needed",
+              sourceMealInstanceIds: [],
+              sourceRecipeIds: [],
+              sourceRecipeNames: [],
+              provenance: [],
+            },
+            {
+              id: "tomatoes",
+              displayName: "Tomatoes",
+              category: "produce",
+              quantities: [
+                {
+                  requiredQuantity: 6,
+                  unit: "piece",
+                  displayQuantity: 6,
+                  displayUnit: "piece",
+                  displayLabel: "6 piece",
+                },
+              ],
+              quantity: 6,
+              unit: "piece",
+              checked: true,
+              status: "got",
+              sourceMealInstanceIds: [],
+              sourceRecipeIds: [],
+              sourceRecipeNames: [],
+              provenance: [],
+            },
           ],
         },
       ],
@@ -328,7 +371,13 @@ describe("generation UX helpers", () => {
     expect(tikka?.personalizedNutrition?.caloriesKcal).toBeGreaterThan(0);
     expect(tikka?.components.some((c) => c.amount != null)).toBe(true);
     expect(result.plan.personalizedWeeklyPlan?.generatedPlanId).toBeTruthy();
-    expect(result.plan.groceryList).toBeUndefined();
+    expect(result.plan.personalizedWeeklyPlan?.finalization?.validationStatus).toBe("finalized");
+    expect(result.plan.groceryList?.available).toBe(true);
+    expect(result.plan.groceryList?.sections.length).toBeGreaterThan(0);
+    const groceryItems = result.plan.groceryList!.sections.flatMap((s) => s.items);
+    expect(groceryItems.length).toBeGreaterThan(0);
+    expect(groceryItems.every((item) => item.quantities.length > 0)).toBe(true);
+    expect(result.plan.groceryList?.diagnostics?.droppedRequirementCount).toBe(0);
   }, 15000);
 });
 

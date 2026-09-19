@@ -28,6 +28,7 @@ import {
   buildLocalDemoNutritionMaps,
   buildNutritionMapsFromGeneratedRecipes,
   composeMealConcepts,
+  deriveGroceryList,
   finalizeWeeklyNutritionPlan,
   formatValidationReportForDiagnostics,
   isStructuralPortionBlockReason,
@@ -223,6 +224,24 @@ async function personalizeAndFinalizeGeneratedPlan(input: {
     );
   }
 
+  const groceryResult = deriveGroceryList({
+    personalizedWeeklyPlan: finalized.personalizedWeeklyPlan,
+    recipesByCandidateId: input.recipesByCandidateId,
+    completeMealsByCandidateId: input.completeMeals,
+    nutritionByCandidateId: input.nutritionByCandidateId,
+    generatedAt: input.generatedAt,
+  });
+
+  if (!groceryResult.ok && typeof console !== "undefined") {
+    console.warn(
+      `[PLAN-012] grocery derivation failed (${groceryResult.code}): ${groceryResult.message}`,
+    );
+  } else if (groceryResult.ok && typeof console !== "undefined" && groceryResult.issues.length > 0) {
+    console.warn(
+      `[PLAN-012] grocery derivation completed with ${groceryResult.issues.length} issue(s)`,
+    );
+  }
+
   const base: ConsumerWeeklyPlan = {
     generatedPlanId: input.generatedPlanId,
     weekStart: input.weekStart,
@@ -239,6 +258,7 @@ async function personalizeAndFinalizeGeneratedPlan(input: {
       recipesByCandidateId: input.recipesByCandidateId,
     }),
     validationReport: finalized.report,
+    groceryList: groceryResult.ok ? groceryResult.groceryList : undefined,
   };
 
   return attachPersonalizedWeeklyPlan(

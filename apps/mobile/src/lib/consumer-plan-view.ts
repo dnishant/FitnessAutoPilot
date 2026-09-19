@@ -17,7 +17,16 @@ import { formatMacroGrams, formatNutritionCalories } from "@fitness-autopilot/do
 import { prepIntentLabel as domainPrepIntentLabel } from "./weekly-strategy-preview";
 
 export const CONSUMER_PLAN_STORAGE_KEY = "fa.consumer.weeklyPlan";
+/** @deprecated Prefer groceryChecklistStorageKey(generatedPlanId) — kept for migration. */
 export const GROCERY_CHECKED_STORAGE_KEY = "fa.consumer.groceryChecked";
+
+/** Checklist state belongs to a grocery list / plan version — never mutates demand. */
+export function groceryChecklistStorageKey(generatedPlanId?: string | null): string {
+  if (generatedPlanId && generatedPlanId.trim()) {
+    return `fa.consumer.groceryChecked.${generatedPlanId.trim()}`;
+  }
+  return GROCERY_CHECKED_STORAGE_KEY;
+}
 
 export const GENERATION_STAGE_COPY: Record<
   ConsumerPlanGenerationStage,
