@@ -446,6 +446,7 @@ function buildDiscoveryRequest(
       ? {
           cookingStyle: cooking.cookingStyle,
           maxFinishMinutes: cooking.maxFinishMinutes,
+          prepFrequency: cooking.prepFrequency,
         }
       : undefined,
     targetCandidateCount: 12,
@@ -679,6 +680,7 @@ async function buildRemotePlan(
       conceptsByCandidateId,
       varietyLevel,
       cookingStyle: cooking?.cookingStyle,
+      prepFrequency: cooking?.prepFrequency,
     });
     if (!v1Strategy.ok) {
       throw Object.assign(new Error(v1Strategy.error.message), {

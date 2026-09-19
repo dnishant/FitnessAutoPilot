@@ -688,9 +688,9 @@ export function buildDiscoveryMetadata(args: {
 
 const COOKING_STYLE_CONTEXT: Record<string, string> = {
   mostly_ready:
-    "Prefer candidates that batch/reheat well; mealPrepAdaptability may lean fully_prepped or component_prepped.",
+    "Prefer candidates that batch/reheat/freeze well; mealPrepAdaptability should be fully_prepped (freezer-friendly batch meals). Do NOT return short-fridge seafood or fresh-only dishes.",
   ready_lunch_fresh_dinner:
-    "Favor dishes that can finish fresh in a short weekday window when maxFinishMinutes is set.",
+    "For once-weekly meal prep, prefer fully_prepped freezer-friendly dishes. Avoid fish/shellfish and other meals that cannot safely hold or freeze across a 6-day prep week.",
   fresh_focused:
     "Favor component-friendly or quick_fresh_finish dishes that cook from prepped ingredients.",
 };
@@ -705,6 +705,13 @@ export function buildCulinaryDiscoveryPrompt(
       `Honor cooking style preference: ${cookingStyle}.`
     : "No cooking-style preference specified.";
   const maxFinish = request.cookingPreferences?.maxFinishMinutes;
+  const prepFrequency = request.cookingPreferences?.prepFrequency;
+  const prepFrequencyNote =
+    prepFrequency === "throughout_week"
+      ? "Prep happens throughout the week — shorter fridge-life dishes may be acceptable."
+      : prepFrequency === "twice_weekly"
+        ? "Two prep sessions per week — dishes must safely hold ~4 days or be freezer-friendly."
+        : "Default once-weekly prep covers six eating days: ONLY return fully_prepped / freezer-friendly batch meals. Exclude component_prepped fish, quick_fresh_finish, and fresh_only from this pool.";
 
   const recentBlock =
     request.recentConcepts && request.recentConcepts.length > 0
@@ -845,6 +852,7 @@ export function buildCulinaryDiscoveryPrompt(
     `Dietary restrictions (HARD — never include): ${listOrNone(request.dietaryRestrictions)}`,
     `Dislikes (soft avoid): ${listOrNone(request.dislikes)}`,
     `Cooking style context: ${cookingNote}`,
+    `Prep frequency constraint: ${prepFrequencyNote}`,
     `Max finish minutes after prep: ${maxFinish ?? "(not specified)"}`,
     `Rejected concepts (avoid): ${listOrNone(request.rejectedConcepts)}`,
     "",

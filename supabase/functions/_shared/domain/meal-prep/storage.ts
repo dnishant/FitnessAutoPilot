@@ -133,13 +133,20 @@ export function buildStorageAndFutureActions(input: {
             relatedStorageAssignmentId: id,
           });
         } else {
+          // Intentional deferral — not a hard failure. Cook/finish closer to the eating day.
+          const actionId = `future_finish_${inst.mealInstanceId}`;
+          const finishMinutes =
+            recipe?.supportedPrepModes.find((m) => m.mode === "fresh" || m.mode === "quick_fresh_finish")
+              ?.finishTimeMinutes ??
+            recipe?.cookTimeMinutes ??
+            20;
           issues.push({
             code: "UNSAFE_STORAGE_HORIZON",
-            message: `Cannot safely assign multi-day storage for ${req.name} on ${inst.day} without fridge/freezer metadata.`,
+            message: `Cannot safely store ${req.name} for ${inst.day} without fridge/freezer metadata — finishing that meal later.`,
             coreMealId: req.coreMealId,
             recipeId: req.recipeId,
             mealInstanceId: inst.mealInstanceId,
-            preservable: false,
+            preservable: true,
           });
           assignments.push({
             id,
@@ -151,9 +158,25 @@ export function buildStorageAndFutureActions(input: {
             mealType: inst.mealType,
             personalServings: inst.personalServings,
             disposition: "fresh_finish_later",
-            reason: "Unsafe to claim fridge life — defer cook/finish.",
+            reason: "Unsafe to claim fridge life — defer cook/finish to the eating day.",
             daysUntilEat,
+            futureActionId: actionId,
             keepComponentsSeparate: [],
+          });
+          futureActions.push({
+            id: actionId,
+            type: "fresh_finish",
+            scheduledDay: inst.day,
+            scheduledWindow: "before_meal",
+            mealInstanceId: inst.mealInstanceId,
+            coreMealId: req.coreMealId,
+            mealName: req.name,
+            durationMinutes: finishMinutes,
+            instructions: [
+              `Cook and finish ${req.name} on ${inst.day} — not safe to hold from prep day without storage metadata.`,
+              ...(recipe?.supportedPrepModes[0]?.finishTasks ?? []).slice(0, 4),
+            ],
+            relatedStorageAssignmentId: id,
           });
         }
         continue;
@@ -196,13 +219,20 @@ export function buildStorageAndFutureActions(input: {
           relatedStorageAssignmentId: id,
         });
       } else if (beyondFridge && !freezerFriendly) {
+        // Intentional deferral: do not cook-and-hold past supported fridge life.
+        const actionId = `future_finish_${inst.mealInstanceId}`;
+        const finishMinutes =
+          recipe?.supportedPrepModes.find((m) => m.mode === "fresh" || m.mode === "quick_fresh_finish")
+            ?.finishTimeMinutes ??
+          recipe?.cookTimeMinutes ??
+          20;
         issues.push({
           code: "UNSAFE_STORAGE_HORIZON",
-          message: `${req.name} for ${inst.day} exceeds fridge life (${life}d) and is not freezer-friendly.`,
+          message: `${req.name} for ${inst.day} exceeds fridge life (${life}d) and is not freezer-friendly — finishing that meal later.`,
           coreMealId: req.coreMealId,
           recipeId: req.recipeId,
           mealInstanceId: inst.mealInstanceId,
-          preservable: false,
+          preservable: true,
         });
         assignments.push({
           id,
@@ -214,10 +244,26 @@ export function buildStorageAndFutureActions(input: {
           mealType: inst.mealType,
           personalServings: inst.personalServings,
           disposition: "fresh_finish_later",
-          reason: "Beyond fridge life without freezer support — cook/finish closer to eating day.",
+          reason: `Beyond fridge life (${life}d) without freezer support — cook/finish on ${inst.day}.`,
           fridgeLifeDaysUsed: life,
           daysUntilEat,
+          futureActionId: actionId,
           keepComponentsSeparate: [],
+        });
+        futureActions.push({
+          id: actionId,
+          type: "fresh_finish",
+          scheduledDay: inst.day,
+          scheduledWindow: "before_meal",
+          mealInstanceId: inst.mealInstanceId,
+          coreMealId: req.coreMealId,
+          mealName: req.name,
+          durationMinutes: finishMinutes,
+          instructions: [
+            `Cook and finish ${req.name} on ${inst.day} ${inst.mealType} — past safe fridge hold from prep day.`,
+            ...(recipe?.supportedPrepModes[0]?.finishTasks ?? []).slice(0, 4),
+          ],
+          relatedStorageAssignmentId: id,
         });
       } else if (
         (reheatingQuality === "poor" || reheatingQuality === "fair") &&
