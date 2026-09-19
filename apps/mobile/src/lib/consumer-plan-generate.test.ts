@@ -3,8 +3,8 @@ import { generateConsumerWeeklyPlan, assertNoUnresolvedRecipesOnReadyPlan } from
 import type { PlanGenerationApis } from "./consumer-plan-generate";
 import { GENERATION_STAGE_ORDER } from "./consumer-plan-view";
 
-describe("PLAN-010 consumer generation orchestration", () => {
-  it("runs personalization automatically in local Generate My Plan flow", async () => {
+describe("PLAN-010/011 consumer generation orchestration", () => {
+  it("runs personalization + PLAN-011 finalization in local Generate My Plan flow", async () => {
     const stages: string[] = [];
     const apis: PlanGenerationApis = {
       useLocalMode: true,
@@ -58,9 +58,15 @@ describe("PLAN-010 consumer generation orchestration", () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(stages).toContain("personalizing_portions");
-    expect(GENERATION_STAGE_ORDER).toContain("personalizing_portions");
+    expect(stages).toContain("finalizing_plan");
+    expect(GENERATION_STAGE_ORDER).toContain("finalizing_plan");
     expect(result.plan.generatedPlanId).toBeTruthy();
     expect(result.plan.personalizedWeeklyPlan).toBeTruthy();
+    expect(result.plan.personalizedWeeklyPlan?.finalization?.validationStatus).toBe(
+      "finalized",
+    );
+    expect(result.plan.validationReport?.policyVersion).toBe("nutrition-validation-policy-v1");
+    expect(result.plan.validationReport?.status).toBe("finalized");
     expect(result.plan.meals?.length).toBe(14);
     const withNutrition = result.plan.meals?.filter((m) => m.personalizedNutrition);
     expect((withNutrition?.length ?? 0) > 0).toBe(true);

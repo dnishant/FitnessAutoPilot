@@ -47,6 +47,10 @@ export const GENERATION_STAGE_COPY: Record<
     label: "Personalizing your portions",
     doneLabel: "Personalizing your portions",
   },
+  finalizing_plan: {
+    label: "Finalizing your plan…",
+    doneLabel: "Finalizing your plan…",
+  },
   complete: {
     label: "Your week is ready",
     doneLabel: "Your week is ready",
@@ -60,6 +64,7 @@ export const GENERATION_STAGE_ORDER: ConsumerPlanGenerationStage[] = [
   "creating_week",
   "finalizing_recipes",
   "personalizing_portions",
+  "finalizing_plan",
   "complete",
 ];
 
@@ -153,6 +158,28 @@ export function consumerPrepLabel(
 
 export function humanizePlanGenerationError(message: string, code?: string): string {
   const lower = message.toLowerCase();
+
+  // Typed generation failures first — never reclassify by substring of a prior humanized message.
+  if (
+    code === "EXECUTABLE_REPLACEMENT_EXHAUSTED" ||
+    code === "PLAN_NOT_EXECUTABLE" ||
+    code === "CANONICAL_MEAL_INTEGRITY_FAILED" ||
+    code === "PLAN_VALIDATION_FAILED" ||
+    lower.includes("plan-011") ||
+    lower.includes("not executable") ||
+    lower.includes("canonical meal integrity")
+  ) {
+    return "We couldn't finish a reliable plan this time. Please try generating again.";
+  }
+  if (
+    code === "DISCOVERY_SCHEMA_VALIDATION_FAILED" ||
+    code === "DISCOVERY_NOT_GROUNDED" ||
+    code === "LLM_INVALID_STRUCTURED_OUTPUT" ||
+    lower.includes("candidates passed schema") ||
+    lower.includes("empty candidates array")
+  ) {
+    return "We couldn't finish finding meal ideas this time. Your preferences are saved — try generating again.";
+  }
   if (
     code === "LLM_CONFIGURATION_ERROR" ||
     lower.includes("gemini") ||
@@ -166,19 +193,65 @@ export function humanizePlanGenerationError(message: string, code?: string): str
   if (lower.includes("network") || lower.includes("failed to send")) {
     return "We couldn't reach the planning service. Check your connection and try again.";
   }
-  if (lower.includes("preference") || lower.includes("allergy")) {
+  // Only real preference/allergy constraint failures — not "Your preferences are saved".
+  if (
+    lower.includes("hard preference constraint") ||
+    lower.includes("allergy constraint") ||
+    (lower.includes("allerg") && lower.includes("blocked"))
+  ) {
     return "Something in your preferences blocked planning. Review food preferences, then try again.";
   }
-  if (
-    code === "EXECUTABLE_REPLACEMENT_EXHAUSTED" ||
-    code === "PLAN_NOT_EXECUTABLE" ||
-    code === "CANONICAL_MEAL_INTEGRITY_FAILED" ||
-    lower.includes("not executable") ||
-    lower.includes("canonical meal integrity")
-  ) {
-    return "We couldn't build a complete executable meal plan from the available recipes. Your preferences are saved — try generating again.";
-  }
   return "We couldn't finish your meal plan. Your preferences are saved. Try generating it again.";
+}
+
+/** Developer-facing detail appended under the consumer message while diagnosing generation. */
+export function formatPlanGenerationFailureDetail(input: {
+  code?: string;
+  message?: string;
+  validationReport?: {
+    status?: string;
+    hardFailureCount?: number;
+    repairableFailureCount?: number;
+    warningCount?: number;
+    repairAttempts?: number;
+    structuralRules?: Array<{ ruleId: string; severity: string }>;
+    days?: Array<{ rules: Array<{ ruleId: string; severity: string }> }>;
+    weekly?: { rules?: Array<{ ruleId: string; severity: string }> };
+  } | null;
+}): string | null {
+  const parts: string[] = [];
+  if (input.code) parts.push(input.code);
+  const report = input.validationReport;
+  if (report?.status) parts.push(report.status);
+  if (report?.repairAttempts != null && report.repairAttempts > 0) {
+    parts.push(`repairs=${report.repairAttempts}`);
+  }
+
+  const allRules = [
+    ...(report?.structuralRules ?? []),
+    ...(report?.days ?? []).flatMap((d) => d.rules),
+    ...(report?.weekly?.rules ?? []),
+  ];
+  const hardIds = [
+    ...new Set(allRules.filter((r) => r.severity === "hard_failure").map((r) => r.ruleId)),
+  ].slice(0, 6);
+  const repairIds = [
+    ...new Set(
+      allRules.filter((r) => r.severity === "repairable_failure").map((r) => r.ruleId),
+    ),
+  ].slice(0, 6);
+  if (hardIds.length > 0) parts.push(hardIds.join(", "));
+  else if (repairIds.length > 0) parts.push(repairIds.join(", "));
+
+  if (hardIds.length === 0 && repairIds.length === 0 && input.message) {
+    const match = input.message.match(/PLAN-011 validation \(([^)]+)\):\s*(.+)$/i);
+    if (match) {
+      parts.push(match[1]);
+      if (match[2]?.trim()) parts.push(match[2].trim().slice(0, 180));
+    }
+  }
+
+  return parts.length > 0 ? parts.join(" · ") : null;
 }
 
 function componentsFromConcept(concept: MealConcept | undefined, fallbackName: string): ConsumerMealComponent[] {

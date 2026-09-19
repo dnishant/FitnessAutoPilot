@@ -10,8 +10,8 @@ import {
 import {
   GENERATION_STAGE_COPY,
   GENERATION_STAGE_ORDER,
+  formatPlanGenerationFailureDetail,
   generateReadySummary,
-  humanizePlanGenerationError,
 } from "../src/lib/consumer-plan-view";
 import { useSession } from "../src/state/session";
 import { colors, radii, spacing, typography } from "../src/theme/tokens";
@@ -26,6 +26,7 @@ export default function GenerateScreen() {
   } = useSession();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [localStage, setLocalStage] = useState<ConsumerPlanGenerationStage | null>(null);
 
   const readyLines = useMemo(
@@ -47,6 +48,7 @@ export default function GenerateScreen() {
   async function submit() {
     setBusy(true);
     setError(null);
+    setErrorDetail(null);
     setLocalStage("understanding_preferences");
 
     const result = await generateWeeklyPlan();
@@ -54,7 +56,19 @@ export default function GenerateScreen() {
 
     if (!result.ok) {
       setLocalStage(null);
-      setError(humanizePlanGenerationError(result.error));
+      // result.error is already consumer-safe from generateConsumerWeeklyPlan.
+      setError(result.error);
+      setErrorDetail(
+        ("detail" in result && result.detail) ||
+          formatPlanGenerationFailureDetail({
+            code: result.code,
+            message: result.plan.errorMessage ?? result.error,
+            validationReport: result.plan.validationReport,
+          }),
+      );
+      if (typeof console !== "undefined") {
+        console.warn("[generate] failed", result.code, result.plan.validationReport?.status);
+      }
       return;
     }
 
@@ -133,10 +147,11 @@ export default function GenerateScreen() {
       {error ? (
         <ErrorState
           title="Couldn't finish your plan"
-          body={error}
+          body={errorDetail ? `${error}\n\n${errorDetail}` : error}
           actionLabel="Try Again"
           onAction={() => {
             setError(null);
+            setErrorDetail(null);
             void submit();
           }}
         />

@@ -133,7 +133,13 @@ type SessionValue = {
   >;
   generateWeeklyPlan: () => Promise<
     | { ok: true; plan: ConsumerWeeklyPlan }
-    | { ok: false; error: string; plan: ConsumerWeeklyPlan }
+    | {
+        ok: false;
+        error: string;
+        code?: string;
+        detail?: string;
+        plan: ConsumerWeeklyPlan;
+      }
   >;
   clearWeeklyPlan: () => Promise<void>;
   adjustDiscreteMealComponent: (input: {

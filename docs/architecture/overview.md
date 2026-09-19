@@ -27,6 +27,7 @@ Fitness Autopilot is a modular monolith.
    - canonical food resolution + deterministic recipe nutrition (`food-resolution-v1`; USDA provider; no user portioning)
    - complete meal assembly (`meal-composition-v1` policy; culinary plate completion; fiber-policy-v1 daily fiber)
    - weekly nutrition personalization (`nutrition-allocation-policy-v1` + `meal-portion-policy-v1`; PLAN-010)
+   - weekly nutrition plan validation & finalization (`nutrition-validation-policy-v1`; PLAN-011)
    - portioning
    - one-day planner
 4. **Infrastructure** (`supabase`) — Postgres + RLS + Edge Functions that call domain logic and persist immutable prescriptions. LLM credentials stay server-side (`generate-recipe`, `culinary-discovery`, `generate-weekly-strategy`, `resolve-recipes`, `compose-meals`). USDA credentials stay server-side (`resolve-recipe-nutrition`). Ranking (`rank-culinary-candidates`) is deterministic and does not call Gemini. `generate-weekly-strategy` dispatches PLAN-007 when ranked lunch/dinner pools are present.
@@ -60,4 +61,4 @@ Gateway JWT verification is off so browser `OPTIONS` preflight can reach the wor
 
 ## Rounding rules
 
-Documented in [nutrition-rounding.md](./nutrition-rounding.md), [rmr-v1.md](./rmr-v1.md), [tdee-v1.md](./tdee-v1.md), [weight-change-policy-v1.md](./weight-change-policy-v1.md), [macro-policy-v1.md](./macro-policy-v1.md), [meal-preferences-v1.md](./meal-preferences-v1.md), [cooking-preferences-v1.md](./cooking-preferences-v1.md), [recipe-generation-v1.md](./recipe-generation-v1.md), [culinary-discovery-v1.md](./culinary-discovery-v1.md), [weekly-strategy-v1.md](./weekly-strategy-v1.md), [recipe-resolution-v1.md](./recipe-resolution-v1.md), [food-resolution-v1.md](./food-resolution-v1.md), [meal-composition-v1.md](./meal-composition-v1.md), [meal-portioning-v1.md](./meal-portioning-v1.md), and [nutrition-target-v1.md](./nutrition-target-v1.md).
+Documented in [nutrition-rounding.md](./nutrition-rounding.md), [rmr-v1.md](./rmr-v1.md), [tdee-v1.md](./tdee-v1.md), [weight-change-policy-v1.md](./weight-change-policy-v1.md), [macro-policy-v1.md](./macro-policy-v1.md), [meal-preferences-v1.md](./meal-preferences-v1.md), [cooking-preferences-v1.md](./cooking-preferences-v1.md), [recipe-generation-v1.md](./recipe-generation-v1.md), [culinary-discovery-v1.md](./culinary-discovery-v1.md), [weekly-strategy-v1.md](./weekly-strategy-v1.md), [recipe-resolution-v1.md](./recipe-resolution-v1.md), [food-resolution-v1.md](./food-resolution-v1.md), [meal-composition-v1.md](./meal-composition-v1.md), [meal-portioning-v1.md](./meal-portioning-v1.md), [nutrition-plan-validation-v1.md](./nutrition-plan-validation-v1.md), and [nutrition-target-v1.md](./nutrition-target-v1.md).

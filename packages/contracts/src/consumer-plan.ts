@@ -5,6 +5,7 @@ import { ResolvedRecipeSchema } from "./recipe-resolution";
 import { RankedWeeklyStrategySchema } from "./ranked-weekly-strategy";
 import { GroceryListSchema } from "./grocery";
 import type { PersonalizedWeeklyNutritionPlan } from "./meal-portioning";
+import type { WeeklyPlanValidationReport } from "./nutrition-plan-validation";
 
 /**
  * Consumer-facing weekly plan + PLAN-010 personalized nutrition shapes.
@@ -97,6 +98,7 @@ export const ConsumerPlanGenerationStageSchema = z.enum([
   "creating_week",
   "finalizing_recipes",
   "personalizing_portions",
+  "finalizing_plan",
   "complete",
 ]);
 
@@ -119,6 +121,11 @@ export const ConsumerWeeklyPlanSchema = z.object({
    * Kept as passthrough here to avoid a Zod circular import with meal-portioning.
    */
   personalizedWeeklyPlan: z.custom<PersonalizedWeeklyNutritionPlan>().optional(),
+  /**
+   * PLAN-011 developer diagnostics. Present on ready plans after finalization.
+   * Never shown raw to consumers.
+   */
+  validationReport: z.custom<WeeklyPlanValidationReport>().optional(),
   /** Grocery aggregation is future — usually absent / unavailable. */
   groceryList: GroceryListSchema.optional(),
 });

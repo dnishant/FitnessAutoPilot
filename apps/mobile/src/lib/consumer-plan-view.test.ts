@@ -231,6 +231,31 @@ describe("generation UX helpers", () => {
     expect(humanizePlanGenerationError("FOOD_RESOLUTION_BLOCKED")).not.toMatch(/FOOD_RESOLUTION/);
   });
 
+  it("does not reclassify already-humanized messages as preference failures", () => {
+    const once = humanizePlanGenerationError("transient upstream failure");
+    expect(once).toMatch(/preferences are saved/i);
+    expect(humanizePlanGenerationError(once)).toBe(once);
+    expect(humanizePlanGenerationError(once)).not.toMatch(/Review food preferences/i);
+  });
+
+  it("maps PLAN-011 validation failures to a reliable-plan retry message", () => {
+    expect(
+      humanizePlanGenerationError(
+        "Weekly nutrition plan failed PLAN-011 validation (repair_exhausted): TARGET_DAILY_CALORIES_OUTSIDE_HARD",
+        "PLAN_VALIDATION_FAILED",
+      ),
+    ).toMatch(/reliable plan/i);
+  });
+
+  it("maps culinary discovery schema failures to a meal-ideas retry message", () => {
+    expect(
+      humanizePlanGenerationError(
+        "No candidates passed schema validation.",
+        "DISCOVERY_SCHEMA_VALIDATION_FAILED",
+      ),
+    ).toMatch(/meal ideas/i);
+  });
+
   it("builds ready summary from real preference state", () => {
     const lines = generateReadySummary({
       nutritionTarget: {

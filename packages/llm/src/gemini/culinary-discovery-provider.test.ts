@@ -214,13 +214,13 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     expect(generateContent).toHaveBeenCalledTimes(2);
   });
 
-  it("rejects invalid URL candidates", async () => {
+  it("rejects invalid URL candidates after coercion", async () => {
     const client = mockClient(async () => ({
       text: JSON.stringify({
         candidates: [
           {
             ...modelCandidate,
-            source: { name: "X", url: "not-a-url" },
+            source: { name: "X", url: "ftp://example.com/recipe" },
           },
         ],
       }),
@@ -229,10 +229,42 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     const provider = new GeminiGroundedCulinaryDiscoveryProvider({
       model: "gemini-3.6-flash",
       client,
+      maxGroundingAttempts: 1,
     });
     await expect(provider.discover(sampleRequest)).rejects.toMatchObject({
       code: "DISCOVERY_SCHEMA_VALIDATION_FAILED",
     });
+  });
+
+  it("retries when grounded candidates fail schema validation", async () => {
+    const generateContent = vi
+      .fn()
+      .mockResolvedValueOnce({
+        text: JSON.stringify({
+          candidates: [
+            {
+              ...modelCandidate,
+              source: { name: "X", url: "ftp://bad.example/recipe" },
+            },
+          ],
+        }),
+        groundingMetadata: grounding,
+      })
+      .mockResolvedValueOnce({
+        text: JSON.stringify({ candidates: [modelCandidate] }),
+        groundingMetadata: grounding,
+      });
+    const provider = new GeminiGroundedCulinaryDiscoveryProvider({
+      model: "gemini-3.6-flash",
+      client: mockClient(generateContent),
+    });
+    const result = await provider.discover(sampleRequest);
+    expect(result.candidates).toHaveLength(1);
+    expect(generateContent).toHaveBeenCalledTimes(2);
+    const secondCall = generateContent.mock.calls.at(1)?.at(0) as
+      | { contents?: string }
+      | undefined;
+    expect(secondCall?.contents).toContain("failed schema checks");
   });
 
   it("factory creates provider from config and keeps Gemini server-side", () => {
@@ -368,6 +400,42 @@ describe("GeminiGroundedCulinaryDiscoveryProvider", () => {
     }) as { fitnessAdaptability: string; fitnessAdaptabilityReason: string };
     expect(coerced.fitnessAdaptability).toBe("easy");
     expect(coerced.fitnessAdaptabilityReason).not.toMatch(/replace|substitute/i);
+  });
+
+  it("coerces common Gemini shape drift into schema-valid candidates", () => {
+    const coerced = coerceDiscoveryCandidatePayload({
+      name: "Pepper Chicken Fry",
+      source: "www.example.com/pepper-chicken",
+      cuisineFamily: "Indian",
+      dishFormat: "skillet",
+      flavorFamilies: "peppery, aromatic",
+      cookingTechniques: "dry roast; saute",
+      whyItIsInteresting: "Regional pepper-forward chicken.",
+      fitnessAdaptability: "Easy",
+      fitnessAdaptabilityReason: "Protein scales independently of starch.",
+      mealPrepAdaptability: "component prepped",
+      noveltyReason: "Less common than tikka.",
+      discoveryConfidence: "High",
+      estimatedFinishMinutesAfterPrep: "25",
+    }) as {
+      candidateId: string;
+      source: { url: string; name: string };
+      flavorFamilies: string[];
+      cookingTechniques: string[];
+      fitnessAdaptability: string;
+      mealPrepAdaptability: string;
+      discoveryConfidence: string;
+      estimatedFinishMinutesAfterPrep: number;
+    };
+    expect(coerced.candidateId).toMatch(/^c_pepper-chicken/);
+    expect(coerced.source.url).toBe("https://www.example.com/pepper-chicken");
+    expect(coerced.source.name).toBe("Source");
+    expect(coerced.flavorFamilies).toEqual(["peppery", "aromatic"]);
+    expect(coerced.cookingTechniques).toEqual(["dry roast", "saute"]);
+    expect(coerced.fitnessAdaptability).toBe("easy");
+    expect(coerced.mealPrepAdaptability).toBe("component_prepped");
+    expect(coerced.discoveryConfidence).toBe("high");
+    expect(coerced.estimatedFinishMinutesAfterPrep).toBe(25);
   });
 
   it("can cap grounding attempts for Edge CPU limits", async () => {

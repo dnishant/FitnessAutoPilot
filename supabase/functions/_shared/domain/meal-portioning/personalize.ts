@@ -51,6 +51,21 @@ export type PersonalizeWeeklyNutritionPlanInput = {
   nutritionTargetId?: string;
   nutritionTargetAlgorithmVersion?: string;
   generatedAt?: string;
+  /**
+   * PLAN-011 declarative repair hints — scales lunch/dinner intents before solving.
+   * PLAN-010 still owns portion mutation; PLAN-011 only supplies diagnosed deltas.
+   */
+  repairDayOverrides?: Partial<
+    Record<
+      DayOfWeek,
+      {
+        /** Multiplier applied to lunch+dinner calorie intents (e.g. 1.12 to close a 12% gap). */
+        mealCalorieScale?: number;
+        /** Multiplier applied to lunch+dinner protein intents. */
+        mealProteinScale?: number;
+      }
+    >
+  >;
 };
 
 function nowMs(): number {
@@ -241,13 +256,49 @@ export function personalizeWeeklyNutritionPlan(
 
   for (const dayPlan of input.strategy.days) {
     const day = dayPlan.day;
+    const repair = input.repairDayOverrides?.[day];
+    const scaleCalories = repair?.mealCalorieScale ?? 1;
+    const scaleProtein = repair?.mealProteinScale ?? 1;
+    const applyRepair = scaleCalories !== 1 || scaleProtein !== 1;
+    const lunchIntent: MealNutritionIntent = applyRepair
+      ? {
+          ...budget.lunchIntent,
+          targetCaloriesKcal: Math.max(
+            150,
+            Math.round(budget.lunchIntent.targetCaloriesKcal * scaleCalories),
+          ),
+          targetProteinGrams:
+            budget.lunchIntent.targetProteinGrams != null
+              ? Math.max(
+                  10,
+                  Math.round(budget.lunchIntent.targetProteinGrams * scaleProtein),
+                )
+              : undefined,
+        }
+      : budget.lunchIntent;
+    const dinnerIntent: MealNutritionIntent = applyRepair
+      ? {
+          ...budget.dinnerIntent,
+          targetCaloriesKcal: Math.max(
+            150,
+            Math.round(budget.dinnerIntent.targetCaloriesKcal * scaleCalories),
+          ),
+          targetProteinGrams:
+            budget.dinnerIntent.targetProteinGrams != null
+              ? Math.max(
+                  10,
+                  Math.round(budget.dinnerIntent.targetProteinGrams * scaleProtein),
+                )
+              : undefined,
+        }
+      : budget.dinnerIntent;
     const slots: Array<{
       slot: typeof dayPlan.lunch;
       mealType: "lunch" | "dinner";
       intent: MealNutritionIntent;
     }> = [
-      { slot: dayPlan.lunch, mealType: "lunch", intent: budget.lunchIntent },
-      { slot: dayPlan.dinner, mealType: "dinner", intent: budget.dinnerIntent },
+      { slot: dayPlan.lunch, mealType: "lunch", intent: lunchIntent },
+      { slot: dayPlan.dinner, mealType: "dinner", intent: dinnerIntent },
     ];
 
     const bundles: { lunch: MealSolveBundle | null; dinner: MealSolveBundle | null } = {

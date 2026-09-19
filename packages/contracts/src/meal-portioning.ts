@@ -392,6 +392,18 @@ export const PersonalizedWeeklyNutritionPlanSchema = z.object({
   averageMealSolveTimeMs: z.number().finite().nonnegative().optional(),
   totalPersonalizationTimeMs: z.number().finite().nonnegative().optional(),
   generatedAt: z.string().min(1),
+  /**
+   * PLAN-011 finalization metadata. Present only after successful validation.
+   * Absence means the plan is personalized but not yet an active prescription.
+   */
+  finalization: z
+    .object({
+      finalizedAt: z.string().min(1),
+      validationPolicyVersion: z.literal("nutrition-validation-policy-v1"),
+      validationStatus: z.literal("finalized"),
+      repairAttempts: z.number().int().nonnegative(),
+    })
+    .optional(),
 });
 
 export type MealNutritionIntent = z.infer<typeof MealNutritionIntentSchema>;

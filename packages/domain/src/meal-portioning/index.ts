@@ -16,3 +16,7 @@ export * from "./complete-meal-nutrition";
 export * from "./local-demo-nutrition";
 export * from "./executability";
 export * from "./canonical-meal-integrity";
+export * from "./validation-policy";
+export * from "./validate-weekly-nutrition-plan";
+export * from "./repair-weekly-nutrition-plan";
+export * from "./finalize-weekly-nutrition-plan";
