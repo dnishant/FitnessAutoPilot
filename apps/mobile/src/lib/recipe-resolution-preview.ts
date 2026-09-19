@@ -243,9 +243,21 @@ export function dedupeProofRows(
   const uniqueFromStrategy = strategy
     ? getUniqueCandidatesFromWeeklyStrategy(strategy).length
     : 0;
+  const slotCountFromStrategy = strategy
+    ? strategy.days.reduce(
+        (n, day) => n + (day.lunch ? 1 : 0) + (day.dinner ? 1 : 0),
+        0,
+      )
+    : 0;
   return [
-    { label: "Weekly meal slots", value: String(result?.slotCount ?? (strategy ? 14 : 0)) },
-    { label: "Unique candidates", value: String(result?.uniqueCandidateIds.length ?? uniqueFromStrategy) },
+    {
+      label: "Weekly meal slots",
+      value: String(result?.slotCount ?? slotCountFromStrategy),
+    },
+    {
+      label: "Unique candidates",
+      value: String(result?.uniqueCandidateIds.length ?? uniqueFromStrategy),
+    },
     { label: "Resolver calls", value: String(result?.resolverCallCount ?? 0) },
     { label: "Prompt version", value: RECIPE_RESOLUTION_PROMPT_VERSION },
   ];
