@@ -382,6 +382,66 @@ begin
         raise;
       end if;
   end;
+
+  -- CATALOG-001: authenticated users may read catalog rows but cannot mutate them.
+  perform set_config('request.jwt.claim.sub', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', true);
+  perform set_config('request.jwt.claim.role', 'authenticated', true);
+  perform set_config('role', 'authenticated', true);
+
+  if not exists (
+    select 1 from public.protein_products where active = true limit 1
+  ) then
+    raise exception 'RLS FAIL: authenticated user cannot read active protein_products';
+  end if;
+
+  if not exists (
+    select 1 from public.canonical_ingredients limit 1
+  ) then
+    raise exception 'RLS FAIL: authenticated user cannot read canonical_ingredients';
+  end if;
+
+  begin
+    insert into public.canonical_ingredients (
+      canonical_key, display_name, category, availability_class
+    ) values (
+      'user_injected_ingredient',
+      'Should fail',
+      'protein',
+      'widely_available'
+    );
+    raise exception 'RLS FAIL: normal user can insert catalog records';
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
+
+  begin
+    update public.protein_products
+    set display_name = 'Hacked'
+    where canonical_key = 'beef_ribeye_steak';
+    if found then
+      raise exception 'RLS FAIL: normal user can update catalog records';
+    end if;
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
+
+  begin
+    delete from public.protein_products where canonical_key = 'beef_ribeye_steak';
+    if found then
+      raise exception 'RLS FAIL: normal user can delete catalog records';
+    end if;
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
 end $$;
 
 rollback;
