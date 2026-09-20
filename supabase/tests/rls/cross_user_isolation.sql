@@ -442,6 +442,51 @@ begin
         raise;
       end if;
   end;
+
+  -- RECIPE-001: authenticated users may read published recipe catalog rows but cannot mutate.
+  -- authenticated user cannot read unpublished recipe versions (RLS: status = 'published' only).
+  if not exists (
+    select 1 from public.catalog_recipe_versions where status = 'published' limit 1
+  ) then
+    raise exception 'RLS FAIL: authenticated user cannot read published catalog_recipe_versions';
+  end if;
+
+  begin
+    insert into public.catalog_recipes (canonical_key, section)
+    values ('user_injected_recipe', 'meal');
+    raise exception 'RLS FAIL: normal user can insert recipe catalog records';
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
+
+  begin
+    update public.catalog_recipe_versions
+    set title = 'Hacked'
+    where title = 'Ground Chicken Kheema Bowl';
+    if found then
+      raise exception 'RLS FAIL: normal user can update recipe catalog records';
+    end if;
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
+
+  begin
+    delete from public.catalog_recipes where canonical_key = 'ground_chicken_kheema_bowl';
+    if found then
+      raise exception 'RLS FAIL: normal user can delete recipe catalog records';
+    end if;
+  exception
+    when others then
+      if sqlerrm like 'RLS FAIL:%' then
+        raise;
+      end if;
+  end;
 end $$;
 
 rollback;

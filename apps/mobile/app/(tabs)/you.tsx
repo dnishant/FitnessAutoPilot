@@ -161,7 +161,7 @@ export default function YouTabScreen() {
         </View>
       </View>
 
-      {/* CATALOG-001: always reachable on hosted PR preview (not consumer primary nav). */}
+      {/* CATALOG verification surfaces: always reachable on hosted PR preview. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Open Protein Catalog verification"
@@ -169,6 +169,14 @@ export default function YouTabScreen() {
         onPress={() => router.push("/catalog/proteins")}
       >
         <Text style={styles.devLinkText}>Protein Catalog (internal)</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Open Recipe Catalog verification"
+        style={styles.devLink}
+        onPress={() => router.push("/catalog/recipes")}
+      >
+        <Text style={styles.devLinkText}>Recipe Catalog (internal)</Text>
       </Pressable>
 
       {showDeveloper ? (

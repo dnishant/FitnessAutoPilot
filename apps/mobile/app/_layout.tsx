@@ -63,6 +63,10 @@ export default function RootLayout() {
           name="catalog/proteins"
           options={{ title: "Protein Catalog" }}
         />
+        <Stack.Screen
+          name="catalog/recipes"
+          options={{ title: "Recipe Catalog" }}
+        />
       </Stack>
     </SessionProvider>
   );

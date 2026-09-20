@@ -17,6 +17,7 @@ Fitness Autopilot is a modular monolith.
    - cooking preference intent (prep frequency, session time, weekly style, finish time; dinner-prep-for-lunch deprecated / planner-owned)
   - food / recipe nutrition
   - canonical ingredient + purchasable protein catalog (`ingredient-catalog-v1`; CATALOG-001)
+  - versioned curated recipe catalog (`recipe-catalog-v1`; RECIPE-001)
   - AI recipe candidate generation (provider-independent; Gemini adapter in `packages/llm`)
    - search-grounded culinary discovery (provider-independent; Gemini + Google Search grounding in `packages/llm`)
    - deterministic culinary candidate ranking + deduplication (`candidate-ranking-v1`; no LLM)

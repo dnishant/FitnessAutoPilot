@@ -21,6 +21,7 @@ export * from "./recipes/recipe-resolution-fixtures";
 export * from "./recipes/generated-nutrition";
 export * from "./food-resolution/index";
 export * from "./ingredient-catalog/index";
+export * from "./recipe-catalog/index";
 export * from "./meal-composition/index";
 export * from "./meal-portioning/index";
 export * from "./grocery/index";
