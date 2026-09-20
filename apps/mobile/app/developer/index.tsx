@@ -5,6 +5,11 @@ import { colors, radii, spacing, typography } from "../../src/theme/tokens";
 
 const PREVIEW_ROUTES: Array<{ href: string; label: string; detail: string }> = [
   {
+    href: "/catalog/proteins",
+    label: "Protein Catalog",
+    detail: "CATALOG-001 canonical purchasable protein forms (read-only)",
+  },
+  {
     href: "/recipe-preview",
     label: "Dev: Recipe Preview",
     detail: "Single-recipe generation sandbox",

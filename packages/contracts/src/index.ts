@@ -23,5 +23,6 @@ export * from "./grocery";
 export * from "./meal-prep-plan";
 export * from "./consumer-plan";
 export * from "./ingredient-economy";
+export * from "./ingredient-catalog";
 export * from "./v1-meal-prep";
 export * from "./api";

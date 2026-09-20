@@ -19,7 +19,9 @@
     "discover:culinary:dev": "pnpm --filter @fitness-autopilot/llm discover:culinary:dev",
     "resolve:recipes:dev": "pnpm --filter @fitness-autopilot/llm resolve:recipes:dev",
     "resolve:recipe-nutrition:dev": "pnpm --filter @fitness-autopilot/llm resolve:recipe-nutrition:dev",
-    "compose:meals:dev": "pnpm --filter @fitness-autopilot/llm compose:meals:dev"
+    "compose:meals:dev": "pnpm --filter @fitness-autopilot/llm compose:meals:dev",
+    "catalog:integrity": "./node_modules/.pnpm/node_modules/.bin/vite-node ./scripts/catalog-integrity.mts",
+    "catalog:seed:sql": "./node_modules/.pnpm/node_modules/.bin/vite-node ./scripts/generate-catalog-seed-sql.mts"
   },
   "engines": {
     "node": ">=20"

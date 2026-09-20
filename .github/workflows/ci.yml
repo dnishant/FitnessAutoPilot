@@ -54,6 +54,17 @@ jobs:
           grep -n "prep_frequency" supabase/migrations/20260910000100_cooking_preferences.sql
           grep -n "cooking_style" supabase/migrations/20260910000100_cooking_preferences.sql
           grep -n "cooking_preferences_completed_at" supabase/migrations/20260910000100_cooking_preferences.sql
+          test -f supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
+          grep -n "canonical_ingredients" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
+          grep -n "protein_products" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
+          grep -n "retailer_availability_evidence" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
+          grep -n "ingredient_substitutions" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
+          grep -n "enable row level security" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
+          grep -n "retailer_evidence_exactly_one_target_chk" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
+          grep -n "ingredient_substitutions_no_self_chk" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
+
+      - name: Catalog integrity
+        run: pnpm catalog:integrity
 
       - name: RLS test file present
         run: |
@@ -67,3 +78,7 @@ jobs:
           grep -n "user A can modify user B meal preferences" supabase/tests/rls/cross_user_isolation.sql
           grep -n "user A can read user B cooking preferences" supabase/tests/rls/cross_user_isolation.sql
           grep -n "user A can modify user B cooking preferences" supabase/tests/rls/cross_user_isolation.sql
+          grep -n "normal user can insert catalog records" supabase/tests/rls/cross_user_isolation.sql
+          grep -n "normal user can update catalog records" supabase/tests/rls/cross_user_isolation.sql
+          grep -n "normal user can delete catalog records" supabase/tests/rls/cross_user_isolation.sql
+          grep -n "protein_products" supabase/tests/rls/cross_user_isolation.sql
