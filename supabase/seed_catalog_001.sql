@@ -625,6 +625,510 @@ on conflict (canonical_key) do update set
   nutrition_source_id = excluded.nutrition_source_id,
   updated_at = excluded.updated_at;
 
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000027',
+  'avocado',
+  'Avocado',
+  'produce',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000028',
+  'whole_grain_bread',
+  'Whole-grain bread',
+  'grain',
+  'count',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000029',
+  'olive_oil',
+  'Olive oil',
+  'oil',
+  'ml',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000030',
+  'kosher_salt',
+  'Kosher salt',
+  'spice',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000031',
+  'black_pepper',
+  'Black pepper',
+  'spice',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000032',
+  'long_grain_white_rice',
+  'Long-grain white rice',
+  'grain',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000033',
+  'yellow_onion',
+  'Yellow onion',
+  'produce',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000034',
+  'garlic',
+  'Garlic',
+  'produce',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000035',
+  'fresh_ginger',
+  'Fresh ginger',
+  'produce',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000036',
+  'roma_tomato',
+  'Roma tomato',
+  'produce',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000037',
+  'ground_cumin',
+  'Ground cumin',
+  'spice',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000038',
+  'ground_coriander',
+  'Ground coriander',
+  'spice',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000039',
+  'ground_turmeric',
+  'Ground turmeric',
+  'spice',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000040',
+  'garam_masala',
+  'Garam masala',
+  'spice',
+  'g',
+  'commonly_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000041',
+  'frozen_green_peas',
+  'Frozen green peas',
+  'produce',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000042',
+  'plain_greek_yogurt',
+  'Plain Greek yogurt',
+  'dairy',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000043',
+  'fresh_cilantro',
+  'Fresh cilantro',
+  'produce',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000044',
+  'lemon_juice',
+  'Lemon juice',
+  'condiment',
+  'ml',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000045',
+  'mixed_berries',
+  'Mixed berries',
+  'produce',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000046',
+  'walnut_halves',
+  'Walnut halves',
+  'other',
+  'g',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
+insert into public.canonical_ingredients (
+  id, canonical_key, display_name, category, default_unit, availability_class,
+  nutrition_source_type, nutrition_source_id, created_at, updated_at
+) values (
+  'c1000000-0000-4000-a000-000000000047',
+  'water',
+  'Water',
+  'other',
+  'ml',
+  'widely_available',
+  null,
+  null,
+  '2026-09-19T00:00:00.000Z',
+  '2026-09-19T00:00:00.000Z'
+)
+on conflict (canonical_key) do update set
+  display_name = excluded.display_name,
+  category = excluded.category,
+  default_unit = excluded.default_unit,
+  availability_class = excluded.availability_class,
+  nutrition_source_type = excluded.nutrition_source_type,
+  nutrition_source_id = excluded.nutrition_source_id,
+  updated_at = excluded.updated_at;
+
 insert into public.protein_products (
   id, canonical_key, ingredient_id, protein_family, display_name, species, cut, form,
   bone_state, skin_state, fat_descriptor, typical_purchase_unit, availability_class,
@@ -1666,6 +2170,42 @@ insert into public.ingredient_aliases (
   'c1000000-0000-4000-a000-000000000024',
   'extra firm tofu',
   'extra firm tofu'
+)
+on conflict (normalized_alias) do update set
+  ingredient_id = excluded.ingredient_id,
+  display_alias = excluded.display_alias;
+
+insert into public.ingredient_aliases (
+  id, ingredient_id, normalized_alias, display_alias
+) values (
+  'c3000000-0000-4000-a000-000000000008',
+  'c1000000-0000-4000-a000-000000000027',
+  'avocado',
+  'avocado'
+)
+on conflict (normalized_alias) do update set
+  ingredient_id = excluded.ingredient_id,
+  display_alias = excluded.display_alias;
+
+insert into public.ingredient_aliases (
+  id, ingredient_id, normalized_alias, display_alias
+) values (
+  'c3000000-0000-4000-a000-000000000009',
+  'c1000000-0000-4000-a000-000000000042',
+  'greek yogurt',
+  'greek yogurt'
+)
+on conflict (normalized_alias) do update set
+  ingredient_id = excluded.ingredient_id,
+  display_alias = excluded.display_alias;
+
+insert into public.ingredient_aliases (
+  id, ingredient_id, normalized_alias, display_alias
+) values (
+  'c3000000-0000-4000-a000-000000000010',
+  'c1000000-0000-4000-a000-000000000005',
+  'ground chicken',
+  'ground chicken'
 )
 on conflict (normalized_alias) do update set
   ingredient_id = excluded.ingredient_id,

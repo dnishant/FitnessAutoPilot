@@ -54,13 +54,19 @@ describe("CATALOG-001 persistence and RLS markers", () => {
       "utf8",
     );
     const generated = readFileSync(join(root, "supabase/seed_catalog_001.sql"), "utf8");
+    const recipeMigration = readFileSync(
+      join(root, "supabase/migrations/20260920000100_versioned_recipe_catalog.sql"),
+      "utf8",
+    );
     const keys = [
       ...seedTs.matchAll(/canonicalKey:\s*"([^"]+)"/g),
     ].map((match) => match[1]!);
     const unique = [...new Set(keys)];
     expect(unique.length).toBeGreaterThanOrEqual(26);
     for (const key of unique) {
-      expect(migration).toContain(key);
+      const inCatalogMigration = migration.includes(key);
+      const inRecipeMigration = recipeMigration.includes(key);
+      expect(inCatalogMigration || inRecipeMigration).toBe(true);
       expect(seed).toContain(key);
       expect(generated).toContain(key);
     }

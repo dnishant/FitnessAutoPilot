@@ -62,9 +62,20 @@ jobs:
           grep -n "enable row level security" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
           grep -n "retailer_evidence_exactly_one_target_chk" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
           grep -n "ingredient_substitutions_no_self_chk" supabase/migrations/20260919000100_canonical_ingredient_protein_catalog.sql
+          test -f supabase/migrations/20260920000100_versioned_recipe_catalog.sql
+          grep -n "catalog_recipes" supabase/migrations/20260920000100_versioned_recipe_catalog.sql
+          grep -n "catalog_recipe_versions" supabase/migrations/20260920000100_versioned_recipe_catalog.sql
+          grep -n "catalog_recipe_step_ingredient_usages" supabase/migrations/20260920000100_versioned_recipe_catalog.sql
+          grep -n "enable row level security" supabase/migrations/20260920000100_versioned_recipe_catalog.sql
+          grep -n "catalog_recipe_versions_select_authenticated" supabase/migrations/20260920000100_versioned_recipe_catalog.sql
+          grep -n "egg_avocado_whole_grain_toast" supabase/migrations/20260920000100_versioned_recipe_catalog.sql
+          grep -n "ground_chicken_kheema_bowl" supabase/migrations/20260920000100_versioned_recipe_catalog.sql
 
       - name: Catalog integrity
         run: pnpm catalog:integrity
+
+      - name: Recipe catalog integrity
+        run: pnpm recipe-catalog:integrity
 
       - name: RLS test file present
         run: |
@@ -82,3 +93,6 @@ jobs:
           grep -n "normal user can update catalog records" supabase/tests/rls/cross_user_isolation.sql
           grep -n "normal user can delete catalog records" supabase/tests/rls/cross_user_isolation.sql
           grep -n "protein_products" supabase/tests/rls/cross_user_isolation.sql
+          grep -n "normal user can insert recipe catalog records" supabase/tests/rls/cross_user_isolation.sql
+          grep -n "normal user can update recipe catalog records" supabase/tests/rls/cross_user_isolation.sql
+          grep -n "authenticated user cannot read unpublished recipe versions" supabase/tests/rls/cross_user_isolation.sql

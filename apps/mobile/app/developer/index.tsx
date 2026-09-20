@@ -10,6 +10,11 @@ const PREVIEW_ROUTES: Array<{ href: string; label: string; detail: string }> = [
     detail: "CATALOG-001 canonical purchasable protein forms (read-only)",
   },
   {
+    href: "/catalog/recipes",
+    label: "Recipe Catalog",
+    detail: "RECIPE-001 versioned curated recipes (read-only verification)",
+  },
+  {
     href: "/recipe-preview",
     label: "Dev: Recipe Preview",
     detail: "Single-recipe generation sandbox",

@@ -21,7 +21,9 @@
     "resolve:recipe-nutrition:dev": "pnpm --filter @fitness-autopilot/llm resolve:recipe-nutrition:dev",
     "compose:meals:dev": "pnpm --filter @fitness-autopilot/llm compose:meals:dev",
     "catalog:integrity": "./node_modules/.pnpm/node_modules/.bin/vite-node ./scripts/catalog-integrity.mts",
-    "catalog:seed:sql": "./node_modules/.pnpm/node_modules/.bin/vite-node ./scripts/generate-catalog-seed-sql.mts"
+    "catalog:seed:sql": "./node_modules/.pnpm/node_modules/.bin/vite-node ./scripts/generate-catalog-seed-sql.mts",
+    "recipe-catalog:integrity": "./node_modules/.pnpm/node_modules/.bin/vite-node ./scripts/recipe-catalog-integrity.mts",
+    "recipe-catalog:seed:sql": "./node_modules/.pnpm/node_modules/.bin/vite-node ./scripts/generate-recipe-catalog-seed-sql.mts"
   },
   "engines": {
     "node": ">=20"
